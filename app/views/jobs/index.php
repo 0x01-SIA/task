@@ -1,0 +1,126 @@
+<?php
+
+declare(strict_types=1);
+
+$canManageJobs = in_array((string) ($user['role'] ?? ''), ['admin', 'dispatcher'], true);
+?>
+<div class="d-grid gap-4">
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4 p-lg-5">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Jobs</p>
+                    <h1 class="h3 mb-2"><?= h($canManageJobs ? 'Job Management' : 'My Jobs') ?></h1>
+                    <p class="text-secondary mb-0">Track scheduled field work, assignments, and current planning status.</p>
+                </div>
+                <?php if ($canManageJobs): ?>
+                    <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>">Create Job</a>
+                <?php endif; ?>
+            </div>
+        </div>
+    </section>
+
+    <?php if ($successMessage !== null): ?>
+        <div class="alert alert-success mb-0" role="status"><?= h($successMessage) ?></div>
+    <?php endif; ?>
+
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <form method="get" action="<?= h(app_url('/jobs')) ?>" class="row g-3 align-items-end">
+                <div class="col-12 col-lg-4">
+                    <label class="form-label" for="search">Search</label>
+                    <input class="form-control" id="search" name="search" type="text" value="<?= h($filters['search'] ?? '') ?>" placeholder="Job number, title, customer, location">
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label" for="status">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">All statuses</option>
+                        <?php foreach (job_status_options() as $value => $label): ?>
+                            <option value="<?= h($value) ?>" <?= ($filters['status'] ?? '') === $value ? 'selected' : '' ?>><?= h($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <?php if ($canManageJobs): ?>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label" for="worker_id">Worker</label>
+                        <select class="form-select" id="worker_id" name="worker_id">
+                            <option value="">All workers</option>
+                            <?php foreach ($workers as $worker): ?>
+                                <option value="<?= h($worker['id']) ?>" <?= (int) ($filters['worker_id'] ?? 0) === (int) $worker['id'] ? 'selected' : '' ?>>
+                                    <?= h($worker['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endif; ?>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label" for="customer_id">Customer</label>
+                    <select class="form-select" id="customer_id" name="customer_id">
+                        <option value="">All customers</option>
+                        <?php foreach ($customers as $customer): ?>
+                            <option value="<?= h($customer['id']) ?>" <?= (int) ($filters['customer_id'] ?? 0) === (int) $customer['id'] ? 'selected' : '' ?>>
+                                <?= h($customer['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label" for="planned_date">Planned date</label>
+                    <input class="form-control" id="planned_date" name="planned_date" type="date" value="<?= h($filters['planned_date'] ?? '') ?>">
+                </div>
+
+                <div class="col-12 d-flex flex-wrap gap-2">
+                    <button class="btn btn-primary" type="submit">Apply Filters</button>
+                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/jobs')) ?>">Clear Filters</a>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <?php if ($jobs === []): ?>
+                <p class="text-secondary mb-0">No jobs matched the current filters.</p>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Job Number</th>
+                            <th scope="col">Customer</th>
+                            <th scope="col">Location</th>
+                            <th scope="col">Job Type</th>
+                            <th scope="col">Assigned Worker</th>
+                            <th scope="col">Planned</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Updated</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($jobs as $job): ?>
+                            <tr>
+                                <td class="fw-semibold"><a href="<?= h(app_url('/jobs/' . $job['id'])) ?>"><?= h($job['job_number']) ?></a></td>
+                                <td><?= h($job['customer_name']) ?></td>
+                                <td><?= h($job['location_name'] ?: 'Not assigned') ?></td>
+                                <td><?= h(job_type_label((string) $job['job_type'])) ?></td>
+                                <td><?= h($job['assigned_worker_name'] ?: 'Unassigned') ?></td>
+                                <td><?= h(trim(format_date($job['planned_date'] ?? null) . ' ' . ($job['planned_start_time'] !== null ? format_time((string) $job['planned_start_time']) : ''))) ?></td>
+                                <td>
+                                    <span class="badge <?= h(job_status_badge_class((string) $job['status'])) ?>">
+                                        <?= h(job_status_label((string) $job['status'])) ?>
+                                    </span>
+                                </td>
+                                <td><?= h(format_datetime($job['updated_at'] ?? null)) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
+</div>
