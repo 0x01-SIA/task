@@ -853,12 +853,13 @@ try {
             break;
 
         case $path === '/jobs/calendar':
-            require_role(['admin', 'dispatcher']);
+            require_role(['admin', 'dispatcher', 'worker']);
 
             if ($method !== 'GET') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
 
+            $viewer = current_user();
             $calendarView = requested_calendar_view($_GET['view'] ?? null);
             $todayDate = new DateTimeImmutable('today');
             $selectedDate = requested_calendar_date($_GET['date'] ?? null);
@@ -877,7 +878,8 @@ try {
             foreach (find_jobs_for_calendar(
                 jobs_connection(),
                 $queryStart->format('Y-m-d'),
-                $queryEnd->format('Y-m-d')
+                $queryEnd->format('Y-m-d'),
+                $viewer
             ) as $job) {
                 $plannedDate = (string) ($job['planned_date'] ?? '');
 
@@ -944,8 +946,9 @@ try {
                 'nextMonth' => $selectedMonth->modify('+1 month'),
                 'weekDays' => $weekDays,
                 'calendarWeeks' => $calendarWeeks,
-                'unscheduledActiveJobsCount' => count_unscheduled_active_jobs(jobs_connection()),
+                'unscheduledActiveJobsCount' => count_unscheduled_active_jobs(jobs_connection(), $viewer),
                 'weekdayLabels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                'viewer' => $viewer,
             ]);
             break;
 

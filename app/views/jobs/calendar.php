@@ -5,6 +5,10 @@ declare(strict_types=1);
 $isWeekView = $calendarView === 'week';
 $monthSwitchMonth = $isWeekView ? $selectedDate->format('Y-m') : $selectedMonth->format('Y-m');
 $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth->format('Y-m-01');
+$isWorker = (string) ($viewer['role'] ?? '') === 'worker';
+$jobBasePath = $isWorker ? '/work/jobs/' : '/jobs/';
+$backPath = $isWorker ? '/work' : '/jobs';
+$unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
 ?>
 <div class="d-grid gap-4">
     <section class="card shadow-sm border-0">
@@ -38,8 +42,10 @@ $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth-
                     </p>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/jobs')) ?>">Back to Jobs</a>
-                    <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>">Create Job</a>
+                    <a class="btn btn-outline-secondary" href="<?= h(app_url($backPath)) ?>"><?= h($isWorker ? 'Back to My Work' : 'Back to Jobs') ?></a>
+                    <?php if (!$isWorker): ?>
+                        <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>">Create Job</a>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -99,7 +105,7 @@ $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth-
                                             $weekJobClasses[] = 'calendar-job--cancelled';
                                         }
                                         ?>
-                                        <a class="<?= h(implode(' ', $weekJobClasses)) ?>" href="<?= h(app_url('/jobs/' . $job['id'])) ?>">
+                                        <a class="<?= h(implode(' ', $weekJobClasses)) ?>" href="<?= h(app_url($jobBasePath . $job['id'])) ?>">
                                             <div class="calendar-job__top">
                                                 <time class="calendar-job__time" datetime="<?= h(($job['planned_date'] ?? '') . 'T' . ($job['planned_start_time'] ?? '00:00:00')) ?>"><?= h($jobTime) ?></time>
                                                 <strong class="calendar-job__number" title="<?= h($job['job_number']) ?>"><?= h($job['job_number']) ?></strong>
@@ -156,7 +162,7 @@ $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth-
                                             $weekAgendaClasses[] = 'calendar-job--cancelled';
                                         }
                                         ?>
-                                        <a class="<?= h(implode(' ', $weekAgendaClasses)) ?>" href="<?= h(app_url('/jobs/' . $job['id'])) ?>">
+                                        <a class="<?= h(implode(' ', $weekAgendaClasses)) ?>" href="<?= h(app_url($jobBasePath . $job['id'])) ?>">
                                             <div class="calendar-job__top">
                                                 <time class="calendar-job__time" datetime="<?= h(($job['planned_date'] ?? '') . 'T' . ($job['planned_start_time'] ?? '00:00:00')) ?>"><?= h($jobTime) ?></time>
                                                 <strong class="calendar-job__number" title="<?= h($job['job_number']) ?>"><?= h($job['job_number']) ?></strong>
@@ -233,7 +239,7 @@ $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth-
                                                 $monthJobClasses[] = 'calendar-job--cancelled';
                                             }
                                             ?>
-                                            <a class="<?= h(implode(' ', $monthJobClasses)) ?>" href="<?= h(app_url('/jobs/' . $job['id'])) ?>">
+                                            <a class="<?= h(implode(' ', $monthJobClasses)) ?>" href="<?= h(app_url($jobBasePath . $job['id'])) ?>">
                                                 <div class="calendar-job__top">
                                                     <time class="calendar-job__time" datetime="<?= h(($job['planned_date'] ?? '') . 'T' . ($job['planned_start_time'] ?? '00:00:00')) ?>"><?= h($jobTime) ?></time>
                                                     <strong class="calendar-job__number" title="<?= h($job['job_number']) ?>"><?= h($job['job_number']) ?></strong>
@@ -297,7 +303,7 @@ $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth-
                                                 $monthAgendaClasses[] = 'calendar-job--cancelled';
                                             }
                                             ?>
-                                            <a class="<?= h(implode(' ', $monthAgendaClasses)) ?>" href="<?= h(app_url('/jobs/' . $job['id'])) ?>">
+                                            <a class="<?= h(implode(' ', $monthAgendaClasses)) ?>" href="<?= h(app_url($jobBasePath . $job['id'])) ?>">
                                                 <div class="calendar-job__top">
                                                     <time class="calendar-job__time" datetime="<?= h(($job['planned_date'] ?? '') . 'T' . ($job['planned_start_time'] ?? '00:00:00')) ?>"><?= h($jobTime) ?></time>
                                                     <strong class="calendar-job__number" title="<?= h($job['job_number']) ?>"><?= h($job['job_number']) ?></strong>
@@ -327,11 +333,15 @@ $weekSwitchDate = $isWeekView ? $selectedDate->format('Y-m-d') : $selectedMonth-
                 <div>
                     <p class="text-uppercase text-secondary small fw-semibold mb-2">Planning</p>
                     <h2 class="h5 mb-1">Unscheduled Active Jobs</h2>
-                    <p class="text-secondary mb-0">Jobs without a planned date stay out of scheduled views until they are assigned a date.</p>
+                    <p class="text-secondary mb-0">
+                        <?= h($isWorker
+                            ? 'Your assigned jobs without a planned date stay out of scheduled views until they are assigned a date.'
+                            : 'Jobs without a planned date stay out of scheduled views until they are assigned a date.') ?>
+                    </p>
                 </div>
                 <div class="d-flex flex-wrap align-items-center gap-3">
                     <span class="badge rounded-pill text-bg-light border fs-6"><?= h((string) $unscheduledActiveJobsCount) ?></span>
-                    <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs?schedule=unscheduled')) ?>">View Unscheduled Jobs</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url($unscheduledPath)) ?>"><?= h($isWorker ? 'View My Jobs' : 'View Unscheduled Jobs') ?></a>
                 </div>
             </div>
         </div>

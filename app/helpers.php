@@ -411,6 +411,7 @@ function auth_navigation_items(?array $user = null): array
     if ($role === 'worker') {
         return [
             ['label' => 'My Work', 'path' => '/work'],
+            ['label' => 'Calendar', 'path' => '/jobs/calendar'],
         ];
     }
 

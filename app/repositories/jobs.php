@@ -158,10 +158,9 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
     return is_array($job) ? $job : null;
 }
 
-function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate): array
+function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate, ?array $viewer = null): array
 {
-    $statement = $pdo->prepare(
-        "SELECT
+    $sql = "SELECT
             j.id,
             j.job_number,
             j.status,
@@ -175,30 +174,45 @@ function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate): a
          INNER JOIN customers c ON c.id = j.customer_id
          LEFT JOIN locations l ON l.id = j.location_id
          LEFT JOIN users u ON u.id = j.assigned_user_id
-         WHERE j.planned_date BETWEEN :start_date AND :end_date
-         ORDER BY
+         WHERE j.planned_date BETWEEN :start_date AND :end_date";
+    $params = [
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+    ];
+
+    if (($viewer['role'] ?? '') === 'worker') {
+        $sql .= ' AND j.assigned_user_id = :viewer_user_id';
+        $params['viewer_user_id'] = (int) $viewer['id'];
+    }
+
+    $sql .= " ORDER BY
             j.planned_date ASC,
             CASE WHEN j.planned_start_time IS NULL THEN 1 ELSE 0 END ASC,
             j.planned_start_time ASC,
-            j.job_number ASC"
-    );
-    $statement->execute([
-        'start_date' => $startDate,
-        'end_date' => $endDate,
-    ]);
+            j.job_number ASC";
+
+    $statement = $pdo->prepare($sql);
+    $statement->execute($params);
     $jobs = $statement->fetchAll();
 
     return is_array($jobs) ? $jobs : [];
 }
 
-function count_unscheduled_active_jobs(PDO $pdo): int
+function count_unscheduled_active_jobs(PDO $pdo, ?array $viewer = null): int
 {
-    $statement = $pdo->query(
-        "SELECT COUNT(*)
+    $sql = "SELECT COUNT(*)
          FROM jobs
          WHERE planned_date IS NULL
-           AND status NOT IN ('completed', 'cancelled')"
-    );
+           AND status NOT IN ('completed', 'cancelled')";
+    $params = [];
+
+    if (($viewer['role'] ?? '') === 'worker') {
+        $sql .= ' AND assigned_user_id = :viewer_user_id';
+        $params['viewer_user_id'] = (int) $viewer['id'];
+    }
+
+    $statement = $pdo->prepare($sql);
+    $statement->execute($params);
 
     return (int) $statement->fetchColumn();
 }
