@@ -2,7 +2,7 @@
 
 Minimal PHP foundation for a lightweight field service management application. This project intentionally stays simple: plain PHP, PDO, MySQL/MariaDB, server-rendered HTML, Bootstrap via CDN, and only minimal vanilla JavaScript.
 
-Current MVP scope also includes visible placeholder sections on job detail pages for deferred features. Attachments, job photos, and customer confirmation or signatures are intentionally postponed to a later version, and no upload or signature functionality is implemented in this repository.
+Current MVP scope also includes visible placeholder sections on job detail pages for deferred features. Attachments, job photos, and customer confirmation or signatures are intentionally postponed to a later version, and no upload or signature functionality is implemented in this repository. Manual task management is now available for administrators and dispatchers, and `jobs.task_id` intentionally remains nullable so existing standalone jobs continue to work.
 
 ## Deferred MVP placeholders
 
@@ -111,6 +111,12 @@ php bin/setup-database.php
 
 This command loads both the schema and the local development seed data. Use `php bin/setup-database.php --no-seed` only when you explicitly want schema-only setup.
 
+To upgrade an existing development database in place without dropping data, run:
+
+```bash
+php bin/upgrade-database.php
+```
+
 The SQL files remain usable on their own even if you use the helper script.
 
 ## Authentication
@@ -139,10 +145,17 @@ Authenticated routes:
 - `GET /locations/{id}` shows location details
 - `GET /locations/{id}/edit` shows the edit form
 - `POST /locations/{id}/edit` updates a location, including active or inactive state
-- `GET /tasks` is an administrator and dispatcher placeholder page
+- `GET /tasks` lists tasks for administrators and dispatchers with search, status, priority, customer, and due-state filters
+- `GET /tasks/create` shows the create-task form for administrators and dispatchers
+- `POST /tasks` creates a task
+- `GET /tasks/{id}` shows a task, its linked jobs, and task actions
+- `GET /tasks/{id}/edit` shows the edit-task form for administrators and dispatchers
+- `POST /tasks/{id}/edit` updates a task
+- `POST /tasks/{id}/status` updates a task status
+- `GET /tasks/{id}/jobs/create` redirects into task-linked job creation
 - `GET /jobs` lists jobs for administrators and dispatchers
 - `GET /jobs/calendar` shows the job calendar for administrators and dispatchers, defaults to Week view, and accepts `?view=week|month`, `?date=YYYY-MM-DD`, and `?month=YYYY-MM`
-- `GET /jobs/create` shows the create-job form for administrators and dispatchers
+- `GET /jobs/create` shows the create-job form for administrators and dispatchers and accepts optional `?task_id={id}` preselection
 - `POST /jobs` creates a job
 - `GET /jobs/{id}` shows a job for administrators and dispatchers
 - `GET /jobs/{id}/edit` shows the edit-job form for administrators and dispatchers
@@ -163,8 +176,8 @@ Authenticated routes:
 
 Role access summary:
 
-- `admin`: full customer, location, and job-management access, plus access to worker-facing `/work` pages for testing and operational review
-- `dispatcher`: the same customer, location, and job-management access as `admin`, plus access to worker-facing `/work` pages
+- `admin`: full customer, location, task, and job-management access, plus access to worker-facing `/work` pages for testing and operational review
+- `dispatcher`: the same customer, location, task, and job-management access as `admin`, plus access to worker-facing `/work` pages
 - `worker`: `/work`, `GET /work/jobs/{id}`, `POST /work/jobs/{id}/start`, `POST /work/jobs/{id}/complete`, and `POST /work/jobs/{id}/notes`
 
 Job calendar behavior:
@@ -197,6 +210,7 @@ Worker permission rules:
 
 - Workers can only view jobs assigned to their own account.
 - Workers can only start, complete, and add notes to their own jobs.
+- Workers cannot access `/tasks`, `/tasks/create`, `/tasks/{id}`, `/tasks/{id}/edit`, `/tasks/{id}/status`, or `/tasks/{id}/jobs/create`.
 - Workers cannot access `/jobs`, `/jobs/create`, `/jobs/{id}`, `/jobs/{id}/edit`, or the job cancel/reactivate routes.
 - Unassigned jobs and jobs assigned to another worker return no worker-facing detail to the requesting worker.
 
@@ -289,13 +303,14 @@ php -S 127.0.0.1:8080 -t public
 
 ```text
 Customer
-└── Location
-    └── Task
-        └── Jobs
-            └── Job notes
+├── Location
+├── Task
+│   └── Jobs
+└── Standalone Jobs
+    └── Job notes
 ```
 
-A Task always belongs to a customer and may also reference a customer location. This means Tasks can be stored directly under a customer even when no specific location is selected yet.
+A Task always belongs to a customer and may also reference a customer location. This means Tasks can be stored directly under a customer even when no specific location is selected yet, while jobs can either link back to a task or remain standalone for compatibility.
 
 ## Database behavior
 

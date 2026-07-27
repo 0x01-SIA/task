@@ -612,6 +612,32 @@ function job_priority_options(): array
     ];
 }
 
+function task_priority_options(): array
+{
+    return job_priority_options();
+}
+
+function task_status_options(): array
+{
+    return [
+        'new' => 'New',
+        'planned' => 'Planned',
+        'in_progress' => 'In Progress',
+        'completed' => 'Completed',
+        'cancelled' => 'Cancelled',
+    ];
+}
+
+function task_due_state_options(): array
+{
+    return [
+        'overdue' => 'Overdue',
+        'due_today' => 'Due Today',
+        'upcoming' => 'Upcoming',
+        'no_due_date' => 'No Due Date',
+    ];
+}
+
 function job_status_options(): array
 {
     return [
@@ -633,9 +659,30 @@ function job_priority_label(string $value): string
     return job_priority_options()[$value] ?? ucfirst($value);
 }
 
+function task_priority_label(string $value): string
+{
+    return task_priority_options()[$value] ?? ucfirst($value);
+}
+
+function task_status_label(string $value): string
+{
+    return task_status_options()[$value] ?? ucfirst(str_replace('_', ' ', $value));
+}
+
 function job_status_label(string $value): string
 {
     return job_status_options()[$value] ?? ucfirst($value);
+}
+
+function task_status_badge_class(string $value): string
+{
+    return match ($value) {
+        'planned' => 'text-bg-primary',
+        'in_progress' => 'text-bg-warning',
+        'completed' => 'text-bg-success',
+        'cancelled' => 'text-bg-secondary',
+        default => 'text-bg-light text-dark',
+    };
 }
 
 function job_status_badge_class(string $value): string
@@ -647,6 +694,31 @@ function job_status_badge_class(string $value): string
         'cancelled' => 'text-bg-secondary',
         default => 'text-bg-light text-dark',
     };
+}
+
+function task_due_state(array $task): string
+{
+    $status = (string) ($task['status'] ?? '');
+    $dueDate = trim((string) ($task['due_date'] ?? ''));
+    $today = date('Y-m-d');
+
+    if ($status === 'completed' || $status === 'cancelled') {
+        return $status;
+    }
+
+    if ($dueDate === '') {
+        return 'no_due_date';
+    }
+
+    if ($dueDate < $today) {
+        return 'overdue';
+    }
+
+    if ($dueDate === $today) {
+        return 'due_today';
+    }
+
+    return 'upcoming';
 }
 
 start_session();

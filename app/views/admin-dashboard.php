@@ -48,6 +48,52 @@ declare(strict_types=1);
         <div class="card-body p-4">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div>
+                    <h2 class="h5 mb-1">Tasks requiring attention</h2>
+                    <p class="text-secondary mb-0">Overdue tasks, urgent open requests, due-today work, and new tasks without jobs are listed first.</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/tasks')) ?>">View all tasks</a>
+                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/create')) ?>">New Task</a>
+                </div>
+            </div>
+
+            <?php if ($attentionTasks === []): ?>
+                <p class="dashboard-empty mb-0">No tasks currently require attention.</p>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Task</th>
+                                <th scope="col">Customer</th>
+                                <th scope="col">Due</th>
+                                <th scope="col">Jobs</th>
+                                <th scope="col">Priority</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($attentionTasks as $task): ?>
+                                <tr>
+                                    <td><a href="<?= h(app_url('/tasks/' . $task['id'])) ?>"><?= h($task['task_number']) ?></a></td>
+                                    <td><?= h($task['customer_name']) ?></td>
+                                    <td><?= h(format_date($task['due_date'] ?? null)) ?></td>
+                                    <td><?= h((string) ($task['linked_job_count'] ?? 0)) ?></td>
+                                    <td><?= h(task_priority_label((string) $task['priority'])) ?></td>
+                                    <td><span class="badge <?= h(task_status_badge_class((string) $task['status'])) ?>"><?= h(task_status_label((string) $task['status'])) ?></span></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                <div>
                     <h2 class="h5 mb-1">Jobs requiring attention</h2>
                     <p class="text-secondary mb-0">Overdue work is listed first, followed by unassigned jobs scheduled soon and active jobs still underway.</p>
                 </div>

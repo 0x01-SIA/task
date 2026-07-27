@@ -129,7 +129,7 @@ INSERT INTO tasks (
 )
 VALUES
     (
-        'TASK-1001',
+        'TASK-000001',
         1,
         1,
         'Prepare warehouse loading dock',
@@ -141,7 +141,7 @@ VALUES
         1
     ),
     (
-        'TASK-1002',
+        'TASK-000002',
         2,
         3,
         'Inspect conveyor controls',
@@ -155,6 +155,7 @@ VALUES
 
 INSERT INTO jobs (
     job_number,
+    task_id,
     customer_id,
     location_id,
     title,
@@ -176,6 +177,7 @@ VALUES
         'JOB-000001',
         1,
         1,
+        1,
         'Inspect dock leveler',
         'Check safety interlocks and general wear before service work.',
         'inspection',
@@ -192,6 +194,7 @@ VALUES
     ),
     (
         'JOB-000002',
+        1,
         1,
         2,
         'Deliver access control parts',
@@ -211,6 +214,7 @@ VALUES
     (
         'JOB-000003',
         1,
+        1,
         2,
         'Replace office keypad',
         'Install the new keypad and test badge access before leaving site.',
@@ -229,6 +233,7 @@ VALUES
     (
         'JOB-000004',
         2,
+        2,
         3,
         'Complete conveyor inspection report',
         'Finish the post-visit report and confirm the repaired conveyor is back online.',
@@ -246,6 +251,7 @@ VALUES
     ),
     (
         'JOB-000005',
+        2,
         2,
         3,
         'Replace worn conveyor sensor',

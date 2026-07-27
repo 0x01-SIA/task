@@ -67,6 +67,8 @@ CREATE TABLE tasks (
     KEY idx_tasks_location_id (location_id),
     KEY idx_tasks_created_by_user_id (created_by_user_id),
     KEY idx_tasks_status (status),
+    KEY idx_tasks_priority (priority),
+    KEY idx_tasks_due_date (due_date),
     CONSTRAINT fk_tasks_customer
         FOREIGN KEY (customer_id) REFERENCES customers (id)
         ON DELETE RESTRICT
@@ -84,6 +86,7 @@ CREATE TABLE tasks (
 CREATE TABLE jobs (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     job_number VARCHAR(50) NOT NULL,
+    task_id BIGINT UNSIGNED DEFAULT NULL,
     customer_id BIGINT UNSIGNED NOT NULL,
     location_id BIGINT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
@@ -103,6 +106,7 @@ CREATE TABLE jobs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_jobs_job_number (job_number),
+    KEY idx_jobs_task_id (task_id),
     KEY idx_jobs_customer_id (customer_id),
     KEY idx_jobs_location_id (location_id),
     KEY idx_jobs_status (status),
@@ -110,6 +114,10 @@ CREATE TABLE jobs (
     KEY idx_jobs_assigned_user_id (assigned_user_id),
     KEY idx_jobs_planned_date (planned_date),
     KEY idx_jobs_created_by_user_id (created_by_user_id),
+    CONSTRAINT fk_jobs_task
+        FOREIGN KEY (task_id) REFERENCES tasks (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_jobs_customer
         FOREIGN KEY (customer_id) REFERENCES customers (id)
         ON DELETE RESTRICT

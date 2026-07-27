@@ -48,16 +48,26 @@ declare(strict_types=1);
 
             <div class="info-grid mt-4">
                 <div>
+                    <p class="info-label">Task</p>
+                    <p class="mb-0">
+                        <?php if ($job['task_id'] !== null): ?>
+                            <?= h($job['linked_task_number']) ?> - <?= h($job['linked_task_title']) ?>
+                        <?php else: ?>
+                            Standalone job
+                        <?php endif; ?>
+                    </p>
+                </div>
+                <div>
                     <p class="info-label">Job Type</p>
                     <p class="mb-0"><?= h(job_type_label((string) $job['job_type'])) ?></p>
                 </div>
                 <div>
-                    <p class="info-label">Priority</p>
-                    <p class="mb-0"><?= h(job_priority_label((string) $job['priority'])) ?></p>
-                </div>
-                <div>
                     <p class="info-label">Scheduled Start</p>
                     <p class="mb-0"><?= h(format_job_scheduled_start($job)) ?></p>
+                </div>
+                <div>
+                    <p class="info-label">Priority</p>
+                    <p class="mb-0"><?= h(job_priority_label((string) $job['priority'])) ?></p>
                 </div>
                 <div>
                     <p class="info-label">Scheduled End</p>

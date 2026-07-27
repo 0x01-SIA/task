@@ -18,6 +18,7 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
     $sql = 'SELECT
                 j.id,
                 j.job_number,
+                j.task_id,
                 j.customer_id,
                 j.location_id,
                 j.title,
@@ -35,11 +36,14 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
                 l.city,
                 l.postal_code,
                 l.country,
-                u.name AS assigned_worker_name
+                u.name AS assigned_worker_name,
+                t.task_number AS linked_task_number,
+                t.title AS linked_task_title
             FROM jobs j
             INNER JOIN customers c ON c.id = j.customer_id
             LEFT JOIN locations l ON l.id = j.location_id
             LEFT JOIN users u ON u.id = j.assigned_user_id
+            LEFT JOIN tasks t ON t.id = j.task_id
             WHERE 1 = 1';
     $params = [];
 
@@ -113,6 +117,7 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
     $sql = 'SELECT
                 j.id,
                 j.job_number,
+                j.task_id,
                 j.customer_id,
                 j.location_id,
                 j.title,
@@ -136,11 +141,14 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
                 l.city,
                 l.postal_code,
                 l.country,
-                u.name AS assigned_worker_name
+                u.name AS assigned_worker_name,
+                t.task_number AS linked_task_number,
+                t.title AS linked_task_title
             FROM jobs j
             INNER JOIN customers c ON c.id = j.customer_id
             LEFT JOIN locations l ON l.id = j.location_id
             LEFT JOIN users u ON u.id = j.assigned_user_id
+            LEFT JOIN tasks t ON t.id = j.task_id
             WHERE j.id = :id';
     $params = ['id' => $id];
 
@@ -163,17 +171,21 @@ function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate, ?a
     $sql = "SELECT
             j.id,
             j.job_number,
+            j.task_id,
             j.status,
             j.planned_date,
             j.planned_start_time,
             c.name AS customer_name,
             l.name AS location_name,
             l.address_line,
-            u.name AS assigned_worker_name
+            u.name AS assigned_worker_name,
+            t.task_number AS linked_task_number,
+            t.title AS linked_task_title
          FROM jobs j
          INNER JOIN customers c ON c.id = j.customer_id
          LEFT JOIN locations l ON l.id = j.location_id
          LEFT JOIN users u ON u.id = j.assigned_user_id
+         LEFT JOIN tasks t ON t.id = j.task_id
          WHERE j.planned_date BETWEEN :start_date AND :end_date";
     $params = [
         'start_date' => $startDate,
@@ -228,6 +240,7 @@ function create_job(array $data): int
             $statement = $connection->prepare(
                 'INSERT INTO jobs (
                     job_number,
+                    task_id,
                     customer_id,
                     location_id,
                     title,
@@ -243,6 +256,7 @@ function create_job(array $data): int
                     created_by_user_id
                 ) VALUES (
                     :job_number,
+                    :task_id,
                     :customer_id,
                     :location_id,
                     :title,
@@ -260,6 +274,7 @@ function create_job(array $data): int
             );
             $statement->execute([
                 'job_number' => $jobNumber,
+                'task_id' => $data['task_id'],
                 'customer_id' => $data['customer_id'],
                 'location_id' => $data['location_id'],
                 'title' => $data['title'],
@@ -292,7 +307,8 @@ function update_job(int $id, array $data): void
 {
     $statement = jobs_connection()->prepare(
         'UPDATE jobs
-         SET customer_id = :customer_id,
+         SET task_id = :task_id,
+             customer_id = :customer_id,
              location_id = :location_id,
              title = :title,
              description = :description,
@@ -308,6 +324,7 @@ function update_job(int $id, array $data): void
     );
     $statement->execute([
         'id' => $id,
+        'task_id' => $data['task_id'],
         'customer_id' => $data['customer_id'],
         'location_id' => $data['location_id'],
         'title' => $data['title'],
@@ -354,6 +371,7 @@ function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
         "SELECT
             j.id,
             j.job_number,
+            j.task_id,
             j.customer_id,
             j.location_id,
             j.title,
@@ -372,10 +390,13 @@ function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
             l.address_line,
             l.city,
             l.postal_code,
-            l.country
+            l.country,
+            t.task_number AS linked_task_number,
+            t.title AS linked_task_title
         FROM jobs j
         INNER JOIN customers c ON c.id = j.customer_id
         LEFT JOIN locations l ON l.id = j.location_id
+        LEFT JOIN tasks t ON t.id = j.task_id
         WHERE j.assigned_user_id = :user_id
         ORDER BY
             CASE
@@ -443,6 +464,7 @@ function find_worker_accessible_job_by_id(int $id, array $viewer): ?array
     $sql = 'SELECT
                 j.id,
                 j.job_number,
+                j.task_id,
                 j.customer_id,
                 j.location_id,
                 j.title,
@@ -466,11 +488,14 @@ function find_worker_accessible_job_by_id(int $id, array $viewer): ?array
                 l.city,
                 l.postal_code,
                 l.country,
-                u.name AS assigned_worker_name
+                u.name AS assigned_worker_name,
+                t.task_number AS linked_task_number,
+                t.title AS linked_task_title
             FROM jobs j
             INNER JOIN customers c ON c.id = j.customer_id
             LEFT JOIN locations l ON l.id = j.location_id
             LEFT JOIN users u ON u.id = j.assigned_user_id
+            LEFT JOIN tasks t ON t.id = j.task_id
             WHERE j.id = :id';
     $params = ['id' => $id];
 
@@ -605,7 +630,7 @@ function job_number_conflict(PDOException $exception): bool
 function recent_jobs_for_location(int $locationId, int $limit = 5): array
 {
     $statement = jobs_connection()->prepare(
-        'SELECT id, job_number, title, status, planned_date, planned_start_time
+        'SELECT id, job_number, task_id, title, status, planned_date, planned_start_time
          FROM jobs
          WHERE location_id = :location_id
          ORDER BY

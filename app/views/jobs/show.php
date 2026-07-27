@@ -36,6 +36,16 @@ $canManageJobs = in_array((string) ($viewer['role'] ?? ''), ['admin', 'dispatche
                     <p class="mb-0"><span class="badge <?= h(job_status_badge_class((string) $job['status'])) ?>"><?= h(job_status_label((string) $job['status'])) ?></span></p>
                 </div>
                 <div>
+                    <p class="info-label">Task</p>
+                    <p class="mb-0">
+                        <?php if ($job['task_id'] !== null): ?>
+                            <a href="<?= h(app_url('/tasks/' . $job['task_id'])) ?>"><?= h($job['linked_task_number']) ?> - <?= h($job['linked_task_title']) ?></a>
+                        <?php else: ?>
+                            Standalone job
+                        <?php endif; ?>
+                    </p>
+                </div>
+                <div>
                     <p class="info-label">Job Type</p>
                     <p class="mb-0"><?= h(job_type_label((string) $job['job_type'])) ?></p>
                 </div>

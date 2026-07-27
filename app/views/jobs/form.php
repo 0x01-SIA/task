@@ -30,7 +30,28 @@ declare(strict_types=1);
                     <div class="alert alert-danger mb-0" role="alert"><?= h($errors['job_number']) ?></div>
                 <?php endif; ?>
 
+                <?php if (($taskContext ?? null) !== null): ?>
+                    <div class="alert alert-info mb-0" role="status">
+                        Creating a job for task <strong><?= h($taskContext['task_number']) ?></strong> - <?= h($taskContext['title']) ?>.
+                    </div>
+                <?php endif; ?>
+
                 <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="task_id">Task</label>
+                        <select class="form-select<?= isset($errors['task_id']) ? ' is-invalid' : '' ?>" id="task_id" name="task_id">
+                            <option value="">Standalone job</option>
+                            <?php foreach (($taskOptions ?? []) as $taskOption): ?>
+                                <option value="<?= h($taskOption['id']) ?>" <?= (int) ($values['task_id'] ?? 0) === (int) $taskOption['id'] ? 'selected' : '' ?>>
+                                    <?= h($taskOption['task_number']) ?> - <?= h($taskOption['title']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if (isset($errors['task_id'])): ?>
+                            <div class="invalid-feedback"><?= h($errors['task_id']) ?></div>
+                        <?php endif; ?>
+                    </div>
+
                     <div class="col-md-6">
                         <label class="form-label" for="customer_id">Customer</label>
                         <select

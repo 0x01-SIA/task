@@ -8,6 +8,7 @@ require base_path('app/repositories/customers.php');
 require base_path('app/repositories/dashboard.php');
 require base_path('app/repositories/jobs.php');
 require base_path('app/repositories/locations.php');
+require base_path('app/repositories/tasks.php');
 require base_path('app/repositories/users.php');
 
 function not_found(string $resourceName): never
@@ -72,8 +73,12 @@ function job_form_values(array $source, array $defaults = []): array
     $assignedUserId = array_key_exists('assigned_user_id', $source)
         ? positive_int_or_null($source['assigned_user_id'])
         : ($defaults['assigned_user_id'] ?? null);
+    $taskId = array_key_exists('task_id', $source)
+        ? positive_int_or_null($source['task_id'])
+        : ($defaults['task_id'] ?? null);
 
     return [
+        'task_id' => $taskId,
         'customer_id' => array_key_exists('customer_id', $source)
             ? positive_int_or_null($source['customer_id'])
             : ($defaults['customer_id'] ?? null),
@@ -93,6 +98,31 @@ function job_form_values(array $source, array $defaults = []): array
         'planned_start_time' => trim((string) ($source['planned_start_time'] ?? ($defaults['planned_start_time'] ?? ''))),
         'estimated_duration_minutes' => trim((string) ($source['estimated_duration_minutes'] ?? ($defaults['estimated_duration_minutes'] ?? ''))),
         'internal_notes' => trim((string) ($source['internal_notes'] ?? ($defaults['internal_notes'] ?? ''))),
+    ];
+}
+
+function task_form_values(array $source, array $defaults = []): array
+{
+    $statusOptions = task_status_options();
+    $priorityOptions = task_priority_options();
+
+    return [
+        'customer_id' => array_key_exists('customer_id', $source)
+            ? positive_int_or_null($source['customer_id'])
+            : ($defaults['customer_id'] ?? null),
+        'location_id' => array_key_exists('location_id', $source)
+            ? positive_int_or_null($source['location_id'])
+            : ($defaults['location_id'] ?? null),
+        'title' => trim((string) ($source['title'] ?? ($defaults['title'] ?? ''))),
+        'description' => trim((string) ($source['description'] ?? ($defaults['description'] ?? ''))),
+        'status' => in_array(($source['status'] ?? $defaults['status'] ?? 'new'), array_keys($statusOptions), true)
+            ? (string) ($source['status'] ?? $defaults['status'] ?? 'new')
+            : 'new',
+        'priority' => in_array(($source['priority'] ?? $defaults['priority'] ?? 'normal'), array_keys($priorityOptions), true)
+            ? (string) ($source['priority'] ?? $defaults['priority'] ?? 'normal')
+            : 'normal',
+        'requested_date' => trim((string) ($source['requested_date'] ?? ($defaults['requested_date'] ?? ''))),
+        'due_date' => trim((string) ($source['due_date'] ?? ($defaults['due_date'] ?? ''))),
     ];
 }
 
@@ -182,17 +212,29 @@ function validate_worker_job_note(string $note): ?string
 function validate_job_form(array $values): array
 {
     $errors = [];
+    $taskId = $values['task_id'] ?? null;
     $customerId = $values['customer_id'] ?? null;
     $locationId = $values['location_id'] ?? null;
     $assignedUserId = $values['assigned_user_id'] ?? null;
     $plannedDate = (string) ($values['planned_date'] ?? '');
     $plannedStartTime = (string) ($values['planned_start_time'] ?? '');
     $estimatedDuration = (string) ($values['estimated_duration_minutes'] ?? '');
+    $task = null;
+
+    if ($taskId !== null) {
+        $task = find_task_brief_by_id((int) $taskId);
+
+        if ($task === null) {
+            $errors['task_id'] = 'The selected task was not found.';
+        }
+    }
 
     if ($customerId === null) {
         $errors['customer_id'] = 'Select a valid customer.';
     } elseif (find_customer_by_id((int) $customerId) === null) {
         $errors['customer_id'] = 'The selected customer was not found.';
+    } elseif ($task !== null && (int) $task['customer_id'] !== (int) $customerId) {
+        $errors['customer_id'] = 'The selected customer must match the linked task.';
     }
 
     if ($locationId === null) {
@@ -244,9 +286,61 @@ function validate_job_form(array $values): array
     return $errors;
 }
 
+function validate_task_form(array $values): array
+{
+    $errors = [];
+    $customerId = $values['customer_id'] ?? null;
+    $locationId = $values['location_id'] ?? null;
+    $requestedDate = (string) ($values['requested_date'] ?? '');
+    $dueDate = (string) ($values['due_date'] ?? '');
+
+    if ($customerId === null) {
+        $errors['customer_id'] = 'Select a valid customer.';
+    } elseif (find_customer_by_id((int) $customerId) === null) {
+        $errors['customer_id'] = 'The selected customer was not found.';
+    }
+
+    if ($locationId !== null) {
+        $location = find_location_by_id((int) $locationId);
+
+        if ($location === null) {
+            $errors['location_id'] = 'The selected location was not found.';
+        } elseif ($customerId !== null && (int) $location['customer_id'] !== (int) $customerId) {
+            $errors['location_id'] = 'The selected location does not belong to the selected customer.';
+        }
+    }
+
+    if (($values['title'] ?? '') === '') {
+        $errors['title'] = 'Task title is required.';
+    }
+
+    if (!array_key_exists((string) ($values['status'] ?? ''), task_status_options())) {
+        $errors['status'] = 'Select a valid task status.';
+    }
+
+    if (!array_key_exists((string) ($values['priority'] ?? ''), task_priority_options())) {
+        $errors['priority'] = 'Select a valid task priority.';
+    }
+
+    if ($requestedDate !== '' && !valid_date_value($requestedDate)) {
+        $errors['requested_date'] = 'Enter a valid requested date.';
+    }
+
+    if ($dueDate !== '' && !valid_date_value($dueDate)) {
+        $errors['due_date'] = 'Enter a valid due date.';
+    }
+
+    if ($requestedDate !== '' && $dueDate !== '' && $dueDate < $requestedDate) {
+        $errors['due_date'] = 'Due date cannot be earlier than the requested date.';
+    }
+
+    return $errors;
+}
+
 function save_job_payload(array $values, int $createdByUserId, ?string $currentStatus = null): array
 {
     return [
+        'task_id' => $values['task_id'] !== null ? (int) $values['task_id'] : null,
         'customer_id' => (int) $values['customer_id'],
         'location_id' => (int) $values['location_id'],
         'title' => $values['title'],
@@ -259,6 +353,21 @@ function save_job_payload(array $values, int $createdByUserId, ?string $currentS
         'planned_start_time' => $values['planned_start_time'] !== '' ? $values['planned_start_time'] : null,
         'estimated_duration_minutes' => $values['estimated_duration_minutes'] !== '' ? (int) $values['estimated_duration_minutes'] : null,
         'internal_notes' => $values['internal_notes'] !== '' ? $values['internal_notes'] : null,
+        'created_by_user_id' => $createdByUserId,
+    ];
+}
+
+function save_task_payload(array $values, int $createdByUserId): array
+{
+    return [
+        'customer_id' => (int) $values['customer_id'],
+        'location_id' => $values['location_id'] !== null ? (int) $values['location_id'] : null,
+        'title' => $values['title'],
+        'description' => $values['description'] !== '' ? $values['description'] : null,
+        'status' => $values['status'],
+        'priority' => $values['priority'],
+        'requested_date' => $values['requested_date'] !== '' ? $values['requested_date'] : null,
+        'due_date' => $values['due_date'] !== '' ? $values['due_date'] : null,
         'created_by_user_id' => $createdByUserId,
     ];
 }
@@ -276,6 +385,21 @@ function job_filter_values(array $source, array $viewer): array
         'customer_id' => positive_int_or_null($source['customer_id'] ?? null),
         'planned_date' => $plannedDate !== '' && valid_date_value($plannedDate) ? $plannedDate : '',
         'schedule' => $schedule === 'unscheduled' ? 'unscheduled' : '',
+    ];
+}
+
+function task_filter_values(array $source): array
+{
+    $status = trim((string) ($source['status'] ?? ''));
+    $priority = trim((string) ($source['priority'] ?? ''));
+    $dueState = trim((string) ($source['due_state'] ?? ''));
+
+    return [
+        'search' => trim((string) ($source['search'] ?? '')),
+        'status' => array_key_exists($status, task_status_options()) ? $status : '',
+        'priority' => array_key_exists($priority, task_priority_options()) ? $priority : '',
+        'customer_id' => positive_int_or_null($source['customer_id'] ?? null),
+        'due_state' => array_key_exists($dueState, task_due_state_options()) ? $dueState : '',
     ];
 }
 
@@ -521,6 +645,7 @@ try {
                 'pageTitle' => 'Dashboard',
                 'user' => current_user(),
                 'summaryCounts' => dashboard_summary_counts(),
+                'attentionTasks' => dashboard_attention_tasks(),
                 'attentionJobs' => dashboard_attention_jobs(),
                 'todaysSchedule' => dashboard_todays_schedule(),
                 'activeWorkers' => dashboard_active_workers(),
@@ -751,11 +876,222 @@ try {
 
         case $path === '/tasks':
             require_role(['admin', 'dispatcher']);
-            render('module-placeholder', [
+
+            if ($method === 'POST') {
+                $csrfToken = $_POST['_token'] ?? null;
+
+                if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                    abort(419, 'Session expired', 'The form token is invalid or has expired.');
+                }
+
+                $values = task_form_values($_POST);
+                $errors = validate_task_form($values);
+
+                if ($errors !== []) {
+                    render('tasks/form', [
+                        'pageTitle' => 'Create Task',
+                        'formTitle' => 'Create Task',
+                        'formAction' => '/tasks',
+                        'submitLabel' => 'Create Task',
+                        'customers' => active_customers(),
+                        'locations' => list_active_locations(),
+                        'values' => $values,
+                        'errors' => $errors,
+                        'task' => null,
+                    ], 422);
+                    break;
+                }
+
+                $createdByUser = current_user();
+
+                try {
+                    $taskId = create_task(save_task_payload($values, (int) $createdByUser['id']));
+                } catch (RuntimeException $exception) {
+                    render('tasks/form', [
+                        'pageTitle' => 'Create Task',
+                        'formTitle' => 'Create Task',
+                        'formAction' => '/tasks',
+                        'submitLabel' => 'Create Task',
+                        'customers' => active_customers(),
+                        'locations' => list_active_locations(),
+                        'values' => $values,
+                        'errors' => ['task_number' => 'Could not generate a task number. Please try again.'],
+                        'task' => null,
+                    ], 422);
+                    break;
+                }
+
+                flash('success', 'Task created successfully.');
+                redirect('/tasks/' . $taskId);
+            }
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $filters = task_filter_values($_GET);
+
+            render('tasks/index', [
                 'pageTitle' => 'Tasks',
-                'heading' => 'Tasks',
-                'message' => 'Task management will be implemented in a later task.',
+                'tasks' => list_tasks($filters),
+                'filters' => $filters,
+                'customers' => all_customers(),
+                'successMessage' => flash('success'),
             ]);
+            break;
+
+        case $path === '/tasks/create':
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            render('tasks/form', [
+                'pageTitle' => 'Create Task',
+                'formTitle' => 'Create Task',
+                'formAction' => '/tasks',
+                'submitLabel' => 'Create Task',
+                'customers' => active_customers(),
+                'locations' => list_active_locations(),
+                'values' => task_form_values($_GET),
+                'errors' => [],
+                'task' => null,
+            ]);
+            break;
+
+        case preg_match('#^/tasks/([1-9][0-9]*)$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $task = find_task_by_id((int) $matches[1]);
+
+            if ($task === null) {
+                not_found('Task');
+            }
+
+            render('tasks/show', [
+                'pageTitle' => $task['task_number'],
+                'task' => $task,
+                'linkedJobs' => list_jobs_for_task((int) $task['id']),
+                'successMessage' => flash('success'),
+            ]);
+            break;
+
+        case preg_match('#^/tasks/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            $task = find_task_by_id((int) $matches[1]);
+
+            if ($task === null) {
+                not_found('Task');
+            }
+
+            if ($method === 'GET') {
+                render('tasks/form', [
+                    'pageTitle' => 'Edit Task',
+                    'formTitle' => 'Edit Task',
+                    'formAction' => '/tasks/' . $task['id'] . '/edit',
+                    'submitLabel' => 'Save Changes',
+                    'customers' => active_customers(),
+                    'locations' => list_active_locations(),
+                    'values' => task_form_values([], [
+                        'customer_id' => (int) $task['customer_id'],
+                        'location_id' => $task['location_id'] !== null ? (int) $task['location_id'] : null,
+                        'title' => (string) $task['title'],
+                        'description' => (string) ($task['description'] ?? ''),
+                        'status' => (string) $task['status'],
+                        'priority' => (string) $task['priority'],
+                        'requested_date' => (string) ($task['requested_date'] ?? ''),
+                        'due_date' => (string) ($task['due_date'] ?? ''),
+                    ]),
+                    'errors' => [],
+                    'task' => $task,
+                ]);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $values = task_form_values($_POST);
+            $errors = validate_task_form($values);
+
+            if ($errors !== []) {
+                render('tasks/form', [
+                    'pageTitle' => 'Edit Task',
+                    'formTitle' => 'Edit Task',
+                    'formAction' => '/tasks/' . $task['id'] . '/edit',
+                    'submitLabel' => 'Save Changes',
+                    'customers' => active_customers(),
+                    'locations' => list_active_locations(),
+                    'values' => $values,
+                    'errors' => $errors,
+                    'task' => $task,
+                ], 422);
+                break;
+            }
+
+            update_task((int) $task['id'], save_task_payload($values, (int) ($task['created_by_user_id'] ?? current_user()['id'])));
+            flash('success', 'Task updated successfully.');
+            redirect('/tasks/' . $task['id']);
+            break;
+
+        case preg_match('#^/tasks/([1-9][0-9]*)/status$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $task = find_task_by_id((int) $matches[1]);
+
+            if ($task === null) {
+                not_found('Task');
+            }
+
+            $status = trim((string) ($_POST['status'] ?? ''));
+
+            if (!array_key_exists($status, task_status_options())) {
+                flash('success', 'Select a valid task status.');
+                redirect('/tasks/' . $task['id']);
+            }
+
+            update_task_status((int) $task['id'], $status);
+            flash('success', 'Task status updated successfully.');
+            redirect('/tasks/' . $task['id']);
+            break;
+
+        case preg_match('#^/tasks/([1-9][0-9]*)/jobs/create$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $task = find_task_by_id((int) $matches[1]);
+
+            if ($task === null) {
+                not_found('Task');
+            }
+
+            redirect('/jobs/create?task_id=' . $task['id']);
             break;
 
         case $path === '/jobs':
@@ -778,6 +1114,7 @@ try {
                         'pageTitle' => 'Create Job',
                         'formTitle' => 'Create Job',
                         'formAction' => '/jobs',
+                        'taskOptions' => list_tasks(),
                         'submitLabel' => 'Create Job',
                         'customers' => active_customers(),
                         'locations' => list_active_locations(),
@@ -785,6 +1122,7 @@ try {
                         'values' => $values,
                         'errors' => $errors,
                         'job' => null,
+                        'taskContext' => $values['task_id'] !== null ? find_task_by_id((int) $values['task_id']) : null,
                     ], 422);
                     break;
                 }
@@ -798,6 +1136,7 @@ try {
                         'pageTitle' => 'Create Job',
                         'formTitle' => 'Create Job',
                         'formAction' => '/jobs',
+                        'taskOptions' => list_tasks(),
                         'submitLabel' => 'Create Job',
                         'customers' => active_customers(),
                         'locations' => list_active_locations(),
@@ -805,6 +1144,7 @@ try {
                         'values' => $values,
                         'errors' => ['job_number' => 'Could not generate a job number. Please try again.'],
                         'job' => null,
+                        'taskContext' => $values['task_id'] !== null ? find_task_by_id((int) $values['task_id']) : null,
                     ], 422);
                     break;
                 }
@@ -838,17 +1178,45 @@ try {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
 
+            $defaults = [];
+            $preselectedTask = null;
+
+            if (array_key_exists('task_id', $_GET) && $_GET['task_id'] !== '') {
+                $taskId = positive_int_or_null($_GET['task_id']);
+
+                if ($taskId === null) {
+                    not_found('Task');
+                }
+
+                $preselectedTask = find_task_by_id($taskId);
+
+                if ($preselectedTask === null) {
+                    not_found('Task');
+                }
+
+                $defaults = [
+                    'task_id' => (int) $preselectedTask['id'],
+                    'customer_id' => (int) $preselectedTask['customer_id'],
+                    'location_id' => $preselectedTask['location_id'] !== null ? (int) $preselectedTask['location_id'] : null,
+                    'title' => (string) $preselectedTask['title'],
+                    'description' => (string) ($preselectedTask['description'] ?? ''),
+                    'priority' => (string) $preselectedTask['priority'],
+                ];
+            }
+
             render('jobs/form', [
                 'pageTitle' => 'Create Job',
                 'formTitle' => 'Create Job',
                 'formAction' => '/jobs',
+                'taskOptions' => list_tasks(),
                 'submitLabel' => 'Create Job',
                 'customers' => active_customers(),
                 'locations' => list_active_locations(),
                 'workers' => list_active_workers(),
-                'values' => job_form_values($_GET),
+                'values' => job_form_values($_GET, $defaults),
                 'errors' => [],
                 'job' => null,
+                'taskContext' => $preselectedTask,
             ]);
             break;
 
@@ -986,11 +1354,13 @@ try {
                     'pageTitle' => 'Edit Job',
                     'formTitle' => 'Edit Job',
                     'formAction' => '/jobs/' . $job['id'] . '/edit',
+                    'taskOptions' => list_tasks(),
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
                     'locations' => list_active_locations(),
                     'workers' => list_active_workers(),
                     'values' => job_form_values([], [
+                        'task_id' => $job['task_id'] !== null ? (int) $job['task_id'] : null,
                         'customer_id' => (int) $job['customer_id'],
                         'location_id' => $job['location_id'] !== null ? (int) $job['location_id'] : null,
                         'title' => (string) $job['title'],
@@ -1005,6 +1375,7 @@ try {
                     ]),
                     'errors' => [],
                     'job' => $job,
+                    'taskContext' => $job['task_id'] !== null ? find_task_by_id((int) $job['task_id']) : null,
                 ]);
                 break;
             }
@@ -1027,6 +1398,7 @@ try {
                     'pageTitle' => 'Edit Job',
                     'formTitle' => 'Edit Job',
                     'formAction' => '/jobs/' . $job['id'] . '/edit',
+                    'taskOptions' => list_tasks(),
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
                     'locations' => list_active_locations(),
@@ -1034,6 +1406,7 @@ try {
                     'values' => $values,
                     'errors' => $errors,
                     'job' => $job,
+                    'taskContext' => $values['task_id'] !== null ? find_task_by_id((int) $values['task_id']) : null,
                 ], 422);
                 break;
             }
