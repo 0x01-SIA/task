@@ -125,6 +125,24 @@ function requested_calendar_month(mixed $value): DateTimeImmutable
     return new DateTimeImmutable('first day of this month');
 }
 
+function requested_calendar_view(mixed $value): string
+{
+    $view = is_string($value) ? trim($value) : '';
+
+    return in_array($view, ['week', 'month'], true) ? $view : 'week';
+}
+
+function requested_calendar_date(mixed $value): DateTimeImmutable
+{
+    $dateValue = is_string($value) ? trim($value) : '';
+
+    if ($dateValue !== '' && valid_date_value($dateValue)) {
+        return new DateTimeImmutable($dateValue);
+    }
+
+    return new DateTimeImmutable('today');
+}
+
 function valid_time_value(string $value): bool
 {
     $time = DateTime::createFromFormat('H:i', $value);
@@ -841,23 +859,25 @@ try {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
 
+            $calendarView = requested_calendar_view($_GET['view'] ?? null);
+            $todayDate = new DateTimeImmutable('today');
+            $selectedDate = requested_calendar_date($_GET['date'] ?? null);
             $selectedMonth = requested_calendar_month($_GET['month'] ?? null);
+            $weekAnchorDate = $calendarView === 'month' ? $selectedMonth : $selectedDate;
+            $weekStart = $weekAnchorDate->modify('-' . ((int) $weekAnchorDate->format('N') - 1) . ' days');
+            $weekEnd = $weekStart->modify('+6 days');
             $monthStart = $selectedMonth->modify('first day of this month');
             $monthEnd = $selectedMonth->modify('last day of this month');
-            $gridStart = $monthStart->modify('-' . ((int) $monthStart->format('N') - 1) . ' days');
-            $gridEnd = $monthEnd->modify('+' . (7 - (int) $monthEnd->format('N')) . ' days');
-            $gridPeriod = new DatePeriod(
-                $gridStart,
-                new DateInterval('P1D'),
-                $gridEnd->modify('+1 day')
-            );
-
+            $monthGridStart = $monthStart->modify('-' . ((int) $monthStart->format('N') - 1) . ' days');
+            $monthGridEnd = $monthEnd->modify('+' . (7 - (int) $monthEnd->format('N')) . ' days');
+            $queryStart = $calendarView === 'week' ? $weekStart : $monthGridStart;
+            $queryEnd = $calendarView === 'week' ? $weekEnd : $monthGridEnd;
             $jobsByDate = [];
 
             foreach (find_jobs_for_calendar(
                 jobs_connection(),
-                $gridStart->format('Y-m-d'),
-                $gridEnd->format('Y-m-d')
+                $queryStart->format('Y-m-d'),
+                $queryEnd->format('Y-m-d')
             ) as $job) {
                 $plannedDate = (string) ($job['planned_date'] ?? '');
 
@@ -869,17 +889,38 @@ try {
                 $jobsByDate[$plannedDate][] = $job;
             }
 
+            $weekDays = [];
+            $weekPeriod = new DatePeriod(
+                $weekStart,
+                new DateInterval('P1D'),
+                $weekEnd->modify('+1 day')
+            );
+
+            foreach ($weekPeriod as $day) {
+                $dateKey = $day->format('Y-m-d');
+                $weekDays[] = [
+                    'date' => $day,
+                    'date_key' => $dateKey,
+                    'is_today' => $dateKey === $todayDate->format('Y-m-d'),
+                    'jobs' => $jobsByDate[$dateKey] ?? [],
+                ];
+            }
+
             $calendarWeeks = [];
             $week = [];
-            $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+            $monthGridPeriod = new DatePeriod(
+                $monthGridStart,
+                new DateInterval('P1D'),
+                $monthGridEnd->modify('+1 day')
+            );
 
-            foreach ($gridPeriod as $day) {
+            foreach ($monthGridPeriod as $day) {
                 $dateKey = $day->format('Y-m-d');
                 $week[] = [
                     'date' => $day,
                     'date_key' => $dateKey,
                     'is_current_month' => $day->format('Y-m') === $selectedMonth->format('Y-m'),
-                    'is_today' => $dateKey === $today,
+                    'is_today' => $dateKey === $todayDate->format('Y-m-d'),
                     'jobs' => $jobsByDate[$dateKey] ?? [],
                 ];
 
@@ -891,9 +932,17 @@ try {
 
             render('jobs/calendar', [
                 'pageTitle' => 'Job Calendar',
+                'calendarView' => $calendarView,
+                'selectedDate' => $selectedDate,
                 'selectedMonth' => $selectedMonth,
+                'todayDate' => $todayDate,
+                'weekStart' => $weekStart,
+                'weekEnd' => $weekEnd,
+                'previousWeek' => $weekStart->modify('-7 days'),
+                'nextWeek' => $weekStart->modify('+7 days'),
                 'previousMonth' => $selectedMonth->modify('-1 month'),
                 'nextMonth' => $selectedMonth->modify('+1 month'),
+                'weekDays' => $weekDays,
                 'calendarWeeks' => $calendarWeeks,
                 'unscheduledActiveJobsCount' => count_unscheduled_active_jobs(jobs_connection()),
                 'weekdayLabels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],

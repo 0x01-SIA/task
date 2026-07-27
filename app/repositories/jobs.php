@@ -180,7 +180,7 @@ function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate): a
             j.planned_date ASC,
             CASE WHEN j.planned_start_time IS NULL THEN 1 ELSE 0 END ASC,
             j.planned_start_time ASC,
-            j.id ASC"
+            j.job_number ASC"
     );
     $statement->execute([
         'start_date' => $startDate,
