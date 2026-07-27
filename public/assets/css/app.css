@@ -178,6 +178,119 @@ body.app-shell {
     text-transform: uppercase;
 }
 
+.task-detail {
+    gap: 1rem;
+}
+
+.task-detail .card-body {
+    padding: 1.15rem 1.25rem;
+}
+
+.task-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.85rem 1rem;
+}
+
+.task-header__content {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.task-header__eyebrow {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.task-header__number {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.35rem;
+    line-height: 1.1;
+}
+
+.task-header__title {
+    margin: 0;
+    color: #475569;
+    font-size: 1rem;
+}
+
+.task-header__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    justify-content: flex-end;
+}
+
+.task-info-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.95rem 1.2rem;
+}
+
+.task-info-grid__item {
+    min-width: 0;
+}
+
+.task-info-grid__item--full {
+    grid-column: 1 / -1;
+}
+
+.task-value {
+    margin: 0;
+    line-height: 1.4;
+}
+
+.task-status-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem 1rem;
+}
+
+.task-status-panel__copy {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.task-status-panel__title {
+    margin: 0;
+}
+
+.task-status-panel__text {
+    margin: 0;
+    color: #64748b;
+}
+
+.task-status-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.task-status-form .form-select {
+    min-width: 12rem;
+}
+
+.task-linked-jobs__header {
+    margin-bottom: 0.85rem;
+}
+
+.task-linked-jobs__title {
+    margin-bottom: 0.15rem;
+}
+
+.task-linked-jobs__text {
+    margin: 0;
+}
+
 .table td,
 .table th {
     vertical-align: middle;
@@ -796,6 +909,27 @@ body.app-shell {
     .calendar-view-switcher__link {
         flex: 1 1 50%;
     }
+
+    .task-header,
+    .task-status-panel {
+        align-items: stretch;
+    }
+
+    .task-header__actions,
+    .task-status-form {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .task-header__actions .btn,
+    .task-status-form .btn {
+        flex: 1 1 auto;
+    }
+
+    .task-status-form .form-select {
+        min-width: 0;
+        width: 100%;
+    }
 }
 
 @media (max-width: 767.98px) {
@@ -808,11 +942,25 @@ body.app-shell {
     .calendar-month-mobile {
         display: grid;
     }
+
+    .task-info-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 991.98px) {
     .calendar-week {
         overflow-x: auto;
         grid-template-columns: repeat(7, minmax(190px, 1fr));
+    }
+
+    .task-info-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .task-info-grid {
+        grid-template-columns: 1fr;
     }
 }

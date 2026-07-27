@@ -3,21 +3,22 @@
 declare(strict_types=1);
 
 $taskClosed = in_array((string) ($task['status'] ?? ''), ['completed', 'cancelled'], true);
+$createJobLabel = $linkedJobs === [] ? 'Create first job' : 'Create Job';
 ?>
-<div class="d-grid gap-4">
+<div class="d-grid task-detail">
     <section class="card shadow-sm border-0">
-        <div class="card-body p-4 p-lg-5">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Task</p>
-                    <h1 class="h3 mb-2"><?= h($task['task_number']) ?></h1>
-                    <p class="text-secondary mb-0"><?= h($task['title']) ?></p>
+        <div class="card-body">
+            <div class="task-header">
+                <div class="task-header__content">
+                    <p class="task-header__eyebrow">Task</p>
+                    <h1 class="task-header__number"><?= h($task['task_number']) ?></h1>
+                    <p class="task-header__title"><?= h($task['title']) ?></p>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
+                <div class="task-header__actions">
                     <a class="btn btn-outline-secondary" href="<?= h(app_url('/tasks')) ?>">Back to Tasks</a>
-                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/' . $task['id'] . '/edit')) ?>">Edit Task</a>
+                    <a class="btn btn-outline-primary" href="<?= h(app_url('/tasks/' . $task['id'] . '/edit')) ?>">Edit Task</a>
                     <?php if (!$taskClosed): ?>
-                        <a class="btn btn-outline-primary" href="<?= h(app_url('/tasks/' . $task['id'] . '/jobs/create')) ?>">Create Job for This Task</a>
+                        <a class="btn btn-primary" href="<?= h(app_url('/tasks/' . $task['id'] . '/jobs/create')) ?>"><?= h($createJobLabel) ?></a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -29,68 +30,66 @@ $taskClosed = in_array((string) ($task['status'] ?? ''), ['completed', 'cancelle
     <?php endif; ?>
 
     <section class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <div class="info-grid">
-                <div>
+        <div class="card-body">
+            <div class="info-grid task-info-grid">
+                <div class="task-info-grid__item">
                     <p class="info-label">Status</p>
-                    <p class="mb-0"><span class="badge <?= h(task_status_badge_class((string) $task['status'])) ?>"><?= h(task_status_label((string) $task['status'])) ?></span></p>
+                    <p class="task-value"><span class="badge <?= h(task_status_badge_class((string) $task['status'])) ?>"><?= h(task_status_label((string) $task['status'])) ?></span></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Priority</p>
-                    <p class="mb-0"><?= h(task_priority_label((string) $task['priority'])) ?></p>
+                    <p class="task-value"><span class="badge <?= h(task_priority_badge_class((string) $task['priority'])) ?>"><?= h(task_priority_label((string) $task['priority'])) ?></span></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Customer</p>
-                    <p class="mb-0"><a href="<?= h(app_url('/customers/' . $task['customer_id'])) ?>"><?= h($task['customer_name']) ?></a></p>
+                    <p class="task-value"><a href="<?= h(app_url('/customers/' . $task['customer_id'])) ?>"><?= h($task['customer_name']) ?></a></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Location</p>
-                    <p class="mb-0">
+                    <p class="task-value">
                         <?php if ($task['location_id'] !== null): ?>
                             <a href="<?= h(app_url('/locations/' . $task['location_id'])) ?>"><?= h($task['location_name'] ?: 'View location') ?></a>
                         <?php else: ?>
-                            Not assigned
+                            Not set
                         <?php endif; ?>
                     </p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Requested Date</p>
-                    <p class="mb-0"><?= h(format_date($task['requested_date'] ?? null)) ?></p>
+                    <p class="task-value"><?= h(format_display_date($task['requested_date'] ?? null)) ?></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Due Date</p>
-                    <p class="mb-0"><?= h(format_date($task['due_date'] ?? null)) ?></p>
+                    <p class="task-value"><?= h(format_display_date($task['due_date'] ?? null)) ?></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Created By</p>
-                    <p class="mb-0"><?= h($task['created_by_name'] ?: 'Unknown user') ?></p>
+                    <p class="task-value"><?= h($task['created_by_name'] ?: 'Unknown user') ?></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Created</p>
-                    <p class="mb-0"><?= h(format_datetime($task['created_at'] ?? null)) ?></p>
+                    <p class="task-value"><?= h(format_display_datetime($task['created_at'] ?? null)) ?></p>
                 </div>
-                <div>
+                <div class="task-info-grid__item">
                     <p class="info-label">Updated</p>
-                    <p class="mb-0"><?= h(format_datetime($task['updated_at'] ?? null)) ?></p>
+                    <p class="task-value"><?= h(format_display_datetime($task['updated_at'] ?? null)) ?></p>
                 </div>
-            </div>
-
-            <div class="mt-4">
+                <div class="task-info-grid__item task-info-grid__item--full">
                 <p class="info-label">Description</p>
-                <p class="mb-0"><?= nl2br(h($task['description'] ?: 'No description provided.')) ?></p>
+                    <p class="task-value"><?= nl2br(h($task['description'] ?: 'No description provided.')) ?></p>
+                </div>
             </div>
         </div>
     </section>
 
     <section class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Status</p>
-                    <h2 class="h5 mb-1">Change Task Status</h2>
-                    <p class="text-secondary mb-0">Use the existing workflow states without removing the task from history.</p>
+        <div class="card-body">
+            <div class="task-status-panel">
+                <div class="task-status-panel__copy">
+                    <h2 class="h5 task-status-panel__title">Change Task Status</h2>
+                    <p class="task-status-panel__text">Use the existing workflow states without removing the task from history.</p>
                 </div>
-                <form method="post" action="<?= h(app_url('/tasks/' . $task['id'] . '/status')) ?>" class="d-flex flex-wrap gap-2 align-items-center">
+                <form method="post" action="<?= h(app_url('/tasks/' . $task['id'] . '/status')) ?>" class="task-status-form">
                     <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
                     <select class="form-select" name="status" aria-label="Task status">
                         <?php foreach (task_status_options() as $value => $label): ?>
@@ -104,25 +103,21 @@ $taskClosed = in_array((string) ($task['status'] ?? ''), ['completed', 'cancelle
     </section>
 
     <section class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 task-linked-jobs__header">
                 <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Linked Jobs</p>
-                    <h2 class="h5 mb-1">Scheduled Work</h2>
-                    <p class="text-secondary mb-0">Every job linked to this task, ordered with upcoming scheduled work first.</p>
+                    <h2 class="h5 task-linked-jobs__title">Linked Jobs</h2>
+                    <p class="text-secondary task-linked-jobs__text">Jobs created for this task, ordered by operational relevance.</p>
                 </div>
                 <?php if (!$taskClosed): ?>
                     <a class="btn btn-outline-primary" href="<?= h(app_url('/tasks/' . $task['id'] . '/jobs/create')) ?>">
-                        <?= $linkedJobs === [] ? 'Create first job' : 'Create Job for This Task' ?>
+                        <?= h($createJobLabel) ?>
                     </a>
                 <?php endif; ?>
             </div>
 
             <?php if ($linkedJobs === []): ?>
-                <p class="text-secondary mb-3">No jobs have been created for this task yet.</p>
-                <?php if (!$taskClosed): ?>
-                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/' . $task['id'] . '/jobs/create')) ?>">Create first job</a>
-                <?php endif; ?>
+                <p class="dashboard-empty mb-0">No jobs have been created for this task yet.</p>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">

@@ -519,6 +519,21 @@ function format_datetime(?string $value): string
     return date('Y-m-d H:i', $timestamp);
 }
 
+function format_display_datetime(?string $value, string $fallback = 'Not set'): string
+{
+    if ($value === null || trim($value) === '') {
+        return $fallback;
+    }
+
+    $timestamp = strtotime($value);
+
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('d M Y, H:i', $timestamp);
+}
+
 function format_date(?string $value): string
 {
     if ($value === null || trim($value) === '') {
@@ -532,6 +547,21 @@ function format_date(?string $value): string
     }
 
     return date('Y-m-d', $timestamp);
+}
+
+function format_display_date(?string $value, string $fallback = 'Not set'): string
+{
+    if ($value === null || trim($value) === '') {
+        return $fallback;
+    }
+
+    $timestamp = strtotime($value);
+
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('d M Y', $timestamp);
 }
 
 function format_time(?string $value): string
@@ -662,6 +692,16 @@ function job_priority_label(string $value): string
 function task_priority_label(string $value): string
 {
     return task_priority_options()[$value] ?? ucfirst($value);
+}
+
+function task_priority_badge_class(string $value): string
+{
+    return match ($value) {
+        'urgent' => 'text-bg-danger',
+        'high' => 'text-bg-warning text-dark',
+        'normal' => 'text-bg-secondary',
+        default => 'text-bg-light text-dark border',
+    };
 }
 
 function task_status_label(string $value): string
