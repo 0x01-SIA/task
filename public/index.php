@@ -103,6 +103,28 @@ function valid_date_value(string $value): bool
     return $date !== false && $date->format('Y-m-d') === $value;
 }
 
+function valid_month_value(string $value): bool
+{
+    if (preg_match('/^\d{4}-\d{2}$/', $value) !== 1) {
+        return false;
+    }
+
+    $month = DateTimeImmutable::createFromFormat('!Y-m', $value);
+
+    return $month !== false && $month->format('Y-m') === $value;
+}
+
+function requested_calendar_month(mixed $value): DateTimeImmutable
+{
+    $monthValue = is_string($value) ? trim($value) : '';
+
+    if ($monthValue !== '' && valid_month_value($monthValue)) {
+        return new DateTimeImmutable($monthValue . '-01');
+    }
+
+    return new DateTimeImmutable('first day of this month');
+}
+
 function valid_time_value(string $value): bool
 {
     $time = DateTime::createFromFormat('H:i', $value);
@@ -227,6 +249,7 @@ function job_filter_values(array $source, array $viewer): array
 {
     $status = trim((string) ($source['status'] ?? ''));
     $plannedDate = trim((string) ($source['planned_date'] ?? ''));
+    $schedule = trim((string) ($source['schedule'] ?? ''));
 
     return [
         'search' => trim((string) ($source['search'] ?? '')),
@@ -234,6 +257,7 @@ function job_filter_values(array $source, array $viewer): array
         'worker_id' => ($viewer['role'] ?? '') === 'worker' ? (int) $viewer['id'] : positive_int_or_null($source['worker_id'] ?? null),
         'customer_id' => positive_int_or_null($source['customer_id'] ?? null),
         'planned_date' => $plannedDate !== '' && valid_date_value($plannedDate) ? $plannedDate : '',
+        'schedule' => $schedule === 'unscheduled' ? 'unscheduled' : '',
     ];
 }
 
@@ -807,6 +831,72 @@ try {
                 'values' => job_form_values($_GET),
                 'errors' => [],
                 'job' => null,
+            ]);
+            break;
+
+        case $path === '/jobs/calendar':
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $selectedMonth = requested_calendar_month($_GET['month'] ?? null);
+            $monthStart = $selectedMonth->modify('first day of this month');
+            $monthEnd = $selectedMonth->modify('last day of this month');
+            $gridStart = $monthStart->modify('-' . ((int) $monthStart->format('N') - 1) . ' days');
+            $gridEnd = $monthEnd->modify('+' . (7 - (int) $monthEnd->format('N')) . ' days');
+            $gridPeriod = new DatePeriod(
+                $gridStart,
+                new DateInterval('P1D'),
+                $gridEnd->modify('+1 day')
+            );
+
+            $jobsByDate = [];
+
+            foreach (find_jobs_for_calendar(
+                jobs_connection(),
+                $gridStart->format('Y-m-d'),
+                $gridEnd->format('Y-m-d')
+            ) as $job) {
+                $plannedDate = (string) ($job['planned_date'] ?? '');
+
+                if ($plannedDate === '') {
+                    continue;
+                }
+
+                $jobsByDate[$plannedDate] ??= [];
+                $jobsByDate[$plannedDate][] = $job;
+            }
+
+            $calendarWeeks = [];
+            $week = [];
+            $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+
+            foreach ($gridPeriod as $day) {
+                $dateKey = $day->format('Y-m-d');
+                $week[] = [
+                    'date' => $day,
+                    'date_key' => $dateKey,
+                    'is_current_month' => $day->format('Y-m') === $selectedMonth->format('Y-m'),
+                    'is_today' => $dateKey === $today,
+                    'jobs' => $jobsByDate[$dateKey] ?? [],
+                ];
+
+                if (count($week) === 7) {
+                    $calendarWeeks[] = $week;
+                    $week = [];
+                }
+            }
+
+            render('jobs/calendar', [
+                'pageTitle' => 'Job Calendar',
+                'selectedMonth' => $selectedMonth,
+                'previousMonth' => $selectedMonth->modify('-1 month'),
+                'nextMonth' => $selectedMonth->modify('+1 month'),
+                'calendarWeeks' => $calendarWeeks,
+                'unscheduledActiveJobsCount' => count_unscheduled_active_jobs(jobs_connection()),
+                'weekdayLabels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
             ]);
             break;
 

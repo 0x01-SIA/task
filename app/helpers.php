@@ -420,6 +420,7 @@ function auth_navigation_items(?array $user = null): array
         ['label' => 'Locations', 'path' => '/locations'],
         ['label' => 'Tasks', 'path' => '/tasks'],
         ['label' => 'Jobs', 'path' => '/jobs'],
+        ['label' => 'Calendar', 'path' => '/jobs/calendar'],
     ];
 
     if ($role === 'admin') {
@@ -465,6 +466,10 @@ function validate_password_strength(string $password): ?string
 function is_current_path(string $path): bool
 {
     $currentPath = request_path();
+
+    if ($currentPath === '/jobs/calendar' && $path === '/jobs') {
+        return false;
+    }
 
     return $currentPath === $path
         || ($path !== '/' && str_starts_with($currentPath, rtrim($path, '/') . '/'));

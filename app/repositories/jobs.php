@@ -79,6 +79,11 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
         $params['planned_date'] = $filters['planned_date'];
     }
 
+    if (($filters['schedule'] ?? '') === 'unscheduled') {
+        $sql .= " AND j.planned_date IS NULL
+                  AND j.status NOT IN ('completed', 'cancelled')";
+    }
+
     if (($viewer['role'] ?? null) !== 'worker' && ($filters['worker_id'] ?? null) !== null) {
         $sql .= ' AND j.assigned_user_id = :worker_id';
         $params['worker_id'] = (int) $filters['worker_id'];
@@ -151,6 +156,51 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
     $job = $statement->fetch();
 
     return is_array($job) ? $job : null;
+}
+
+function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate): array
+{
+    $statement = $pdo->prepare(
+        "SELECT
+            j.id,
+            j.job_number,
+            j.status,
+            j.planned_date,
+            j.planned_start_time,
+            c.name AS customer_name,
+            l.name AS location_name,
+            l.address_line,
+            u.name AS assigned_worker_name
+         FROM jobs j
+         INNER JOIN customers c ON c.id = j.customer_id
+         LEFT JOIN locations l ON l.id = j.location_id
+         LEFT JOIN users u ON u.id = j.assigned_user_id
+         WHERE j.planned_date BETWEEN :start_date AND :end_date
+         ORDER BY
+            j.planned_date ASC,
+            CASE WHEN j.planned_start_time IS NULL THEN 1 ELSE 0 END ASC,
+            j.planned_start_time ASC,
+            j.id ASC"
+    );
+    $statement->execute([
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+    ]);
+    $jobs = $statement->fetchAll();
+
+    return is_array($jobs) ? $jobs : [];
+}
+
+function count_unscheduled_active_jobs(PDO $pdo): int
+{
+    $statement = $pdo->query(
+        "SELECT COUNT(*)
+         FROM jobs
+         WHERE planned_date IS NULL
+           AND status NOT IN ('completed', 'cancelled')"
+    );
+
+    return (int) $statement->fetchColumn();
 }
 
 function create_job(array $data): int

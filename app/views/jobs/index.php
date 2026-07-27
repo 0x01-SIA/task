@@ -13,9 +13,12 @@ $canManageJobs = in_array((string) ($user['role'] ?? ''), ['admin', 'dispatcher'
                     <h1 class="h3 mb-2"><?= h($canManageJobs ? 'Job Management' : 'My Jobs') ?></h1>
                     <p class="text-secondary mb-0">Track scheduled field work, assignments, and current planning status.</p>
                 </div>
-                <?php if ($canManageJobs): ?>
-                    <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>">Create Job</a>
-                <?php endif; ?>
+                <div class="d-flex flex-wrap gap-2">
+                    <?php if ($canManageJobs): ?>
+                        <a class="btn btn-outline-secondary" href="<?= h(app_url('/jobs/calendar')) ?>">Calendar</a>
+                        <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>">Create Job</a>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </section>
@@ -27,6 +30,9 @@ $canManageJobs = in_array((string) ($user['role'] ?? ''), ['admin', 'dispatcher'
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
             <form method="get" action="<?= h(app_url('/jobs')) ?>" class="row g-3 align-items-end">
+                <?php if (($filters['schedule'] ?? '') === 'unscheduled'): ?>
+                    <input type="hidden" name="schedule" value="unscheduled">
+                <?php endif; ?>
                 <div class="col-12 col-lg-4">
                     <label class="form-label" for="search">Search</label>
                     <input class="form-control" id="search" name="search" type="text" value="<?= h($filters['search'] ?? '') ?>" placeholder="Job number, title, customer, location">
@@ -83,6 +89,12 @@ $canManageJobs = in_array((string) ($user['role'] ?? ''), ['admin', 'dispatcher'
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
+            <?php if (($filters['schedule'] ?? '') === 'unscheduled'): ?>
+                <div class="alert alert-info mb-4" role="status">
+                    Showing active jobs without a planned date.
+                </div>
+            <?php endif; ?>
+
             <?php if ($jobs === []): ?>
                 <p class="text-secondary mb-0">No jobs matched the current filters.</p>
             <?php else: ?>

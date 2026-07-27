@@ -309,6 +309,154 @@ body.app-shell {
     background: #f8fafc;
 }
 
+.calendar-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.calendar-toolbar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.calendar-shell {
+    overflow-x: auto;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(150px, 1fr));
+    gap: 0.75rem;
+    min-width: 100%;
+}
+
+.calendar-grid__weekday {
+    padding: 0.75rem 0.9rem;
+    color: #475569;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.calendar-day {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 0.75rem;
+    min-height: 12rem;
+    padding: 0.85rem;
+    border: 1px solid #dbe4ee;
+    border-radius: 1rem;
+    background: #ffffff;
+    box-shadow: 0 0.25rem 1rem rgba(15, 23, 42, 0.04);
+}
+
+.calendar-day--outside {
+    background: #f8fafc;
+    color: #94a3b8;
+}
+
+.calendar-day--today {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 0.2rem rgba(96, 165, 250, 0.15);
+}
+
+.calendar-day__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.calendar-day__number {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.calendar-day--outside .calendar-day__number {
+    color: #64748b;
+}
+
+.calendar-day__count {
+    min-width: 1.6rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.calendar-day__jobs {
+    display: grid;
+    align-content: start;
+    gap: 0.5rem;
+}
+
+.calendar-job {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #dbe4ee;
+    border-radius: 0.85rem;
+    background: #f8fafc;
+    color: inherit;
+    text-decoration: none;
+}
+
+.calendar-job:hover,
+.calendar-job:focus {
+    border-color: #93c5fd;
+    color: inherit;
+    text-decoration: none;
+    background: #eff6ff;
+}
+
+.calendar-job--completed {
+    opacity: 0.78;
+}
+
+.calendar-job--cancelled {
+    opacity: 0.62;
+    background: #f1f5f9;
+}
+
+.calendar-job__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.calendar-job__number {
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.calendar-job__body {
+    display: grid;
+    gap: 0.15rem;
+    color: #0f172a;
+    font-size: 0.88rem;
+    line-height: 1.3;
+}
+
+.calendar-job__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.65rem;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
 @media (max-width: 575.98px) {
     .app-header-bar {
         align-items: stretch;
@@ -329,5 +477,17 @@ body.app-shell {
     .worker-note__meta {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .calendar-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .calendar-grid__weekday {
+        display: none;
+    }
+
+    .calendar-day {
+        min-height: auto;
     }
 }

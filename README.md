@@ -141,6 +141,7 @@ Authenticated routes:
 - `POST /locations/{id}/edit` updates a location, including active or inactive state
 - `GET /tasks` is an administrator and dispatcher placeholder page
 - `GET /jobs` lists jobs for administrators and dispatchers
+- `GET /jobs/calendar` shows the monthly jobs calendar for administrators and dispatchers and accepts `?month=YYYY-MM`
 - `GET /jobs/create` shows the create-job form for administrators and dispatchers
 - `POST /jobs` creates a job
 - `GET /jobs/{id}` shows a job for administrators and dispatchers
@@ -165,6 +166,14 @@ Role access summary:
 - `admin`: full customer, location, and job-management access, plus access to worker-facing `/work` pages for testing and operational review
 - `dispatcher`: the same customer, location, and job-management access as `admin`, plus access to worker-facing `/work` pages
 - `worker`: `/work`, `GET /work/jobs/{id}`, `POST /work/jobs/{id}/start`, `POST /work/jobs/{id}/complete`, and `POST /work/jobs/{id}/notes`
+
+Job calendar behavior:
+
+- `/jobs/calendar` defaults to the current month when `month` is missing or invalid.
+- The `month` query parameter must use strict `YYYY-MM` format, for example `/jobs/calendar?month=2026-07`.
+- Scheduled jobs are placed on the calendar using the existing `jobs.planned_date` field.
+- Jobs without a planned date are excluded from calendar day cells and are summarized separately as unscheduled active jobs.
+- Cancelled jobs remain visible on the calendar with muted styling to match the existing job-list behavior.
 
 User-management access rules:
 
@@ -246,7 +255,9 @@ The seed data creates:
 18. Sign in with `dispatcher@example.test` and confirm both `/dashboard` and job-management pages still work.
 19. As `worker@example.test`, confirm sign-in still redirects to `/work` and `/jobs` plus `/dashboard` each return HTTP `403`.
 20. Run `php bin/setup-database.php` twice consecutively and confirm both runs succeed.
-21. Run `php -l` on each changed PHP file and confirm there are no syntax errors.
+21. Open `/jobs/calendar`, `/jobs/calendar?month=2026-07`, `/jobs/calendar?month=2026-08`, and `/jobs/calendar?month=invalid` and confirm month navigation plus invalid-month fallback work.
+22. As `worker@example.test`, confirm `/jobs/calendar` returns HTTP `403`.
+23. Run `php -l` on each changed PHP file and confirm there are no syntax errors.
 
 ## User management testing
 
