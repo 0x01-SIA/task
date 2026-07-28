@@ -48,6 +48,7 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
     let drawing = false;
     let hasInk = false;
     let lastPoint = null;
+    let activePointerId = null;
 
     const setupContext = () => {
         context.lineCap = 'round';
@@ -92,15 +93,28 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
 
     const pointFromEvent = (event) => {
         const bounds = canvas.getBoundingClientRect();
+        const source = 'touches' in event && event.touches.length > 0
+            ? event.touches[0]
+            : 'changedTouches' in event && event.changedTouches.length > 0
+                ? event.changedTouches[0]
+                : event;
 
         return {
-            x: event.clientX - bounds.left,
-            y: event.clientY - bounds.top,
+            x: source.clientX - bounds.left,
+            y: source.clientY - bounds.top,
         };
     };
 
     const beginStroke = (event) => {
         event.preventDefault();
+
+        if ('pointerId' in event) {
+            activePointerId = event.pointerId;
+            if (typeof canvas.setPointerCapture === 'function') {
+                canvas.setPointerCapture(event.pointerId);
+            }
+        }
+
         drawing = true;
         lastPoint = pointFromEvent(event);
         hasInk = true;
@@ -114,6 +128,10 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
             return;
         }
 
+        if ('pointerId' in event && activePointerId !== null && event.pointerId !== activePointerId) {
+            return;
+        }
+
         event.preventDefault();
         const nextPoint = pointFromEvent(event);
         context.beginPath();
@@ -123,12 +141,25 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
         lastPoint = nextPoint;
     };
 
-    const endStroke = () => {
+    const endStroke = (event) => {
         if (!drawing) {
             return;
         }
 
+        if (event && 'pointerId' in event && activePointerId !== null && event.pointerId !== activePointerId) {
+            return;
+        }
+
+        if (event && 'pointerId' in event && typeof canvas.releasePointerCapture === 'function') {
+            try {
+                canvas.releasePointerCapture(event.pointerId);
+            } catch (error) {
+                // Ignore browsers that reject release when capture was not set.
+            }
+        }
+
         drawing = false;
+        activePointerId = null;
         lastPoint = null;
         output.value = hasInk ? canvas.toDataURL('image/png') : '';
     };
@@ -140,6 +171,7 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
         setupContext();
         drawing = false;
         hasInk = false;
+        activePointerId = null;
         lastPoint = null;
         output.value = '';
         pad.classList.add('is-empty');
@@ -155,11 +187,22 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
         restoreSignature(initialSignature);
     }
 
-    canvas.addEventListener('pointerdown', beginStroke);
-    canvas.addEventListener('pointermove', continueStroke);
-    canvas.addEventListener('pointerup', endStroke);
-    canvas.addEventListener('pointerleave', endStroke);
-    canvas.addEventListener('pointercancel', endStroke);
+    if ('PointerEvent' in window) {
+        canvas.addEventListener('pointerdown', beginStroke);
+        canvas.addEventListener('pointermove', continueStroke);
+        canvas.addEventListener('pointerup', endStroke);
+        canvas.addEventListener('pointerleave', endStroke);
+        canvas.addEventListener('pointercancel', endStroke);
+    } else {
+        canvas.addEventListener('mousedown', beginStroke);
+        canvas.addEventListener('mousemove', continueStroke);
+        canvas.addEventListener('mouseup', endStroke);
+        canvas.addEventListener('mouseleave', endStroke);
+        canvas.addEventListener('touchstart', beginStroke, { passive: false });
+        canvas.addEventListener('touchmove', continueStroke, { passive: false });
+        canvas.addEventListener('touchend', endStroke, { passive: false });
+        canvas.addEventListener('touchcancel', endStroke, { passive: false });
+    }
     clearButton.addEventListener('click', clearSignature);
     form.addEventListener('submit', () => {
         output.value = hasInk ? canvas.toDataURL('image/png') : '';
