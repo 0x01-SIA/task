@@ -251,15 +251,7 @@ $canManageJobs = in_array((string) ($viewer['role'] ?? ''), ['admin', 'dispatche
         </div>
     </section>
 
-    <section class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <div class="mb-3">
-                <p class="text-uppercase text-secondary small fw-semibold mb-2">Later Version</p>
-                <h2 class="h5 mb-1">Customer Confirmation</h2>
-                <p class="text-secondary mb-0">Customer confirmation and signature will be available in a later version.</p>
-            </div>
-        </div>
-    </section>
+    <?php require base_path('app/views/jobs/customer-confirmation.php'); ?>
 
     <?php if ($canManageJobs): ?>
         <section class="card shadow-sm border-0">

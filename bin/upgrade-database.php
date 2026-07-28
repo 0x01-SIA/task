@@ -27,6 +27,7 @@ try {
     ensureJobsTaskLink($connection);
     ensureJobAttachmentsTable($connection);
     ensureJobPhotosTable($connection);
+    ensureJobCustomerConfirmationsTable($connection);
     fwrite(STDOUT, "Database upgrade completed successfully.\n");
 } catch (Throwable $exception) {
     fwrite(STDERR, sprintf("Database upgrade failed: %s\n", $exception->getMessage()));
@@ -163,6 +164,49 @@ function ensureJobPhotosTable(PDO $connection): void
 
     ensureForeignKey($connection, 'job_photos', 'fk_job_photos_job', 'ALTER TABLE job_photos ADD CONSTRAINT fk_job_photos_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensureForeignKey($connection, 'job_photos', 'fk_job_photos_uploaded_by_user', 'ALTER TABLE job_photos ADD CONSTRAINT fk_job_photos_uploaded_by_user FOREIGN KEY (uploaded_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensureJobCustomerConfirmationsTable(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS job_customer_confirmations (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            job_id BIGINT UNSIGNED NOT NULL,
+            customer_name VARCHAR(255) NOT NULL,
+            customer_email VARCHAR(255) DEFAULT NULL,
+            signature_path VARCHAR(1000) NOT NULL,
+            signature_mime_type VARCHAR(100) NOT NULL DEFAULT 'image/png',
+            signature_file_size BIGINT UNSIGNED NOT NULL,
+            confirmed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            confirmed_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_job_customer_confirmations_job_id (job_id),
+            KEY idx_job_customer_confirmations_confirmed_by_user_id (confirmed_by_user_id),
+            KEY idx_job_customer_confirmations_confirmed_at (confirmed_at),
+            CONSTRAINT fk_job_customer_confirmations_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_job_customer_confirmations_confirmed_by_user FOREIGN KEY (confirmed_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensureColumn($connection, 'job_customer_confirmations', 'job_id', 'ALTER TABLE job_customer_confirmations ADD COLUMN job_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensureColumn($connection, 'job_customer_confirmations', 'customer_name', 'ALTER TABLE job_customer_confirmations ADD COLUMN customer_name VARCHAR(255) NOT NULL AFTER job_id');
+    ensureColumn($connection, 'job_customer_confirmations', 'customer_email', 'ALTER TABLE job_customer_confirmations ADD COLUMN customer_email VARCHAR(255) DEFAULT NULL AFTER customer_name');
+    ensureColumn($connection, 'job_customer_confirmations', 'signature_path', 'ALTER TABLE job_customer_confirmations ADD COLUMN signature_path VARCHAR(1000) NOT NULL AFTER customer_email');
+    ensureColumn($connection, 'job_customer_confirmations', 'signature_mime_type', "ALTER TABLE job_customer_confirmations ADD COLUMN signature_mime_type VARCHAR(100) NOT NULL DEFAULT 'image/png' AFTER signature_path");
+    ensureColumn($connection, 'job_customer_confirmations', 'signature_file_size', 'ALTER TABLE job_customer_confirmations ADD COLUMN signature_file_size BIGINT UNSIGNED NOT NULL AFTER signature_mime_type');
+    ensureColumn($connection, 'job_customer_confirmations', 'confirmed_at', 'ALTER TABLE job_customer_confirmations ADD COLUMN confirmed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER signature_file_size');
+    ensureColumn($connection, 'job_customer_confirmations', 'confirmed_by_user_id', 'ALTER TABLE job_customer_confirmations ADD COLUMN confirmed_by_user_id BIGINT UNSIGNED DEFAULT NULL AFTER confirmed_at');
+    ensureColumn($connection, 'job_customer_confirmations', 'created_at', 'ALTER TABLE job_customer_confirmations ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER confirmed_by_user_id');
+    ensureColumn($connection, 'job_customer_confirmations', 'updated_at', 'ALTER TABLE job_customer_confirmations ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
+
+    ensureIndex($connection, 'job_customer_confirmations', 'uq_job_customer_confirmations_job_id', 'ALTER TABLE job_customer_confirmations ADD UNIQUE KEY uq_job_customer_confirmations_job_id (job_id)');
+    ensureIndex($connection, 'job_customer_confirmations', 'idx_job_customer_confirmations_confirmed_by_user_id', 'ALTER TABLE job_customer_confirmations ADD KEY idx_job_customer_confirmations_confirmed_by_user_id (confirmed_by_user_id)');
+    ensureIndex($connection, 'job_customer_confirmations', 'idx_job_customer_confirmations_confirmed_at', 'ALTER TABLE job_customer_confirmations ADD KEY idx_job_customer_confirmations_confirmed_at (confirmed_at)');
+
+    ensureForeignKey($connection, 'job_customer_confirmations', 'fk_job_customer_confirmations_job', 'ALTER TABLE job_customer_confirmations ADD CONSTRAINT fk_job_customer_confirmations_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensureForeignKey($connection, 'job_customer_confirmations', 'fk_job_customer_confirmations_confirmed_by_user', 'ALTER TABLE job_customer_confirmations ADD CONSTRAINT fk_job_customer_confirmations_confirmed_by_user FOREIGN KEY (confirmed_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
 }
 
 function ensureColumn(PDO $connection, string $table, string $column, string $sql): void

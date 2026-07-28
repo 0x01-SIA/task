@@ -7,6 +7,7 @@ require base_path('app/database/connection.php');
 require base_path('app/repositories/customers.php');
 require base_path('app/repositories/dashboard.php');
 require base_path('app/repositories/job_assets.php');
+require base_path('app/repositories/job_customer_confirmations.php');
 require base_path('app/repositories/jobs.php');
 require base_path('app/repositories/locations.php');
 require base_path('app/repositories/tasks.php');
@@ -222,6 +223,149 @@ function validate_job_photo_caption(string $caption): ?string
     }
 
     return null;
+}
+
+function customer_confirmation_form_values(array $source): array
+{
+    return [
+        'customer_name' => trim((string) ($source['customer_name'] ?? '')),
+        'customer_email' => trim((string) ($source['customer_email'] ?? '')),
+        'signature_data' => trim((string) ($source['signature_data'] ?? '')),
+    ];
+}
+
+function validate_customer_confirmation_form(array $values, array $job, ?array $viewer): array
+{
+    $errors = [];
+    $rules = job_customer_confirmation_rules();
+
+    if ($job === []) {
+        $errors['job'] = 'The selected job was not found.';
+
+        return $errors;
+    }
+
+    if ($viewer === null || !user_can_record_job_customer_confirmation($viewer, $job)) {
+        $errors['authorization'] = 'You do not have permission to record customer confirmation for this job.';
+    }
+
+    if (!job_can_accept_customer_confirmation($job)) {
+        $errors['status'] = 'Customer confirmation can only be recorded after the job is completed.';
+    }
+
+    if (find_job_customer_confirmation((int) $job['id']) !== null) {
+        $errors['duplicate'] = 'Customer confirmation has already been recorded for this job.';
+    }
+
+    $customerName = (string) ($values['customer_name'] ?? '');
+
+    if ($customerName === '') {
+        $errors['customer_name'] = 'Customer name is required.';
+    } elseif (strlen($customerName) > $rules['max_name_length']) {
+        $errors['customer_name'] = 'Customer name must be 255 characters or fewer.';
+    }
+
+    $customerEmail = (string) ($values['customer_email'] ?? '');
+
+    if ($customerEmail !== '') {
+        if (strlen($customerEmail) > $rules['max_email_length']) {
+            $errors['customer_email'] = 'Customer email must be 255 characters or fewer.';
+        } elseif (filter_var($customerEmail, FILTER_VALIDATE_EMAIL) === false) {
+            $errors['customer_email'] = 'Enter a valid customer email address.';
+        }
+    }
+
+    $signatureError = validate_customer_confirmation_signature_data((string) ($values['signature_data'] ?? ''));
+
+    if ($signatureError !== null) {
+        $errors['signature_data'] = $signatureError;
+    }
+
+    return $errors;
+}
+
+function validate_customer_confirmation_signature_data(string $signatureData): ?string
+{
+    if ($signatureData === '') {
+        return 'Capture the customer signature before submitting.';
+    }
+
+    if (preg_match('#^data:image/png;base64,([A-Za-z0-9+/=]+)$#', $signatureData, $matches) !== 1) {
+        return 'The signature must be submitted as a valid PNG image.';
+    }
+
+    $decoded = base64_decode($matches[1], true);
+
+    if ($decoded === false || $decoded === '') {
+        return 'The signature image could not be decoded.';
+    }
+
+    if (strlen($decoded) > job_customer_confirmation_rules()['max_signature_bytes']) {
+        return 'The signature image exceeds the allowed size limit.';
+    }
+
+    $imageInfo = @getimagesizefromstring($decoded);
+
+    if ($imageInfo === false || ($imageInfo['mime'] ?? '') !== 'image/png') {
+        return 'The signature image must be a valid PNG.';
+    }
+
+    return null;
+}
+
+function decoded_customer_confirmation_signature(string $signatureData): string
+{
+    if (preg_match('#^data:image/png;base64,([A-Za-z0-9+/=]+)$#', $signatureData, $matches) !== 1) {
+        throw new InvalidArgumentException('Invalid signature data.');
+    }
+
+    $decoded = base64_decode($matches[1], true);
+
+    if ($decoded === false || $decoded === '') {
+        throw new InvalidArgumentException('Invalid signature payload.');
+    }
+
+    return $decoded;
+}
+
+function job_detail_route_for_user(array $viewer, int $jobId): string
+{
+    return ((string) ($viewer['role'] ?? '')) === 'worker'
+        ? '/work/jobs/' . $jobId
+        : '/jobs/' . $jobId;
+}
+
+function render_job_show_page(
+    array $job,
+    array $viewer,
+    array $overrides = [],
+    bool $workerView = false,
+    int $statusCode = 200
+): void {
+    $baseData = [
+        'pageTitle' => $job['job_number'],
+        'job' => $job,
+        'attachments' => list_job_attachments((int) $job['id']),
+        'photos' => list_job_photos((int) $job['id']),
+        'customerConfirmation' => find_job_customer_confirmation((int) $job['id']),
+        'customerConfirmationValues' => customer_confirmation_form_values([]),
+        'customerConfirmationErrors' => [],
+        'viewer' => $viewer,
+        'successMessage' => flash('success'),
+        'errorMessage' => flash('error'),
+        'attachmentError' => null,
+        'photoError' => null,
+        'photoCaption' => '',
+        'photoCaptionError' => null,
+    ];
+
+    if ($workerView) {
+        $baseData['notes'] = list_job_notes((int) $job['id']);
+        $baseData['noteValue'] = '';
+        $baseData['noteError'] = null;
+    }
+
+    render($workerView ? 'work/show' : 'jobs/show', array_merge($baseData, $overrides), $statusCode);
 }
 
 function send_stored_job_asset(array $asset, string $disposition = 'attachment'): never
@@ -1382,19 +1526,9 @@ try {
             $attachmentError = validate_job_attachment_upload($_FILES['attachment'] ?? []);
 
             if ($attachmentError !== null) {
-                render('jobs/show', [
-                    'pageTitle' => $job['job_number'],
-                    'job' => $job,
-                    'attachments' => list_job_attachments((int) $job['id']),
-                    'photos' => list_job_photos((int) $job['id']),
-                    'viewer' => $viewer,
-                'successMessage' => flash('success'),
-                'errorMessage' => flash('error'),
-                'attachmentError' => $attachmentError,
-                'photoError' => null,
-                'photoCaption' => '',
-                    'photoCaptionError' => null,
-                ], 422);
+                render_job_show_page($job, $viewer, [
+                    'attachmentError' => $attachmentError,
+                ], false, 422);
                 break;
             }
 
@@ -1487,19 +1621,11 @@ try {
             $photoError = $photoCaptionError ?? validate_job_photo_upload($_FILES['photo'] ?? []);
 
             if ($photoError !== null) {
-                render('jobs/show', [
-                    'pageTitle' => $job['job_number'],
-                    'job' => $job,
-                    'attachments' => list_job_attachments((int) $job['id']),
-                    'photos' => list_job_photos((int) $job['id']),
-                    'viewer' => $viewer,
-                    'successMessage' => flash('success'),
-                    'errorMessage' => flash('error'),
-                    'attachmentError' => null,
+                render_job_show_page($job, $viewer, [
                     'photoError' => $photoError,
                     'photoCaption' => $photoCaption,
                     'photoCaptionError' => $photoCaptionError,
-                ], 422);
+                ], false, 422);
                 break;
             }
 
@@ -1567,6 +1693,110 @@ try {
             redirect('/jobs/' . $job['id']);
             break;
 
+        case preg_match('#^/jobs/([1-9][0-9]*)/customer-confirmation$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $jobId = (int) $matches[1];
+            $job = (($viewer['role'] ?? '') === 'worker')
+                ? find_worker_accessible_job_by_id($jobId, $viewer)
+                : find_job_by_id($jobId, $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $values = customer_confirmation_form_values($_POST);
+            $errors = validate_customer_confirmation_form($values, $job, $viewer);
+
+            if ($errors !== []) {
+                render_job_show_page($job, $viewer, [
+                    'customerConfirmationValues' => $values,
+                    'customerConfirmationErrors' => $errors,
+                ], ((string) ($viewer['role'] ?? '')) === 'worker', 422);
+                break;
+            }
+
+            create_job_customer_confirmation(
+                (int) $job['id'],
+                $values['customer_name'],
+                $values['customer_email'] !== '' ? $values['customer_email'] : null,
+                decoded_customer_confirmation_signature($values['signature_data']),
+                (int) $viewer['id']
+            );
+            flash('success', 'Customer confirmation recorded successfully.');
+            redirect(job_detail_route_for_user($viewer, (int) $job['id']));
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/customer-confirmation/signature$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $viewer = current_user();
+            $jobId = (int) $matches[1];
+            $job = (($viewer['role'] ?? '') === 'worker')
+                ? find_worker_accessible_job_by_id($jobId, $viewer)
+                : find_job_by_id($jobId, $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $confirmation = find_job_customer_confirmation($jobId);
+
+            if ($confirmation === null) {
+                not_found('Customer confirmation');
+            }
+
+            send_stored_job_asset(job_customer_confirmation_signature_asset($confirmation), 'inline');
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/customer-confirmation/delete$#', $path, $matches) === 1:
+            require_role(['admin']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_delete_job_customer_confirmation($viewer)) {
+                abort(403, 'Access denied', 'You do not have permission to remove customer confirmation.');
+            }
+
+            if (!delete_job_customer_confirmation((int) $job['id'])) {
+                flash('error', 'The customer confirmation could not be removed.');
+                redirect('/jobs/' . $job['id']);
+            }
+
+            flash('success', 'Customer confirmation removed successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
         case preg_match('#^/jobs/([1-9][0-9]*)$#', $path, $matches) === 1:
             require_role(['admin', 'dispatcher']);
 
@@ -1580,19 +1810,7 @@ try {
                 not_found('Job');
             }
 
-            render('jobs/show', [
-                'pageTitle' => $job['job_number'],
-                'job' => $job,
-                'attachments' => list_job_attachments((int) $job['id']),
-                'photos' => list_job_photos((int) $job['id']),
-                'viewer' => current_user(),
-                'successMessage' => flash('success'),
-                'errorMessage' => flash('error'),
-                'attachmentError' => null,
-                'photoError' => null,
-                'photoCaption' => '',
-                'photoCaptionError' => null,
-            ]);
+            render_job_show_page($job, current_user());
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
@@ -1923,22 +2141,7 @@ try {
                 not_found('Job');
             }
 
-            render('work/show', [
-                'pageTitle' => $job['job_number'],
-                'job' => $job,
-                'attachments' => list_job_attachments((int) $job['id']),
-                'photos' => list_job_photos((int) $job['id']),
-                'notes' => list_job_notes((int) $job['id']),
-                'noteValue' => '',
-                'noteError' => null,
-                'attachmentError' => null,
-                'photoError' => null,
-                'photoCaption' => '',
-                'photoCaptionError' => null,
-                'successMessage' => flash('success'),
-                'errorMessage' => flash('error'),
-                'viewer' => $viewer,
-            ]);
+            render_job_show_page($job, $viewer, [], true);
             break;
 
         case preg_match('#^/work/jobs/([1-9][0-9]*)/photos$#', $path, $matches) === 1:
@@ -1970,22 +2173,11 @@ try {
             $photoError = $photoCaptionError ?? validate_job_photo_upload($_FILES['photo'] ?? []);
 
             if ($photoError !== null) {
-                render('work/show', [
-                    'pageTitle' => $job['job_number'],
-                    'job' => $job,
-                    'attachments' => list_job_attachments((int) $job['id']),
-                    'photos' => list_job_photos((int) $job['id']),
-                    'notes' => list_job_notes((int) $job['id']),
-                    'noteValue' => '',
-                    'noteError' => null,
-                    'attachmentError' => null,
+                render_job_show_page($job, $viewer, [
                     'photoError' => $photoError,
                     'photoCaption' => $photoCaption,
                     'photoCaptionError' => $photoCaptionError,
-                    'successMessage' => flash('success'),
-                    'errorMessage' => flash('error'),
-                    'viewer' => $viewer,
-                ], 422);
+                ], true, 422);
                 break;
             }
 
@@ -2119,22 +2311,10 @@ try {
             $noteError = validate_worker_job_note($noteValue);
 
             if ($noteError !== null) {
-                render('work/show', [
-                    'pageTitle' => $job['job_number'],
-                    'job' => $job,
-                    'attachments' => list_job_attachments((int) $job['id']),
-                    'photos' => list_job_photos((int) $job['id']),
-                    'notes' => list_job_notes((int) $job['id']),
+                render_job_show_page($job, $viewer, [
                     'noteValue' => $noteValue,
                     'noteError' => $noteError,
-                    'attachmentError' => null,
-                    'photoError' => null,
-                    'photoCaption' => '',
-                    'photoCaptionError' => null,
-                    'successMessage' => flash('success'),
-                    'errorMessage' => flash('error'),
-                    'viewer' => $viewer,
-                ], 422);
+                ], true, 422);
                 break;
             }
 

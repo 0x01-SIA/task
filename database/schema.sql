@@ -201,3 +201,29 @@ CREATE TABLE job_photos (
         ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE job_customer_confirmations (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    job_id BIGINT UNSIGNED NOT NULL,
+    customer_name VARCHAR(255) NOT NULL,
+    customer_email VARCHAR(255) DEFAULT NULL,
+    signature_path VARCHAR(1000) NOT NULL,
+    signature_mime_type VARCHAR(100) NOT NULL DEFAULT 'image/png',
+    signature_file_size BIGINT UNSIGNED NOT NULL,
+    confirmed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    confirmed_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_job_customer_confirmations_job_id (job_id),
+    KEY idx_job_customer_confirmations_confirmed_by_user_id (confirmed_by_user_id),
+    KEY idx_job_customer_confirmations_confirmed_at (confirmed_at),
+    CONSTRAINT fk_job_customer_confirmations_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_customer_confirmations_confirmed_by_user
+        FOREIGN KEY (confirmed_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -2,7 +2,7 @@
 
 Minimal PHP foundation for a lightweight field service management application. This project intentionally stays simple: plain PHP, PDO, MySQL/MariaDB, server-rendered HTML, Bootstrap via CDN, and only minimal vanilla JavaScript.
 
-Manual task management is available for administrators and dispatchers, and `jobs.task_id` intentionally remains nullable so existing standalone jobs continue to work. Job detail pages now also support authenticated attachment downloads and job photo uploads while keeping customer confirmation and signatures deferred.
+Manual task management is available for administrators and dispatchers, and `jobs.task_id` intentionally remains nullable so existing standalone jobs continue to work. Job detail pages now also support authenticated attachment downloads, job photo uploads, and completed-job customer confirmation with private signature storage.
 
 ## Requirements
 
@@ -117,14 +117,23 @@ php bin/upgrade-database.php
 
 The SQL files remain usable on their own even if you use the helper script.
 
+Existing production upgrades continue to use:
+
+```bash
+cd /var/www/task-app
+php bin/upgrade-database.php
+```
+
 ## Upload storage
 
 - Uploaded files are stored outside the public web root by default in `storage/uploads`.
 - If that project-local directory is not writable for the PHP runtime, the app falls back to a non-public system temp directory such as `/tmp/task-app-uploads`.
 - Attachment files are written under `storage/uploads/jobs/{job_id}/attachments/`.
 - Photo files are written under `storage/uploads/jobs/{job_id}/photos/`.
+- Customer confirmation signature files are written under `storage/uploads/jobs/{job_id}/confirmations/`.
 - The upload directory is ignored by Git via `.gitignore`.
 - In production, `UPLOAD_BASE_DIR` is recommended so uploads land in a stable writable location managed outside the release tree.
+- Customer signatures are served only through authenticated application routes and never via a public filesystem path.
 
 ## Authentication
 
@@ -165,6 +174,9 @@ Authenticated routes:
 - `GET /jobs/create` shows the create-job form for administrators and dispatchers and accepts optional `?task_id={id}` preselection
 - `POST /jobs` creates a job
 - `GET /jobs/{id}` shows a job for administrators and dispatchers
+- `POST /jobs/{id}/customer-confirmation` records customer confirmation for a completed job
+- `GET /jobs/{id}/customer-confirmation/signature` renders the stored confirmation signature after authentication and access checks
+- `POST /jobs/{id}/customer-confirmation/delete` removes an existing confirmation for administrators only
 - `POST /jobs/{id}/attachments` uploads a job attachment for administrators and dispatchers
 - `GET /jobs/{id}/attachments/{attachmentId}/download` downloads a job attachment through an authenticated route
 - `POST /jobs/{id}/attachments/{attachmentId}/delete` deletes a job attachment for administrators and dispatchers
@@ -183,6 +195,7 @@ Authenticated routes:
 - `POST /users/{id}/edit` updates name, email, role, and active state for administrators only
 - `POST /users/{id}/password` resets a user's password for administrators only
 - `GET /work/jobs/{id}` shows a worker-facing job detail page
+- `POST /jobs/{id}/customer-confirmation` also accepts submissions from the assigned worker and redirects back to `/work/jobs/{id}`
 - `POST /work/jobs/{id}/photos` uploads a photo to a worker-accessible job
 - `POST /work/jobs/{id}/photos/{photoId}/delete` deletes a job photo while the job is still open and the worker still has access
 - `POST /work/jobs/{id}/start` transitions a worker-accessible job to `in_progress`
@@ -225,6 +238,7 @@ Worker permission rules:
 
 - Workers can only view jobs assigned to their own account.
 - Workers can only start, complete, and add notes to their own jobs.
+- Workers can only record customer confirmation for their own completed jobs.
 - Workers can view job attachments assigned to their own jobs, but cannot upload or delete general attachments.
 - Workers can upload photos to their own jobs and can delete those photos only while the job remains open.
 - Workers cannot access `/tasks`, `/tasks/create`, `/tasks/{id}`, `/tasks/{id}/edit`, `/tasks/{id}/status`, or `/tasks/{id}/jobs/create`.
@@ -237,6 +251,17 @@ Worker workflow status rules:
 - Only `in_progress` jobs can move to `completed`.
 - Cancelled jobs remain read-only in the worker workflow.
 - The workflow reuses the canonical job statuses: `draft`, `planned`, `in_progress`, `completed`, and `cancelled`.
+
+## Customer confirmation
+
+- One customer confirmation may be stored per job.
+- `customer_name` and a drawn signature are required. `customer_email` is optional and validated when supplied.
+- The confirmation timestamp is generated on the server and stored in `confirmed_at`.
+- The user who records the confirmation is stored in `confirmed_by_user_id`.
+- Administrators, dispatchers, and the assigned worker may record confirmation, but only after the job has reached `completed`.
+- Existing confirmations render read-only on both administrator and worker job detail pages.
+- Administrators may remove a confirmation with a CSRF-protected POST action and then capture a replacement if needed.
+- No extra upload root is required when `UPLOAD_BASE_DIR` or the default private upload storage is already available to the PHP runtime.
 
 ## Development seed credentials
 

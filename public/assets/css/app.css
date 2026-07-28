@@ -532,6 +532,103 @@ body.app-shell {
     word-break: break-word;
 }
 
+.customer-confirmation-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+}
+
+.customer-confirmation-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.customer-confirmation-form__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.customer-confirmation-card {
+    display: grid;
+    gap: 1rem;
+}
+
+.customer-confirmation-card__details {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.customer-confirmation-signature-pad {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.9rem;
+    background:
+        linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.95)),
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 31px,
+            rgba(148, 163, 184, 0.12) 31px,
+            rgba(148, 163, 184, 0.12) 32px
+        );
+}
+
+.customer-confirmation-signature-pad.is-empty::after {
+    content: "Customer signature";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #94a3b8;
+    font-size: 0.95rem;
+    pointer-events: none;
+}
+
+.customer-confirmation-signature-pad.is-invalid {
+    border-color: #dc3545;
+}
+
+.customer-confirmation-signature-pad__canvas {
+    display: block;
+    width: 100%;
+    min-height: 180px;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.customer-confirmation-signature-pad__actions {
+    margin-top: 0.75rem;
+}
+
+.customer-confirmation-signature {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.customer-confirmation-signature__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 28rem);
+    min-height: 12rem;
+    padding: 0.75rem;
+    border: 1px solid #dbe4ee;
+    border-radius: 0.9rem;
+    background: #ffffff;
+}
+
+.customer-confirmation-signature__image {
+    display: block;
+    max-width: 100%;
+    max-height: 14rem;
+    object-fit: contain;
+}
+
 .deferred-feature-panel {
     padding: 1rem;
     border: 1px solid #dbe4ee;
