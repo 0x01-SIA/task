@@ -96,6 +96,51 @@ function find_material_by_id(int $id): ?array
     return is_array($material) ? $material : null;
 }
 
+function count_material_movements(int $materialId): int
+{
+    $statement = materials_connection()->prepare(
+        'SELECT COUNT(*)
+         FROM job_materials
+         WHERE material_id = :material_id'
+    );
+    $statement->execute(['material_id' => $materialId]);
+
+    return (int) $statement->fetchColumn();
+}
+
+function list_material_movements(int $materialId, int $limit, int $offset): array
+{
+    $statement = materials_connection()->prepare(
+        'SELECT
+            jm.id,
+            jm.job_id,
+            jm.quantity,
+            jm.created_at,
+            jm.updated_at,
+            j.job_number,
+            c.name AS customer_name,
+            l.name AS location_name,
+            m.unit AS material_unit,
+            u.name AS recorded_by_name
+         FROM job_materials jm
+         INNER JOIN jobs j ON j.id = jm.job_id
+         LEFT JOIN customers c ON c.id = j.customer_id
+         LEFT JOIN locations l ON l.id = j.location_id
+         INNER JOIN materials m ON m.id = jm.material_id
+         LEFT JOIN users u ON u.id = jm.recorded_by_user_id
+         WHERE jm.material_id = :material_id
+         ORDER BY jm.updated_at DESC, jm.id DESC
+         LIMIT :limit OFFSET :offset'
+    );
+    $statement->bindValue(':material_id', $materialId, PDO::PARAM_INT);
+    $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $statement->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $statement->execute();
+    $movements = $statement->fetchAll();
+
+    return is_array($movements) ? $movements : [];
+}
+
 function create_material(array $data): int
 {
     $statement = materials_connection()->prepare(

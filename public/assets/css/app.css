@@ -1104,6 +1104,26 @@ body.app-shell {
     width: 7rem;
 }
 
+.material-movements-toolbar {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.material-movements-toolbar .form-select {
+    width: auto;
+    min-width: 4.5rem;
+}
+
+.material-movements-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
 @media (max-width: 575.98px) {
     .app-header-bar {
         align-items: stretch;
@@ -1125,7 +1145,9 @@ body.app-shell {
     .job-assets-header,
     .job-asset-item__meta,
     .job-material-actions,
-    .job-material-inline-form {
+    .job-material-inline-form,
+    .material-movements-toolbar,
+    .material-movements-pagination {
         flex-direction: column;
         align-items: flex-start;
     }

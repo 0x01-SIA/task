@@ -182,6 +182,20 @@ function material_option_label(array $material): string
     return $label . ' - ' . (string) $material['unit'];
 }
 
+function requested_material_movement_limit(mixed $value): int
+{
+    $limit = is_scalar($value) ? (int) $value : 0;
+
+    return in_array($limit, [10, 50, 100], true) ? $limit : 10;
+}
+
+function requested_material_movement_page(mixed $value): int
+{
+    $page = is_scalar($value) ? (int) $value : 0;
+
+    return $page > 0 ? $page : 1;
+}
+
 function job_form_values(array $source, array $defaults = []): array
 {
     $typeOptions = job_type_options();
@@ -1249,9 +1263,25 @@ try {
                 not_found('Material');
             }
 
+            $movementLimit = requested_material_movement_limit($_GET['limit'] ?? null);
+            $movementPage = requested_material_movement_page($_GET['page'] ?? null);
+            $movementTotal = count_material_movements((int) $material['id']);
+            $movementLastPage = max(1, (int) ceil($movementTotal / $movementLimit));
+
+            if ($movementPage > $movementLastPage) {
+                $movementPage = $movementLastPage;
+            }
+
+            $movementOffset = ($movementPage - 1) * $movementLimit;
+
             render('materials/show', [
                 'pageTitle' => $material['name'],
                 'material' => $material,
+                'movementLimit' => $movementLimit,
+                'movementPage' => $movementPage,
+                'movementTotal' => $movementTotal,
+                'movementLastPage' => $movementLastPage,
+                'materialMovements' => list_material_movements((int) $material['id'], $movementLimit, $movementOffset),
                 'successMessage' => flash('success'),
                 'errorMessage' => flash('error'),
             ]);
