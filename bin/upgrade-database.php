@@ -28,6 +28,8 @@ try {
     ensureJobAttachmentsTable($connection);
     ensureJobPhotosTable($connection);
     ensureJobCustomerConfirmationsTable($connection);
+    ensureMaterialsTable($connection);
+    ensureJobMaterialsTable($connection);
     fwrite(STDOUT, "Database upgrade completed successfully.\n");
 } catch (Throwable $exception) {
     fwrite(STDERR, sprintf("Database upgrade failed: %s\n", $exception->getMessage()));
@@ -207,6 +209,75 @@ function ensureJobCustomerConfirmationsTable(PDO $connection): void
 
     ensureForeignKey($connection, 'job_customer_confirmations', 'fk_job_customer_confirmations_job', 'ALTER TABLE job_customer_confirmations ADD CONSTRAINT fk_job_customer_confirmations_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensureForeignKey($connection, 'job_customer_confirmations', 'fk_job_customer_confirmations_confirmed_by_user', 'ALTER TABLE job_customer_confirmations ADD CONSTRAINT fk_job_customer_confirmations_confirmed_by_user FOREIGN KEY (confirmed_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensureMaterialsTable(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS materials (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL,
+            sku VARCHAR(100) DEFAULT NULL,
+            unit VARCHAR(50) NOT NULL,
+            description TEXT DEFAULT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_materials_name (name),
+            KEY idx_materials_sku (sku),
+            KEY idx_materials_is_active (is_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensureColumn($connection, 'materials', 'name', 'ALTER TABLE materials ADD COLUMN name VARCHAR(255) NOT NULL AFTER id');
+    ensureColumn($connection, 'materials', 'sku', 'ALTER TABLE materials ADD COLUMN sku VARCHAR(100) DEFAULT NULL AFTER name');
+    ensureColumn($connection, 'materials', 'unit', 'ALTER TABLE materials ADD COLUMN unit VARCHAR(50) NOT NULL AFTER sku');
+    ensureColumn($connection, 'materials', 'description', 'ALTER TABLE materials ADD COLUMN description TEXT DEFAULT NULL AFTER unit');
+    ensureColumn($connection, 'materials', 'is_active', 'ALTER TABLE materials ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER description');
+    ensureColumn($connection, 'materials', 'created_at', 'ALTER TABLE materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active');
+    ensureColumn($connection, 'materials', 'updated_at', 'ALTER TABLE materials ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
+
+    ensureIndex($connection, 'materials', 'idx_materials_name', 'ALTER TABLE materials ADD KEY idx_materials_name (name)');
+    ensureIndex($connection, 'materials', 'idx_materials_sku', 'ALTER TABLE materials ADD KEY idx_materials_sku (sku)');
+    ensureIndex($connection, 'materials', 'idx_materials_is_active', 'ALTER TABLE materials ADD KEY idx_materials_is_active (is_active)');
+}
+
+function ensureJobMaterialsTable(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS job_materials (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            job_id BIGINT UNSIGNED NOT NULL,
+            material_id BIGINT UNSIGNED NOT NULL,
+            quantity DECIMAL(12,3) NOT NULL,
+            recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_job_materials_job_id_material_id (job_id, material_id),
+            KEY idx_job_materials_material_id (material_id),
+            KEY idx_job_materials_recorded_by_user_id (recorded_by_user_id),
+            CONSTRAINT fk_job_materials_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_job_materials_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_job_materials_recorded_by_user FOREIGN KEY (recorded_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensureColumn($connection, 'job_materials', 'job_id', 'ALTER TABLE job_materials ADD COLUMN job_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensureColumn($connection, 'job_materials', 'material_id', 'ALTER TABLE job_materials ADD COLUMN material_id BIGINT UNSIGNED NOT NULL AFTER job_id');
+    ensureColumn($connection, 'job_materials', 'quantity', 'ALTER TABLE job_materials ADD COLUMN quantity DECIMAL(12,3) NOT NULL AFTER material_id');
+    ensureColumn($connection, 'job_materials', 'recorded_by_user_id', 'ALTER TABLE job_materials ADD COLUMN recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL AFTER quantity');
+    ensureColumn($connection, 'job_materials', 'created_at', 'ALTER TABLE job_materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
+    ensureColumn($connection, 'job_materials', 'updated_at', 'ALTER TABLE job_materials ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
+
+    ensureIndex($connection, 'job_materials', 'uq_job_materials_job_id_material_id', 'ALTER TABLE job_materials ADD UNIQUE KEY uq_job_materials_job_id_material_id (job_id, material_id)');
+    ensureIndex($connection, 'job_materials', 'idx_job_materials_material_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_material_id (material_id)');
+    ensureIndex($connection, 'job_materials', 'idx_job_materials_recorded_by_user_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_recorded_by_user_id (recorded_by_user_id)');
+
+    ensureForeignKey($connection, 'job_materials', 'fk_job_materials_job', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensureForeignKey($connection, 'job_materials', 'fk_job_materials_material', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensureForeignKey($connection, 'job_materials', 'fk_job_materials_recorded_by_user', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_recorded_by_user FOREIGN KEY (recorded_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
 }
 
 function ensureColumn(PDO $connection, string $table, string $column, string $sql): void

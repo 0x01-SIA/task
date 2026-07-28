@@ -1085,6 +1085,25 @@ body.app-shell {
     gap: 0.9rem;
 }
 
+.job-material-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.job-material-inline-form {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.job-material-inline-form .form-control {
+    width: 7rem;
+}
+
 @media (max-width: 575.98px) {
     .app-header-bar {
         align-items: stretch;
@@ -1104,9 +1123,15 @@ body.app-shell {
     .worker-action-bar,
     .worker-note__meta,
     .job-assets-header,
-    .job-asset-item__meta {
+    .job-asset-item__meta,
+    .job-material-actions,
+    .job-material-inline-form {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .job-material-inline-form .form-control {
+        width: 100%;
     }
 
     .calendar-toolbar__actions {

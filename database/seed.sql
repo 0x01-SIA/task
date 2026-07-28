@@ -337,3 +337,66 @@ VALUES
         2,
         'Dispatcher flagged this overdue job for follow-up.'
     );
+
+INSERT INTO materials (
+    name,
+    sku,
+    unit,
+    description,
+    is_active
+)
+VALUES
+    (
+        'Cable ties',
+        'CAB-TIE-100',
+        'pcs',
+        'General-purpose cable ties for clean cable management.',
+        1
+    ),
+    (
+        'Installation cable',
+        'CAB-001',
+        'm',
+        'Field installation cable supplied by the metre.',
+        1
+    ),
+    (
+        'Mounting bracket',
+        'BRKT-220',
+        'pcs',
+        'Standard mounting bracket for wall and frame installations.',
+        1
+    ),
+    (
+        'Cleaning solvent',
+        'SOLV-010',
+        'l',
+        'Solvent used for degreasing before component replacement.',
+        0
+    );
+
+INSERT INTO job_materials (
+    job_id,
+    material_id,
+    quantity,
+    recorded_by_user_id
+)
+VALUES
+    (
+        3,
+        1,
+        20.000,
+        3
+    ),
+    (
+        3,
+        2,
+        12.500,
+        3
+    ),
+    (
+        4,
+        4,
+        1.250,
+        2
+    );

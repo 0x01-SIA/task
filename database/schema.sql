@@ -227,3 +227,44 @@ CREATE TABLE job_customer_confirmations (
         ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE materials (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    sku VARCHAR(100) DEFAULT NULL,
+    unit VARCHAR(50) NOT NULL,
+    description TEXT DEFAULT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_materials_name (name),
+    KEY idx_materials_sku (sku),
+    KEY idx_materials_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE job_materials (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    job_id BIGINT UNSIGNED NOT NULL,
+    material_id BIGINT UNSIGNED NOT NULL,
+    quantity DECIMAL(12,3) NOT NULL,
+    recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_job_materials_job_id_material_id (job_id, material_id),
+    KEY idx_job_materials_material_id (material_id),
+    KEY idx_job_materials_recorded_by_user_id (recorded_by_user_id),
+    CONSTRAINT fk_job_materials_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_materials_material
+        FOREIGN KEY (material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_materials_recorded_by_user
+        FOREIGN KEY (recorded_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

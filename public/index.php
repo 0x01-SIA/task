@@ -10,6 +10,7 @@ require base_path('app/repositories/job_assets.php');
 require base_path('app/repositories/job_customer_confirmations.php');
 require base_path('app/repositories/jobs.php');
 require base_path('app/repositories/locations.php');
+require base_path('app/repositories/materials.php');
 require base_path('app/repositories/tasks.php');
 require base_path('app/repositories/users.php');
 
@@ -66,6 +67,119 @@ function save_location_payload(array $values): array
         'notes' => $values['access_notes'] !== '' ? $values['access_notes'] : null,
         'is_active' => $values['is_active'] === '1' ? 1 : 0,
     ];
+}
+
+function material_filter_values(array $source): array
+{
+    $status = trim((string) ($source['status'] ?? ''));
+
+    return [
+        'search' => trim((string) ($source['search'] ?? '')),
+        'status' => in_array($status, ['active', 'inactive'], true) ? $status : '',
+    ];
+}
+
+function material_form_values(array $source, array $defaults = []): array
+{
+    $isActive = array_key_exists('is_active', $source)
+        ? (string) $source['is_active']
+        : (string) ($defaults['is_active'] ?? '1');
+
+    return [
+        'name' => trim((string) ($source['name'] ?? ($defaults['name'] ?? ''))),
+        'sku' => trim((string) ($source['sku'] ?? ($defaults['sku'] ?? ''))),
+        'unit' => trim((string) ($source['unit'] ?? ($defaults['unit'] ?? ''))),
+        'description' => trim((string) ($source['description'] ?? ($defaults['description'] ?? ''))),
+        'is_active' => $isActive === '0' ? '0' : '1',
+    ];
+}
+
+function validate_material_form(array $values): array
+{
+    $errors = [];
+
+    if (($values['name'] ?? '') === '') {
+        $errors['name'] = 'Material name is required.';
+    }
+
+    if (($values['unit'] ?? '') === '') {
+        $errors['unit'] = 'Unit is required.';
+    }
+
+    return $errors;
+}
+
+function save_material_payload(array $values): array
+{
+    return [
+        'name' => $values['name'],
+        'sku' => $values['sku'] !== '' ? $values['sku'] : null,
+        'unit' => $values['unit'],
+        'description' => $values['description'] !== '' ? $values['description'] : null,
+        'is_active' => $values['is_active'] === '1' ? 1 : 0,
+    ];
+}
+
+function job_material_form_values(array $source): array
+{
+    return [
+        'material_id' => positive_int_or_null($source['material_id'] ?? null),
+        'quantity' => trim((string) ($source['quantity'] ?? '')),
+    ];
+}
+
+function normalize_quantity_value(string $value): ?string
+{
+    $normalized = trim($value);
+
+    if ($normalized === '' || preg_match('/^\d+(?:\.\d{1,3})?$/', $normalized) !== 1) {
+        return null;
+    }
+
+    if ((float) $normalized <= 0) {
+        return null;
+    }
+
+    return number_format((float) $normalized, 3, '.', '');
+}
+
+function validate_job_material_create(array $values): array
+{
+    $errors = [];
+
+    if (($values['material_id'] ?? null) === null) {
+        $errors['material_id'] = 'Select a valid material.';
+    } else {
+        $material = find_material_by_id((int) $values['material_id']);
+
+        if ($material === null || (int) ($material['is_active'] ?? 0) !== 1) {
+            $errors['material_id'] = 'The selected material is not available.';
+        }
+    }
+
+    if (normalize_quantity_value((string) ($values['quantity'] ?? '')) === null) {
+        $errors['quantity'] = 'Enter a quantity greater than zero using up to 3 decimal places.';
+    }
+
+    return $errors;
+}
+
+function validate_job_material_quantity(string $quantity): ?string
+{
+    return normalize_quantity_value($quantity) === null
+        ? 'Enter a quantity greater than zero using up to 3 decimal places.'
+        : null;
+}
+
+function material_option_label(array $material): string
+{
+    $label = (string) $material['name'];
+
+    if (($material['sku'] ?? null) !== null && trim((string) $material['sku']) !== '') {
+        $label .= ' (' . trim((string) $material['sku']) . ')';
+    }
+
+    return $label . ' - ' . (string) $material['unit'];
 }
 
 function job_form_values(array $source, array $defaults = []): array
@@ -347,9 +461,15 @@ function render_job_show_page(
         'job' => $job,
         'attachments' => list_job_attachments((int) $job['id']),
         'photos' => list_job_photos((int) $job['id']),
+        'jobMaterials' => list_job_materials((int) $job['id']),
+        'activeMaterials' => list_active_materials(),
         'customerConfirmation' => find_job_customer_confirmation((int) $job['id']),
         'customerConfirmationValues' => customer_confirmation_form_values([]),
         'customerConfirmationErrors' => [],
+        'materialUsageValues' => job_material_form_values([]),
+        'materialUsageErrors' => [],
+        'materialEditValues' => [],
+        'materialEditErrors' => [],
         'viewer' => $viewer,
         'successMessage' => flash('success'),
         'errorMessage' => flash('error'),
@@ -1053,6 +1173,180 @@ try {
             redirect('/locations/' . $location['id']);
             break;
 
+        case $path === '/materials':
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $filters = material_filter_values($_GET);
+
+            render('materials/index', [
+                'pageTitle' => 'Materials',
+                'materials' => list_materials($filters),
+                'filters' => $filters,
+                'successMessage' => flash('success'),
+            ]);
+            break;
+
+        case $path === '/materials/create':
+            require_role(['admin', 'dispatcher']);
+
+            if ($method === 'POST') {
+                $csrfToken = $_POST['_token'] ?? null;
+
+                if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                    abort(419, 'Session expired', 'The form token is invalid or has expired.');
+                }
+
+                $values = material_form_values($_POST);
+                $errors = validate_material_form($values);
+
+                if ($errors !== []) {
+                    render('materials/form', [
+                        'pageTitle' => 'Create Material',
+                        'formTitle' => 'Create Material',
+                        'formAction' => '/materials/create',
+                        'submitLabel' => 'Create Material',
+                        'values' => $values,
+                        'errors' => $errors,
+                        'material' => null,
+                    ], 422);
+                    break;
+                }
+
+                $materialId = create_material(save_material_payload($values));
+                flash('success', 'Material created successfully.');
+                redirect('/materials/' . $materialId);
+            }
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            render('materials/form', [
+                'pageTitle' => 'Create Material',
+                'formTitle' => 'Create Material',
+                'formAction' => '/materials/create',
+                'submitLabel' => 'Create Material',
+                'values' => material_form_values([]),
+                'errors' => [],
+                'material' => null,
+            ]);
+            break;
+
+        case preg_match('#^/materials/([1-9][0-9]*)$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $material = find_material_by_id((int) $matches[1]);
+
+            if ($material === null) {
+                not_found('Material');
+            }
+
+            render('materials/show', [
+                'pageTitle' => $material['name'],
+                'material' => $material,
+                'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
+            ]);
+            break;
+
+        case preg_match('#^/materials/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            $material = find_material_by_id((int) $matches[1]);
+
+            if ($material === null) {
+                not_found('Material');
+            }
+
+            if ($method === 'GET') {
+                render('materials/form', [
+                    'pageTitle' => 'Edit Material',
+                    'formTitle' => 'Edit Material',
+                    'formAction' => '/materials/' . $material['id'] . '/edit',
+                    'submitLabel' => 'Save Changes',
+                    'values' => material_form_values([], [
+                        'name' => (string) $material['name'],
+                        'sku' => (string) ($material['sku'] ?? ''),
+                        'unit' => (string) $material['unit'],
+                        'description' => (string) ($material['description'] ?? ''),
+                        'is_active' => (int) ($material['is_active'] ?? 0) === 1 ? '1' : '0',
+                    ]),
+                    'errors' => [],
+                    'material' => $material,
+                ]);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $values = material_form_values($_POST);
+            $errors = validate_material_form($values);
+
+            if ($errors !== []) {
+                render('materials/form', [
+                    'pageTitle' => 'Edit Material',
+                    'formTitle' => 'Edit Material',
+                    'formAction' => '/materials/' . $material['id'] . '/edit',
+                    'submitLabel' => 'Save Changes',
+                    'values' => $values,
+                    'errors' => $errors,
+                    'material' => $material,
+                ], 422);
+                break;
+            }
+
+            update_material((int) $material['id'], save_material_payload($values));
+            flash('success', 'Material updated successfully.');
+            redirect('/materials/' . $material['id']);
+            break;
+
+        case preg_match('#^/materials/([1-9][0-9]*)/status$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $material = find_material_by_id((int) $matches[1]);
+
+            if ($material === null) {
+                not_found('Material');
+            }
+
+            $statusValue = (string) ($_POST['is_active'] ?? '');
+
+            if (!in_array($statusValue, ['0', '1'], true)) {
+                flash('error', 'Select a valid material status.');
+                redirect('/materials/' . $material['id']);
+            }
+
+            set_material_active_status((int) $material['id'], $statusValue === '1');
+            flash('success', $statusValue === '1' ? 'Material activated successfully.' : 'Material deactivated successfully.');
+            redirect('/materials/' . $material['id']);
+            break;
+
         case $path === '/tasks':
             require_role(['admin', 'dispatcher']);
 
@@ -1497,6 +1791,141 @@ try {
                 'weekdayLabels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                 'viewer' => $viewer,
             ]);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/materials$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_record_job_material($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to add materials to this job.');
+            }
+
+            $values = job_material_form_values($_POST);
+            $errors = validate_job_material_create($values);
+
+            if ($errors !== []) {
+                render_job_show_page($job, $viewer, [
+                    'materialUsageValues' => $values,
+                    'materialUsageErrors' => $errors,
+                ], false, 422);
+                break;
+            }
+
+            add_job_material_usage(
+                (int) $job['id'],
+                (int) $values['material_id'],
+                (string) normalize_quantity_value($values['quantity']),
+                isset($viewer['id']) ? (int) $viewer['id'] : null
+            );
+            flash('success', 'Material usage recorded successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/materials/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $jobMaterial = find_job_material_by_id((int) $job['id'], (int) $matches[2]);
+
+            if ($jobMaterial === null) {
+                not_found('Job material');
+            }
+
+            if (!user_can_modify_job_material($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to update this material usage.');
+            }
+
+            $quantity = trim((string) ($_POST['quantity'] ?? ''));
+            $error = validate_job_material_quantity($quantity);
+
+            if ($error !== null) {
+                render_job_show_page($job, $viewer, [
+                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity]],
+                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error]],
+                ], false, 422);
+                break;
+            }
+
+            update_job_material_quantity(
+                (int) $job['id'],
+                (int) $jobMaterial['id'],
+                (string) normalize_quantity_value($quantity),
+                isset($viewer['id']) ? (int) $viewer['id'] : null
+            );
+            flash('success', 'Material quantity updated successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/materials/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $jobMaterial = find_job_material_by_id((int) $job['id'], (int) $matches[2]);
+
+            if ($jobMaterial === null) {
+                not_found('Job material');
+            }
+
+            if (!user_can_modify_job_material($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to remove this material usage.');
+            }
+
+            if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
+                flash('error', 'The material usage could not be removed.');
+                redirect('/jobs/' . $job['id']);
+            }
+
+            flash('success', 'Material usage removed successfully.');
+            redirect('/jobs/' . $job['id']);
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)/attachments$#', $path, $matches) === 1:
@@ -2142,6 +2571,141 @@ try {
             }
 
             render_job_show_page($job, $viewer, [], true);
+            break;
+
+        case preg_match('#^/work/jobs/([1-9][0-9]*)/materials$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_worker_accessible_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_record_job_material($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to add materials to this job.');
+            }
+
+            $values = job_material_form_values($_POST);
+            $errors = validate_job_material_create($values);
+
+            if ($errors !== []) {
+                render_job_show_page($job, $viewer, [
+                    'materialUsageValues' => $values,
+                    'materialUsageErrors' => $errors,
+                ], true, 422);
+                break;
+            }
+
+            add_job_material_usage(
+                (int) $job['id'],
+                (int) $values['material_id'],
+                (string) normalize_quantity_value($values['quantity']),
+                isset($viewer['id']) ? (int) $viewer['id'] : null
+            );
+            flash('success', 'Material usage recorded successfully.');
+            redirect('/work/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/work/jobs/([1-9][0-9]*)/materials/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_worker_accessible_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $jobMaterial = find_job_material_by_id((int) $job['id'], (int) $matches[2]);
+
+            if ($jobMaterial === null) {
+                not_found('Job material');
+            }
+
+            if (!user_can_modify_job_material($viewer, $job)) {
+                abort(403, 'Access denied', 'This material usage can no longer be updated.');
+            }
+
+            $quantity = trim((string) ($_POST['quantity'] ?? ''));
+            $error = validate_job_material_quantity($quantity);
+
+            if ($error !== null) {
+                render_job_show_page($job, $viewer, [
+                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity]],
+                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error]],
+                ], true, 422);
+                break;
+            }
+
+            update_job_material_quantity(
+                (int) $job['id'],
+                (int) $jobMaterial['id'],
+                (string) normalize_quantity_value($quantity),
+                isset($viewer['id']) ? (int) $viewer['id'] : null
+            );
+            flash('success', 'Material quantity updated successfully.');
+            redirect('/work/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/work/jobs/([1-9][0-9]*)/materials/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_worker_accessible_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $jobMaterial = find_job_material_by_id((int) $job['id'], (int) $matches[2]);
+
+            if ($jobMaterial === null) {
+                not_found('Job material');
+            }
+
+            if (!user_can_modify_job_material($viewer, $job)) {
+                abort(403, 'Access denied', 'This material usage can no longer be removed.');
+            }
+
+            if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
+                flash('error', 'The material usage could not be removed.');
+                redirect('/work/jobs/' . $job['id']);
+            }
+
+            flash('success', 'Material usage removed successfully.');
+            redirect('/work/jobs/' . $job['id']);
             break;
 
         case preg_match('#^/work/jobs/([1-9][0-9]*)/photos$#', $path, $matches) === 1:

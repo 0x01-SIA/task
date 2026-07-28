@@ -421,6 +421,7 @@ function auth_navigation_items(?array $user = null): array
         ['label' => 'Locations', 'path' => '/locations'],
         ['label' => 'Tasks', 'path' => '/tasks'],
         ['label' => 'Jobs', 'path' => '/jobs'],
+        ['label' => 'Materials', 'path' => '/materials'],
         ['label' => 'Calendar', 'path' => '/jobs/calendar'],
     ];
 
@@ -732,6 +733,22 @@ function task_status_label(string $value): string
 function job_status_label(string $value): string
 {
     return job_status_options()[$value] ?? ucfirst($value);
+}
+
+function format_decimal_quantity(mixed $value): string
+{
+    $formatted = trim((string) $value);
+
+    if ($formatted === '') {
+        return '0';
+    }
+
+    if (str_contains($formatted, '.')) {
+        $formatted = rtrim($formatted, '0');
+        $formatted = rtrim($formatted, '.');
+    }
+
+    return $formatted === '' ? '0' : $formatted;
 }
 
 function task_status_badge_class(string $value): string

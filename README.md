@@ -4,6 +4,8 @@ Minimal PHP foundation for a lightweight field service management application. T
 
 Manual task management is available for administrators and dispatchers, and `jobs.task_id` intentionally remains nullable so existing standalone jobs continue to work. Job detail pages now also support authenticated attachment downloads, job photo uploads, and completed-job customer confirmation with private signature storage.
 
+The application also includes a lightweight materials catalogue with job-level material usage tracking. Administrators and dispatchers can manage catalogue items and correct usage on any job, while workers can record materials only on their own open jobs.
+
 ## Requirements
 
 - PHP 8.1 or newer with PDO and `pdo_mysql`
@@ -173,7 +175,17 @@ Authenticated routes:
 - `GET /jobs/calendar` shows the job calendar for administrators and dispatchers, defaults to Week view, and accepts `?view=week|month`, `?date=YYYY-MM-DD`, and `?month=YYYY-MM`
 - `GET /jobs/create` shows the create-job form for administrators and dispatchers and accepts optional `?task_id={id}` preselection
 - `POST /jobs` creates a job
+- `GET /materials` lists materials for administrators and dispatchers with search and active/inactive filtering
+- `GET /materials/create` shows the create-material form for administrators and dispatchers
+- `POST /materials/create` creates a material
+- `GET /materials/{id}` shows a material detail page
+- `GET /materials/{id}/edit` shows the edit-material form
+- `POST /materials/{id}/edit` updates a material
+- `POST /materials/{id}/status` activates or deactivates a material without deleting historical job usage
 - `GET /jobs/{id}` shows a job for administrators and dispatchers
+- `POST /jobs/{id}/materials` records job material usage for administrators and dispatchers
+- `POST /jobs/{id}/materials/{jobMaterialId}/edit` corrects a recorded material quantity for administrators and dispatchers
+- `POST /jobs/{id}/materials/{jobMaterialId}/delete` removes a recorded material usage entry for administrators and dispatchers
 - `POST /jobs/{id}/customer-confirmation` records customer confirmation for a completed job
 - `GET /jobs/{id}/customer-confirmation/signature` renders the stored confirmation signature after authentication and access checks
 - `POST /jobs/{id}/customer-confirmation/delete` removes an existing confirmation for administrators only
@@ -196,6 +208,9 @@ Authenticated routes:
 - `POST /users/{id}/password` resets a user's password for administrators only
 - `GET /work/jobs/{id}` shows a worker-facing job detail page
 - `POST /jobs/{id}/customer-confirmation` also accepts submissions from the assigned worker and redirects back to `/work/jobs/{id}`
+- `POST /work/jobs/{id}/materials` records job material usage on a worker-accessible open job
+- `POST /work/jobs/{id}/materials/{jobMaterialId}/edit` corrects a recorded material quantity while the job remains open
+- `POST /work/jobs/{id}/materials/{jobMaterialId}/delete` removes a recorded material usage entry while the job remains open
 - `POST /work/jobs/{id}/photos` uploads a photo to a worker-accessible job
 - `POST /work/jobs/{id}/photos/{photoId}/delete` deletes a job photo while the job is still open and the worker still has access
 - `POST /work/jobs/{id}/start` transitions a worker-accessible job to `in_progress`
@@ -237,7 +252,8 @@ User-management safety rules:
 Worker permission rules:
 
 - Workers can only view jobs assigned to their own account.
-- Workers can only start, complete, and add notes to their own jobs.
+- Workers can only start, complete, add notes to, and record materials on their own open jobs.
+- Inactive materials remain visible in historical job usage but cannot be selected for new entries.
 - Workers can only record customer confirmation for their own completed jobs.
 - Workers can view job attachments assigned to their own jobs, but cannot upload or delete general attachments.
 - Workers can upload photos to their own jobs and can delete those photos only while the job remains open.
