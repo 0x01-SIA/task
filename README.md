@@ -120,10 +120,11 @@ The SQL files remain usable on their own even if you use the helper script.
 ## Upload storage
 
 - Uploaded files are stored outside the public web root by default in `storage/uploads`.
+- If that project-local directory is not writable for the PHP runtime, the app falls back to a non-public system temp directory such as `/tmp/task-app-uploads`.
 - Attachment files are written under `storage/uploads/jobs/{job_id}/attachments/`.
 - Photo files are written under `storage/uploads/jobs/{job_id}/photos/`.
 - The upload directory is ignored by Git via `.gitignore`.
-- Ensure the PHP process can create and write to the configured upload directory before testing uploads.
+- In production, `UPLOAD_BASE_DIR` is recommended so uploads land in a stable writable location managed outside the release tree.
 
 ## Authentication
 

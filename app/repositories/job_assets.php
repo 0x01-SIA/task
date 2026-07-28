@@ -26,11 +26,47 @@ function job_asset_base_directory(): string
 {
     $configured = trim((string) config('uploads.base_dir', ''));
 
+    $candidates = [];
+
     if ($configured !== '') {
-        return $configured;
+        $candidates[] = $configured;
     }
 
-    return base_path('storage/uploads');
+    $candidates[] = base_path('storage/uploads');
+    $candidates[] = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'task-app-uploads';
+
+    foreach ($candidates as $candidate) {
+        if (job_asset_directory_is_available($candidate)) {
+            return $candidate;
+        }
+    }
+
+    throw new RuntimeException('No writable upload directory is available. Configure UPLOAD_BASE_DIR for the PHP runtime.');
+}
+
+function job_asset_directory_is_available(string $directory): bool
+{
+    if ($directory === '') {
+        return false;
+    }
+
+    if (is_dir($directory)) {
+        return is_writable($directory);
+    }
+
+    $parentDirectory = dirname($directory);
+
+    while ($parentDirectory !== '' && $parentDirectory !== '.' && !is_dir($parentDirectory)) {
+        $nextParent = dirname($parentDirectory);
+
+        if ($nextParent === $parentDirectory) {
+            break;
+        }
+
+        $parentDirectory = $nextParent;
+    }
+
+    return is_dir($parentDirectory) && is_writable($parentDirectory);
 }
 
 function job_asset_directory(int $jobId, string $type): string
