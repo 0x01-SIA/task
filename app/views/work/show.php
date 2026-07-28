@@ -139,7 +139,7 @@ declare(strict_types=1);
                                         · <?= h(format_datetime($attachment['uploaded_at'] ?? null)) ?>
                                     </p>
                                 </div>
-                                <div class="job-asset-item__actions">
+                                <div class="job-asset-actions">
                                     <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/' . $job['id'] . '/attachments/' . $attachment['id'] . '/download')) ?>">Download</a>
                                 </div>
                             </div>
@@ -189,20 +189,20 @@ declare(strict_types=1);
                 <?php else: ?>
                     <?php foreach ($photos as $photo): ?>
                         <article class="job-photo-card">
-                            <a href="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>" target="_blank" rel="noreferrer" class="job-photo-card__image-link">
+                            <a href="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>" target="_blank" rel="noreferrer" class="job-photo-preview">
                                 <img
-                                    class="job-photo-card__image"
+                                    class="job-photo-preview__image"
                                     src="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>"
                                     alt="<?= h($photo['caption'] ?: $photo['original_filename']) ?>"
                                     loading="lazy"
                                 >
                             </a>
-                            <div class="job-photo-card__body">
-                                <p class="job-photo-card__meta mb-1"><?= h($photo['uploader_name'] ?: 'Unknown user') ?> · <?= h(format_datetime($photo['uploaded_at'] ?? null)) ?></p>
+                            <div class="job-photo-meta">
+                                <p class="job-photo-meta__details mb-1"><?= h($photo['uploader_name'] ?: 'Unknown user') ?> · <?= h(format_datetime($photo['uploaded_at'] ?? null)) ?></p>
                                 <?php if (($photo['caption'] ?? null) !== null && trim((string) $photo['caption']) !== ''): ?>
-                                    <p class="job-photo-card__caption"><?= h($photo['caption']) ?></p>
+                                    <p class="job-photo-meta__caption"><?= h($photo['caption']) ?></p>
                                 <?php endif; ?>
-                                <div class="job-photo-card__actions">
+                                <div class="job-asset-actions">
                                     <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>" target="_blank" rel="noreferrer">Open Full Size</a>
                                     <?php if (user_can_delete_job_photos($viewer, $job)): ?>
                                         <form method="post" action="<?= h(app_url('/work/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this photo?');">
