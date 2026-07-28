@@ -519,6 +519,26 @@ function format_datetime(?string $value): string
     return date('Y-m-d H:i', $timestamp);
 }
 
+function format_file_size(int|string|null $bytes): string
+{
+    $value = is_numeric($bytes) ? (float) $bytes : 0.0;
+
+    if ($value < 1024) {
+        return (string) (int) $value . ' B';
+    }
+
+    $units = ['KB', 'MB', 'GB', 'TB'];
+    $scaled = $value;
+    $unitIndex = -1;
+
+    while ($scaled >= 1024 && $unitIndex < count($units) - 1) {
+        $scaled /= 1024;
+        $unitIndex++;
+    }
+
+    return number_format($scaled, $scaled >= 10 ? 0 : 1) . ' ' . $units[$unitIndex];
+}
+
 function format_display_datetime(?string $value, string $fallback = 'Not set'): string
 {
     if ($value === null || trim($value) === '') {

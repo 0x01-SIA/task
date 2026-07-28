@@ -6,6 +6,7 @@ require dirname(__DIR__) . '/app/helpers.php';
 require base_path('app/database/connection.php');
 require base_path('app/repositories/customers.php');
 require base_path('app/repositories/dashboard.php');
+require base_path('app/repositories/job_assets.php');
 require base_path('app/repositories/jobs.php');
 require base_path('app/repositories/locations.php');
 require base_path('app/repositories/tasks.php');
@@ -207,6 +208,40 @@ function validate_worker_job_note(string $note): ?string
     }
 
     return null;
+}
+
+function job_photo_caption_value(array $source): string
+{
+    return trim((string) ($source['caption'] ?? ''));
+}
+
+function validate_job_photo_caption(string $caption): ?string
+{
+    if (strlen($caption) > 255) {
+        return 'Photo captions must be 255 characters or fewer.';
+    }
+
+    return null;
+}
+
+function send_stored_job_asset(array $asset, string $disposition = 'attachment'): never
+{
+    $storagePath = (string) ($asset['storage_path'] ?? '');
+
+    if ($storagePath === '' || !is_file($storagePath) || !is_readable($storagePath)) {
+        abort(404, 'File not found', 'The requested file is unavailable.');
+    }
+
+    $mimeType = (string) ($asset['mime_type'] ?? 'application/octet-stream');
+    $fileSize = (int) ($asset['file_size'] ?? filesize($storagePath) ?: 0);
+    $downloadName = basename((string) ($asset['original_filename'] ?? 'download'));
+
+    header('Content-Type: ' . $mimeType);
+    header('Content-Length: ' . $fileSize);
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: ' . $disposition . '; filename="' . addcslashes($downloadName, "\"\\") . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
+    readfile($storagePath);
+    exit;
 }
 
 function validate_job_form(array $values): array
@@ -1320,6 +1355,218 @@ try {
             ]);
             break;
 
+        case preg_match('#^/jobs/([1-9][0-9]*)/attachments$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_upload_job_attachments($viewer)) {
+                abort(403, 'Access denied', 'You do not have permission to upload attachments for this job.');
+            }
+
+            $attachmentError = validate_job_attachment_upload($_FILES['attachment'] ?? []);
+
+            if ($attachmentError !== null) {
+                render('jobs/show', [
+                    'pageTitle' => $job['job_number'],
+                    'job' => $job,
+                    'attachments' => list_job_attachments((int) $job['id']),
+                    'photos' => list_job_photos((int) $job['id']),
+                    'viewer' => $viewer,
+                'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
+                'attachmentError' => $attachmentError,
+                'photoError' => null,
+                'photoCaption' => '',
+                    'photoCaptionError' => null,
+                ], 422);
+                break;
+            }
+
+            store_uploaded_job_attachment((int) $job['id'], $_FILES['attachment'], (int) $viewer['id']);
+            flash('success', 'Attachment uploaded successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/attachments/([1-9][0-9]*)/download$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $viewer = current_user();
+            $jobId = (int) $matches[1];
+            $job = (($viewer['role'] ?? '') === 'worker')
+                ? find_worker_accessible_job_by_id($jobId, $viewer)
+                : find_job_by_id($jobId, $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $attachment = find_job_attachment_by_id($jobId, (int) $matches[2]);
+
+            if ($attachment === null) {
+                not_found('Attachment');
+            }
+
+            send_stored_job_asset($attachment, 'attachment');
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/attachments/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_delete_job_attachments($viewer) || !delete_job_attachment((int) $job['id'], (int) $matches[2])) {
+                flash('error', 'The attachment could not be removed.');
+                redirect('/jobs/' . $job['id']);
+            }
+
+            flash('success', 'Attachment deleted successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/photos$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_upload_job_photos($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to upload photos for this job.');
+            }
+
+            $photoCaption = job_photo_caption_value($_POST);
+            $photoCaptionError = validate_job_photo_caption($photoCaption);
+            $photoError = $photoCaptionError ?? validate_job_photo_upload($_FILES['photo'] ?? []);
+
+            if ($photoError !== null) {
+                render('jobs/show', [
+                    'pageTitle' => $job['job_number'],
+                    'job' => $job,
+                    'attachments' => list_job_attachments((int) $job['id']),
+                    'photos' => list_job_photos((int) $job['id']),
+                    'viewer' => $viewer,
+                    'successMessage' => flash('success'),
+                    'errorMessage' => flash('error'),
+                    'attachmentError' => null,
+                    'photoError' => $photoError,
+                    'photoCaption' => $photoCaption,
+                    'photoCaptionError' => $photoCaptionError,
+                ], 422);
+                break;
+            }
+
+            store_uploaded_job_photo((int) $job['id'], $_FILES['photo'], (int) $viewer['id'], $photoCaption !== '' ? $photoCaption : null);
+            flash('success', 'Photo uploaded successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/photos/([1-9][0-9]*)/view$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $viewer = current_user();
+            $jobId = (int) $matches[1];
+            $job = (($viewer['role'] ?? '') === 'worker')
+                ? find_worker_accessible_job_by_id($jobId, $viewer)
+                : find_job_by_id($jobId, $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            $photo = find_job_photo_by_id($jobId, (int) $matches[2]);
+
+            if ($photo === null) {
+                not_found('Photo');
+            }
+
+            send_stored_job_asset($photo, 'inline');
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/photos/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_delete_job_photos($viewer, $job)) {
+                abort(403, 'Access denied', 'This photo can no longer be deleted.');
+            }
+
+            if (!delete_job_photo((int) $job['id'], (int) $matches[2])) {
+                flash('error', 'The photo could not be removed.');
+                redirect('/jobs/' . $job['id']);
+            }
+
+            flash('success', 'Photo deleted successfully.');
+            redirect('/jobs/' . $job['id']);
+            break;
+
         case preg_match('#^/jobs/([1-9][0-9]*)$#', $path, $matches) === 1:
             require_role(['admin', 'dispatcher']);
 
@@ -1336,7 +1583,15 @@ try {
             render('jobs/show', [
                 'pageTitle' => $job['job_number'],
                 'job' => $job,
+                'attachments' => list_job_attachments((int) $job['id']),
+                'photos' => list_job_photos((int) $job['id']),
+                'viewer' => current_user(),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
+                'attachmentError' => null,
+                'photoError' => null,
+                'photoCaption' => '',
+                'photoCaptionError' => null,
             ]);
             break;
 
@@ -1671,13 +1926,105 @@ try {
             render('work/show', [
                 'pageTitle' => $job['job_number'],
                 'job' => $job,
+                'attachments' => list_job_attachments((int) $job['id']),
+                'photos' => list_job_photos((int) $job['id']),
                 'notes' => list_job_notes((int) $job['id']),
                 'noteValue' => '',
                 'noteError' => null,
+                'attachmentError' => null,
+                'photoError' => null,
+                'photoCaption' => '',
+                'photoCaptionError' => null,
                 'successMessage' => flash('success'),
                 'errorMessage' => flash('error'),
                 'viewer' => $viewer,
             ]);
+            break;
+
+        case preg_match('#^/work/jobs/([1-9][0-9]*)/photos$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_worker_accessible_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_upload_job_photos($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to upload photos for this job.');
+            }
+
+            $photoCaption = job_photo_caption_value($_POST);
+            $photoCaptionError = validate_job_photo_caption($photoCaption);
+            $photoError = $photoCaptionError ?? validate_job_photo_upload($_FILES['photo'] ?? []);
+
+            if ($photoError !== null) {
+                render('work/show', [
+                    'pageTitle' => $job['job_number'],
+                    'job' => $job,
+                    'attachments' => list_job_attachments((int) $job['id']),
+                    'photos' => list_job_photos((int) $job['id']),
+                    'notes' => list_job_notes((int) $job['id']),
+                    'noteValue' => '',
+                    'noteError' => null,
+                    'attachmentError' => null,
+                    'photoError' => $photoError,
+                    'photoCaption' => $photoCaption,
+                    'photoCaptionError' => $photoCaptionError,
+                    'successMessage' => flash('success'),
+                    'errorMessage' => flash('error'),
+                    'viewer' => $viewer,
+                ], 422);
+                break;
+            }
+
+            store_uploaded_job_photo((int) $job['id'], $_FILES['photo'], (int) $viewer['id'], $photoCaption !== '' ? $photoCaption : null);
+            flash('success', 'Photo uploaded successfully.');
+            redirect('/work/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/work/jobs/([1-9][0-9]*)/photos/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_worker_accessible_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_delete_job_photos($viewer, $job)) {
+                abort(403, 'Access denied', 'This photo can no longer be deleted.');
+            }
+
+            if (!delete_job_photo((int) $job['id'], (int) $matches[2])) {
+                flash('error', 'The photo could not be removed.');
+                redirect('/work/jobs/' . $job['id']);
+            }
+
+            flash('success', 'Photo deleted successfully.');
+            redirect('/work/jobs/' . $job['id']);
             break;
 
         case preg_match('#^/work/jobs/([1-9][0-9]*)/start$#', $path, $matches) === 1:
@@ -1775,9 +2122,15 @@ try {
                 render('work/show', [
                     'pageTitle' => $job['job_number'],
                     'job' => $job,
+                    'attachments' => list_job_attachments((int) $job['id']),
+                    'photos' => list_job_photos((int) $job['id']),
                     'notes' => list_job_notes((int) $job['id']),
                     'noteValue' => $noteValue,
                     'noteError' => $noteError,
+                    'attachmentError' => null,
+                    'photoError' => null,
+                    'photoCaption' => '',
+                    'photoCaptionError' => null,
                     'successMessage' => flash('success'),
                     'errorMessage' => flash('error'),
                     'viewer' => $viewer,

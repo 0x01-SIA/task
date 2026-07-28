@@ -28,6 +28,10 @@ $canManageJobs = in_array((string) ($viewer['role'] ?? ''), ['admin', 'dispatche
         <div class="alert alert-success mb-0" role="status"><?= h($successMessage) ?></div>
     <?php endif; ?>
 
+    <?php if ($errorMessage !== null): ?>
+        <div class="alert alert-danger mb-0" role="alert"><?= h($errorMessage) ?></div>
+    <?php endif; ?>
+
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
             <div class="info-grid">
@@ -122,27 +126,137 @@ $canManageJobs = in_array((string) ($viewer['role'] ?? ''), ['admin', 'dispatche
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
-            <div class="mb-3">
-                <p class="text-uppercase text-secondary small fw-semibold mb-2">Later Version</p>
-                <h2 class="h5 mb-1">Deferred Job Features</h2>
-                <p class="text-secondary mb-0">These sections are included for structure in the MVP and will become available in a later version.</p>
+            <div class="job-assets-header">
+                <div>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Job Files</p>
+                    <h2 class="h5 mb-1">Attachments</h2>
+                    <p class="text-secondary mb-0">Business documents are stored securely and downloaded through the application.</p>
+                </div>
+                <?php if (user_can_upload_job_attachments($viewer)): ?>
+                    <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/attachments')) ?>" enctype="multipart/form-data" class="job-upload-form">
+                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                        <div>
+                            <label class="form-label" for="attachment">Upload attachment</label>
+                            <input class="form-control<?= $attachmentError !== null ? ' is-invalid' : '' ?>" type="file" id="attachment" name="attachment" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip">
+                            <div class="form-text">Maximum size: <?= h(format_file_size(job_attachment_rules()['max_bytes'])) ?>.</div>
+                            <?php if ($attachmentError !== null): ?>
+                                <div class="invalid-feedback d-block"><?= h($attachmentError) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div>
+                            <button class="btn btn-primary" type="submit">Upload Attachment</button>
+                        </div>
+                    </form>
+                <?php endif; ?>
             </div>
 
-            <div class="deferred-feature-grid">
-                <section class="deferred-feature-panel" aria-labelledby="job-attachments-placeholder">
-                    <p class="info-label mb-2" id="job-attachments-placeholder">Attachments</p>
-                    <p class="text-secondary mb-0">Attachments will be available in a later version.</p>
-                </section>
+            <div class="job-asset-list mt-4">
+                <?php if ($attachments === []): ?>
+                    <p class="text-secondary mb-0">No attachments have been uploaded yet.</p>
+                <?php else: ?>
+                    <?php foreach ($attachments as $attachment): ?>
+                        <article class="job-asset-item">
+                            <div class="job-asset-item__meta">
+                                <div>
+                                    <p class="job-asset-item__title"><?= h($attachment['original_filename']) ?></p>
+                                    <p class="job-asset-item__details mb-0">
+                                        <?= h(format_file_size($attachment['file_size'])) ?>
+                                        · <?= h($attachment['uploader_name'] ?: 'Unknown user') ?>
+                                        · <?= h(format_datetime($attachment['uploaded_at'] ?? null)) ?>
+                                    </p>
+                                </div>
+                                <div class="job-asset-item__actions">
+                                    <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/' . $job['id'] . '/attachments/' . $attachment['id'] . '/download')) ?>">Download</a>
+                                    <?php if (user_can_delete_job_attachments($viewer)): ?>
+                                        <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/attachments/' . $attachment['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this attachment?');">
+                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                            <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </section>
 
-                <section class="deferred-feature-panel" aria-labelledby="job-photos-placeholder">
-                    <p class="info-label mb-2" id="job-photos-placeholder">Photos</p>
-                    <p class="text-secondary mb-0">Photo uploads will be available in a later version.</p>
-                </section>
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <div class="job-assets-header">
+                <div>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Job Media</p>
+                    <h2 class="h5 mb-1">Photos</h2>
+                    <p class="text-secondary mb-0">Upload field photos at any stage. Deletion remains available only while the job is open.</p>
+                </div>
+                <?php if (user_can_upload_job_photos($viewer, $job)): ?>
+                    <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/photos')) ?>" enctype="multipart/form-data" class="job-upload-form">
+                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                        <div>
+                            <label class="form-label" for="photo">Upload photo</label>
+                            <input class="form-control<?= $photoError !== null && $photoCaptionError === null ? ' is-invalid' : '' ?>" type="file" id="photo" name="photo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                            <div class="form-text">Maximum size: <?= h(format_file_size(job_photo_rules()['max_bytes'])) ?>.</div>
+                        </div>
+                        <div>
+                            <label class="form-label" for="caption">Caption (optional)</label>
+                            <input class="form-control<?= $photoCaptionError !== null ? ' is-invalid' : '' ?>" type="text" id="caption" name="caption" maxlength="255" value="<?= h($photoCaption) ?>">
+                            <?php if ($photoCaptionError !== null): ?>
+                                <div class="invalid-feedback"><?= h($photoCaptionError) ?></div>
+                            <?php endif; ?>
+                            <?php if ($photoError !== null): ?>
+                                <div class="invalid-feedback d-block"><?= h($photoError) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div>
+                            <button class="btn btn-primary" type="submit">Upload Photo</button>
+                        </div>
+                    </form>
+                <?php endif; ?>
+            </div>
 
-                <section class="deferred-feature-panel" aria-labelledby="job-confirmation-placeholder">
-                    <p class="info-label mb-2" id="job-confirmation-placeholder">Customer Confirmation</p>
-                    <p class="text-secondary mb-0">Customer confirmation and signature will be available in a later version.</p>
-                </section>
+            <div class="job-photo-grid mt-4">
+                <?php if ($photos === []): ?>
+                    <p class="text-secondary mb-0">No photos have been uploaded yet.</p>
+                <?php else: ?>
+                    <?php foreach ($photos as $photo): ?>
+                        <article class="job-photo-card">
+                            <a href="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>" target="_blank" rel="noreferrer" class="job-photo-card__image-link">
+                                <img
+                                    class="job-photo-card__image"
+                                    src="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>"
+                                    alt="<?= h($photo['caption'] ?: $photo['original_filename']) ?>"
+                                    loading="lazy"
+                                >
+                            </a>
+                            <div class="job-photo-card__body">
+                                <p class="job-photo-card__meta mb-1"><?= h($photo['uploader_name'] ?: 'Unknown user') ?> · <?= h(format_datetime($photo['uploaded_at'] ?? null)) ?></p>
+                                <?php if (($photo['caption'] ?? null) !== null && trim((string) $photo['caption']) !== ''): ?>
+                                    <p class="job-photo-card__caption"><?= h($photo['caption']) ?></p>
+                                <?php endif; ?>
+                                <div class="job-photo-card__actions">
+                                    <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/view')) ?>" target="_blank" rel="noreferrer">Open Full Size</a>
+                                    <?php if (user_can_delete_job_photos($viewer, $job)): ?>
+                                        <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/photos/' . $photo['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this photo?');">
+                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                            <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <div class="mb-3">
+                <p class="text-uppercase text-secondary small fw-semibold mb-2">Later Version</p>
+                <h2 class="h5 mb-1">Customer Confirmation</h2>
+                <p class="text-secondary mb-0">Customer confirmation and signature will be available in a later version.</p>
             </div>
         </div>
     </section>

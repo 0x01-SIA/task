@@ -154,3 +154,50 @@ CREATE TABLE job_notes (
         ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE job_attachments (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    job_id BIGINT UNSIGNED NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    storage_path VARCHAR(1000) NOT NULL,
+    mime_type VARCHAR(255) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    uploaded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_job_attachments_job_id (job_id),
+    KEY idx_job_attachments_uploaded_by_user_id (uploaded_by_user_id),
+    CONSTRAINT fk_job_attachments_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_attachments_uploaded_by_user
+        FOREIGN KEY (uploaded_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE job_photos (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    job_id BIGINT UNSIGNED NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    storage_path VARCHAR(1000) NOT NULL,
+    mime_type VARCHAR(255) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    caption VARCHAR(255) DEFAULT NULL,
+    uploaded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_job_photos_job_id (job_id),
+    KEY idx_job_photos_uploaded_by_user_id (uploaded_by_user_id),
+    CONSTRAINT fk_job_photos_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_photos_uploaded_by_user
+        FOREIGN KEY (uploaded_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

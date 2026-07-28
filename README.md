@@ -2,15 +2,7 @@
 
 Minimal PHP foundation for a lightweight field service management application. This project intentionally stays simple: plain PHP, PDO, MySQL/MariaDB, server-rendered HTML, Bootstrap via CDN, and only minimal vanilla JavaScript.
 
-Current MVP scope also includes visible placeholder sections on job detail pages for deferred features. Attachments, job photos, and customer confirmation or signatures are intentionally postponed to a later version, and no upload or signature functionality is implemented in this repository. Manual task management is now available for administrators and dispatchers, and `jobs.task_id` intentionally remains nullable so existing standalone jobs continue to work.
-
-## Deferred MVP placeholders
-
-- Attachments are deferred.
-- Job photos are deferred.
-- Customer confirmation and signatures are deferred.
-- Visible placeholders for these sections are included on job detail pages in the MVP.
-- No upload, storage, or signature functionality has been implemented.
+Manual task management is available for administrators and dispatchers, and `jobs.task_id` intentionally remains nullable so existing standalone jobs continue to work. Job detail pages now also support authenticated attachment downloads and job photo uploads while keeping customer confirmation and signatures deferred.
 
 ## Requirements
 
@@ -54,6 +46,9 @@ Supported variables:
 - `DB_NAME`
 - `DB_USERNAME`
 - `DB_PASSWORD`
+- `UPLOAD_BASE_DIR`
+- `JOB_ATTACHMENT_MAX_BYTES`
+- `JOB_PHOTO_MAX_BYTES`
 
 Sensitive values belong in `.env`, which is ignored by Git.
 
@@ -89,6 +84,9 @@ DB_PORT=3306
 DB_NAME=task_app
 DB_USERNAME=task_app
 DB_PASSWORD=task_app_dev
+UPLOAD_BASE_DIR=/absolute/path/to/task/storage/uploads
+JOB_ATTACHMENT_MAX_BYTES=10485760
+JOB_PHOTO_MAX_BYTES=10485760
 ```
 
 Run the schema manually:
@@ -118,6 +116,14 @@ php bin/upgrade-database.php
 ```
 
 The SQL files remain usable on their own even if you use the helper script.
+
+## Upload storage
+
+- Uploaded files are stored outside the public web root by default in `storage/uploads`.
+- Attachment files are written under `storage/uploads/jobs/{job_id}/attachments/`.
+- Photo files are written under `storage/uploads/jobs/{job_id}/photos/`.
+- The upload directory is ignored by Git via `.gitignore`.
+- Ensure the PHP process can create and write to the configured upload directory before testing uploads.
 
 ## Authentication
 
@@ -158,6 +164,12 @@ Authenticated routes:
 - `GET /jobs/create` shows the create-job form for administrators and dispatchers and accepts optional `?task_id={id}` preselection
 - `POST /jobs` creates a job
 - `GET /jobs/{id}` shows a job for administrators and dispatchers
+- `POST /jobs/{id}/attachments` uploads a job attachment for administrators and dispatchers
+- `GET /jobs/{id}/attachments/{attachmentId}/download` downloads a job attachment through an authenticated route
+- `POST /jobs/{id}/attachments/{attachmentId}/delete` deletes a job attachment for administrators and dispatchers
+- `POST /jobs/{id}/photos` uploads a job photo for administrators and dispatchers
+- `GET /jobs/{id}/photos/{photoId}/view` opens a job photo through an authenticated route
+- `POST /jobs/{id}/photos/{photoId}/delete` deletes a job photo while the job is still open
 - `GET /jobs/{id}/edit` shows the edit-job form for administrators and dispatchers
 - `POST /jobs/{id}/edit` updates a job
 - `POST /jobs/{id}/cancel` cancels a job
@@ -170,6 +182,8 @@ Authenticated routes:
 - `POST /users/{id}/edit` updates name, email, role, and active state for administrators only
 - `POST /users/{id}/password` resets a user's password for administrators only
 - `GET /work/jobs/{id}` shows a worker-facing job detail page
+- `POST /work/jobs/{id}/photos` uploads a photo to a worker-accessible job
+- `POST /work/jobs/{id}/photos/{photoId}/delete` deletes a job photo while the job is still open and the worker still has access
 - `POST /work/jobs/{id}/start` transitions a worker-accessible job to `in_progress`
 - `POST /work/jobs/{id}/complete` transitions an in-progress worker-accessible job to `completed`
 - `POST /work/jobs/{id}/notes` creates a plain-text job note
@@ -210,6 +224,8 @@ Worker permission rules:
 
 - Workers can only view jobs assigned to their own account.
 - Workers can only start, complete, and add notes to their own jobs.
+- Workers can view job attachments assigned to their own jobs, but cannot upload or delete general attachments.
+- Workers can upload photos to their own jobs and can delete those photos only while the job remains open.
 - Workers cannot access `/tasks`, `/tasks/create`, `/tasks/{id}`, `/tasks/{id}/edit`, `/tasks/{id}/status`, or `/tasks/{id}/jobs/create`.
 - Workers cannot access `/jobs`, `/jobs/create`, `/jobs/{id}`, `/jobs/{id}/edit`, or the job cancel/reactivate routes.
 - Unassigned jobs and jobs assigned to another worker return no worker-facing detail to the requesting worker.

@@ -17,4 +17,13 @@ return [
         'password' => (string) env_value('DB_PASSWORD', ''),
         'charset' => 'utf8mb4',
     ],
+    'uploads' => [
+        'base_dir' => (string) env_value('UPLOAD_BASE_DIR', base_path('storage/uploads')),
+        'attachments' => [
+            'max_bytes' => (int) env_value('JOB_ATTACHMENT_MAX_BYTES', 10 * 1024 * 1024),
+        ],
+        'photos' => [
+            'max_bytes' => (int) env_value('JOB_PHOTO_MAX_BYTES', 10 * 1024 * 1024),
+        ],
+    ],
 ];
