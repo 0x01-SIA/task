@@ -729,6 +729,66 @@ function user_filter_values(array $source): array
     ];
 }
 
+function company_form_values(array $source, array $defaults = []): array
+{
+    $isActive = array_key_exists('is_active', $source)
+        ? trim((string) $source['is_active'])
+        : (string) ($defaults['is_active'] ?? '1');
+
+    return [
+        'name' => trim((string) ($source['name'] ?? ($defaults['name'] ?? ''))),
+        'slug' => trim((string) ($source['slug'] ?? ($defaults['slug'] ?? ''))),
+        'registration_number' => trim((string) ($source['registration_number'] ?? ($defaults['registration_number'] ?? ''))),
+        'email' => trim((string) ($source['email'] ?? ($defaults['email'] ?? ''))),
+        'phone' => trim((string) ($source['phone'] ?? ($defaults['phone'] ?? ''))),
+        'address' => trim((string) ($source['address'] ?? ($defaults['address'] ?? ''))),
+        'is_active' => $isActive === '0' ? '0' : '1',
+    ];
+}
+
+function validate_company_form(array $values, ?array $existingCompany = null): array
+{
+    $errors = [];
+    $name = trim((string) ($values['name'] ?? ''));
+    $slug = trim((string) ($values['slug'] ?? ''));
+    $email = trim((string) ($values['email'] ?? ''));
+
+    if ($name === '') {
+        $errors['name'] = 'Company name is required.';
+    }
+
+    if ($slug === '') {
+        $errors['slug'] = 'Company slug is required.';
+    } elseif (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug) !== 1) {
+        $errors['slug'] = 'Use lowercase letters, numbers, and hyphens only.';
+    } elseif (company_slug_exists($slug, $existingCompany !== null ? (int) $existingCompany['id'] : null)) {
+        $errors['slug'] = 'This company slug is already in use.';
+    }
+
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        $errors['email'] = 'Enter a valid email address.';
+    }
+
+    if (!in_array((string) ($values['is_active'] ?? ''), ['0', '1'], true)) {
+        $errors['is_active'] = 'Select a valid company status.';
+    }
+
+    return $errors;
+}
+
+function save_company_payload(array $values): array
+{
+    return [
+        'name' => $values['name'],
+        'slug' => $values['slug'],
+        'registration_number' => $values['registration_number'] !== '' ? $values['registration_number'] : null,
+        'email' => $values['email'] !== '' ? $values['email'] : null,
+        'phone' => $values['phone'] !== '' ? $values['phone'] : null,
+        'address' => $values['address'] !== '' ? $values['address'] : null,
+        'is_active' => $values['is_active'] === '1' ? 1 : 0,
+    ];
+}
+
 function user_form_values(array $source, array $defaults = [], bool $includePassword = true): array
 {
     $role = array_key_exists('role', $source)
@@ -753,7 +813,7 @@ function user_form_values(array $source, array $defaults = [], bool $includePass
     return $values;
 }
 
-function validate_user_form(array $values, ?array $existingUser = null, ?array $actor = null): array
+function validate_user_form(array $values, ?array $existingUser = null, ?array $actor = null, ?array $existingMembership = null): array
 {
     $errors = [];
     $name = trim((string) ($values['name'] ?? ''));
@@ -781,6 +841,10 @@ function validate_user_form(array $values, ?array $existingUser = null, ?array $
         $errors['is_active'] = 'Select a valid account status.';
     }
 
+    if ($existingUser !== null && !is_super_admin($actor) && (string) ($existingUser['global_role'] ?? '') === 'super_admin') {
+        $errors['authorization'] = 'A company administrator cannot modify a super admin account.';
+    }
+
     if ($existingUser === null) {
         $password = (string) ($values['password'] ?? '');
         $passwordConfirmation = (string) ($values['password_confirmation'] ?? '');
@@ -802,23 +866,28 @@ function validate_user_form(array $values, ?array $existingUser = null, ?array $
     if ($existingUser !== null) {
         $actorId = (int) ($actor['id'] ?? 0);
         $existingUserId = (int) $existingUser['id'];
-        $existingRole = (string) $existingUser['role'];
+        $existingRole = (string) ($existingMembership['role'] ?? $existingUser['global_role'] ?? '');
         $existingActive = (int) ($existingUser['is_active'] ?? 0) === 1;
         $targetActive = $isActive === '1';
         $isSelf = $actorId !== 0 && $actorId === $existingUserId;
+        $existingMembershipActive = (int) ($existingMembership['is_active'] ?? 0) === 1;
         $removingActiveAdmin = $existingRole === 'admin'
-            && $existingActive
+            && ($existingMembership !== null ? $existingMembershipActive : $existingActive)
             && (!$targetActive || $role !== 'admin');
 
-        if ($isSelf && !$targetActive) {
+        if ($isSelf && !$targetActive && is_super_admin($actor)) {
             $errors['is_active'] = 'You cannot deactivate your own account.';
         }
 
         if ($isSelf && $role !== 'admin') {
-            $errors['role'] = 'You cannot remove your own administrator role.';
+            $errors['role'] = 'You cannot remove your own administrator role in the active company.';
         }
 
-        if ($removingActiveAdmin && count_active_admin_users() <= 1) {
+        $adminCount = $existingMembership !== null && current_company_id() !== null
+            ? count_active_company_admin_memberships((int) current_company_id())
+            : count_active_admin_users();
+
+        if ($removingActiveAdmin && $adminCount <= 1) {
             if (!$targetActive) {
                 $errors['is_active'] ??= 'The last active administrator cannot be deactivated.';
             }
@@ -859,13 +928,13 @@ function validate_password_reset_form(array $source): array
     return [$values, $errors];
 }
 
-function save_user_payload(array $values, bool $includePassword = false): array
+function save_user_payload(array $values, bool $includePassword = false, string $globalRole = 'worker', ?int $globalIsActive = null): array
 {
     $payload = [
         'name' => $values['name'],
         'email' => $values['email'],
-        'role' => $values['role'],
-        'is_active' => $values['is_active'] === '1' ? 1 : 0,
+        'role' => $globalRole,
+        'is_active' => $globalIsActive ?? ($values['is_active'] === '1' ? 1 : 0),
     ];
 
     if ($includePassword) {
@@ -1017,6 +1086,204 @@ try {
                 'activeWorkers' => dashboard_active_workers(),
                 'recentlyCompletedJobs' => dashboard_recently_completed_jobs(),
             ]);
+            break;
+
+        case $path === '/companies':
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            if ($method === 'POST') {
+                $csrfToken = $_POST['_token'] ?? null;
+
+                if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                    abort(419, 'Session expired', 'The form token is invalid or has expired.');
+                }
+
+                $values = company_form_values($_POST);
+                $errors = validate_company_form($values);
+
+                if ($errors !== []) {
+                    render('companies/form', [
+                        'pageTitle' => 'Create Company',
+                        'formTitle' => 'Create Company',
+                        'formAction' => '/companies',
+                        'submitLabel' => 'Create Company',
+                        'values' => $values,
+                        'errors' => $errors,
+                        'companyRecord' => null,
+                    ], 422);
+                    break;
+                }
+
+                $companyId = create_company(save_company_payload($values));
+                flash('success', 'Company created successfully.');
+                redirect('/companies/' . $companyId);
+            }
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            render('companies/index', [
+                'pageTitle' => 'Companies',
+                'companies' => list_companies(),
+                'successMessage' => flash('success'),
+            ]);
+            break;
+
+        case $path === '/companies/create':
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            render('companies/form', [
+                'pageTitle' => 'Create Company',
+                'formTitle' => 'Create Company',
+                'formAction' => '/companies',
+                'submitLabel' => 'Create Company',
+                'values' => company_form_values([]),
+                'errors' => [],
+                'companyRecord' => null,
+            ]);
+            break;
+
+        case preg_match('#^/companies/([1-9][0-9]*)$#', $path, $matches) === 1:
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $company = find_company_by_id((int) $matches[1]);
+
+            if ($company === null) {
+                not_found('Company');
+            }
+
+            render('companies/show', [
+                'pageTitle' => $company['name'],
+                'company' => $company,
+                'memberships' => list_company_memberships((int) $company['id']),
+                'successMessage' => flash('success'),
+            ]);
+            break;
+
+        case preg_match('#^/companies/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            $company = find_company_by_id((int) $matches[1]);
+
+            if ($company === null) {
+                not_found('Company');
+            }
+
+            if ($method === 'GET') {
+                render('companies/form', [
+                    'pageTitle' => 'Edit Company',
+                    'formTitle' => 'Edit Company',
+                    'formAction' => '/companies/' . $company['id'] . '/edit',
+                    'submitLabel' => 'Save Changes',
+                    'values' => company_form_values([], $company),
+                    'errors' => [],
+                    'companyRecord' => $company,
+                ]);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $values = company_form_values($_POST);
+            $errors = validate_company_form($values, $company);
+
+            if ($errors !== []) {
+                render('companies/form', [
+                    'pageTitle' => 'Edit Company',
+                    'formTitle' => 'Edit Company',
+                    'formAction' => '/companies/' . $company['id'] . '/edit',
+                    'submitLabel' => 'Save Changes',
+                    'values' => $values,
+                    'errors' => $errors,
+                    'companyRecord' => $company,
+                ], 422);
+                break;
+            }
+
+            update_company((int) $company['id'], save_company_payload($values));
+            flash('success', 'Company updated successfully.');
+            redirect('/companies/' . $company['id']);
+            break;
+
+        case preg_match('#^/companies/([1-9][0-9]*)/status$#', $path, $matches) === 1:
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $company = find_company_by_id((int) $matches[1]);
+
+            if ($company === null) {
+                not_found('Company');
+            }
+
+            set_company_active_status((int) $company['id'], ($_POST['is_active'] ?? '0') === '1');
+            flash('success', 'Company status updated successfully.');
+            redirect('/companies/' . $company['id']);
             break;
 
         case $path === '/work':
@@ -2453,14 +2720,16 @@ try {
             require_role(['admin']);
 
             if ($method === 'POST') {
+                require_active_company_context();
                 $csrfToken = $_POST['_token'] ?? null;
 
                 if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
                     abort(419, 'Session expired', 'The form token is invalid or has expired.');
                 }
 
+                $actor = current_user();
                 $values = user_form_values($_POST);
-                $errors = validate_user_form($values);
+                $errors = validate_user_form($values, null, $actor);
 
                 if ($errors !== []) {
                     render('users/form', [
@@ -2471,11 +2740,20 @@ try {
                         'values' => $values,
                         'errors' => $errors,
                         'userRecord' => null,
+                        'roleFieldLabel' => 'Company Role',
                     ], 422);
                     break;
                 }
 
-                $userId = create_user(save_user_payload($values, true));
+                $userId = create_user(
+                    save_user_payload(
+                        $values,
+                        true,
+                        'worker',
+                        is_super_admin($actor) ? ($values['is_active'] === '1' ? 1 : 0) : 1
+                    )
+                );
+                upsert_company_membership((int) current_company_id(), $userId, $values['role'], $values['is_active'] === '1');
                 flash('success', 'User created successfully.');
                 redirect('/users/' . $userId);
             }
@@ -2496,6 +2774,7 @@ try {
 
         case $path === '/users/create':
             require_role(['admin']);
+            require_active_company_context();
 
             if ($method !== 'GET') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
@@ -2509,6 +2788,7 @@ try {
                 'values' => user_form_values([]),
                 'errors' => [],
                 'userRecord' => null,
+                'roleFieldLabel' => 'Company Role',
             ]);
             break;
 
@@ -2525,10 +2805,29 @@ try {
                 not_found('User');
             }
 
+            if (!is_super_admin() && (string) ($managedUser['global_role'] ?? '') === 'super_admin') {
+                abort(403, 'Access denied', 'You do not have permission to view this user.');
+            }
+
+            $memberships = is_super_admin()
+                ? list_user_memberships((int) $managedUser['id'])
+                : (current_company_id() !== null && ($membership = find_company_membership((int) current_company_id(), (int) $managedUser['id'])) !== null
+                    ? [[
+                        'company_id' => current_company_id(),
+                        'company_name' => current_company_context_label(),
+                        'company_is_active' => 1,
+                        'role' => $membership['role'],
+                        'is_active' => $membership['is_active'],
+                        'created_at' => $membership['created_at'],
+                        'updated_at' => $membership['updated_at'],
+                    ]]
+                    : []);
+
             render('users/show', [
                 'pageTitle' => $managedUser['name'],
                 'managedUser' => $managedUser,
                 'recentJobs' => recent_assigned_jobs_for_user((int) $managedUser['id']),
+                'memberships' => $memberships,
                 'passwordValues' => ['password' => '', 'password_confirmation' => ''],
                 'passwordErrors' => [],
                 'successMessage' => flash('success'),
@@ -2537,12 +2836,19 @@ try {
 
         case preg_match('#^/users/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
             require_role(['admin']);
+            require_active_company_context();
 
             $managedUser = find_managed_user_by_id((int) $matches[1]);
 
             if ($managedUser === null) {
                 not_found('User');
             }
+
+            if (!is_super_admin() && (string) ($managedUser['global_role'] ?? '') === 'super_admin') {
+                abort(403, 'Access denied', 'You do not have permission to modify this user.');
+            }
+
+            $existingMembership = find_company_membership((int) current_company_id(), (int) $managedUser['id']);
 
             if ($method === 'GET') {
                 render('users/form', [
@@ -2553,11 +2859,14 @@ try {
                     'values' => user_form_values([], [
                         'name' => (string) $managedUser['name'],
                         'email' => (string) $managedUser['email'],
-                        'role' => (string) $managedUser['role'],
-                        'is_active' => (int) ($managedUser['is_active'] ?? 0) === 1 ? '1' : '0',
+                        'role' => (string) ($existingMembership['role'] ?? 'worker'),
+                        'is_active' => is_super_admin()
+                            ? ((int) ($managedUser['is_active'] ?? 0) === 1 ? '1' : '0')
+                            : ((int) ($existingMembership['is_active'] ?? 1) === 1 ? '1' : '0'),
                     ], false),
                     'errors' => [],
                     'userRecord' => $managedUser,
+                    'roleFieldLabel' => 'Company Role',
                 ]);
                 break;
             }
@@ -2573,7 +2882,7 @@ try {
             }
 
             $values = user_form_values($_POST, [], false);
-            $errors = validate_user_form($values, $managedUser, current_user());
+            $errors = validate_user_form($values, $managedUser, current_user(), $existingMembership);
 
             if ($errors !== []) {
                 render('users/form', [
@@ -2584,11 +2893,21 @@ try {
                     'values' => $values,
                     'errors' => $errors,
                     'userRecord' => $managedUser,
+                    'roleFieldLabel' => 'Company Role',
                 ], 422);
                 break;
             }
 
-            update_user((int) $managedUser['id'], save_user_payload($values));
+            update_user(
+                (int) $managedUser['id'],
+                save_user_payload(
+                    $values,
+                    false,
+                    (string) ($managedUser['global_role'] ?? 'worker'),
+                    is_super_admin() ? ($values['is_active'] === '1' ? 1 : 0) : (int) ($managedUser['is_active'] ?? 1)
+                )
+            );
+            upsert_company_membership((int) current_company_id(), (int) $managedUser['id'], $values['role'], $values['is_active'] === '1');
             flash('success', 'User updated successfully.');
             redirect('/users/' . $managedUser['id']);
             break;
@@ -2612,6 +2931,10 @@ try {
                 not_found('User');
             }
 
+            if (!is_super_admin() && (string) ($managedUser['global_role'] ?? '') === 'super_admin') {
+                abort(403, 'Access denied', 'You do not have permission to modify this user.');
+            }
+
             [$passwordValues, $passwordErrors] = validate_password_reset_form($_POST);
 
             if ($passwordErrors !== []) {
@@ -2619,6 +2942,7 @@ try {
                     'pageTitle' => $managedUser['name'],
                     'managedUser' => $managedUser,
                     'recentJobs' => recent_assigned_jobs_for_user((int) $managedUser['id']),
+                    'memberships' => is_super_admin() ? list_user_memberships((int) $managedUser['id']) : [],
                     'passwordValues' => $passwordValues,
                     'passwordErrors' => $passwordErrors,
                     'successMessage' => null,

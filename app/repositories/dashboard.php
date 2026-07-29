@@ -30,26 +30,39 @@ function fetch_count(string $sql, array $params = []): int
     return (int) $statement->fetchColumn();
 }
 
+function dashboard_company_scope(string $column = 'company_id', ?array $viewer = null, bool $allowAll = true): array
+{
+    $params = [];
+    $clause = scoped_company_sql($column, $params, $viewer, $allowAll);
+
+    return [$clause, $params];
+}
+
 function dashboard_summary_counts(): array
 {
+    [$companyClause, $companyParams] = dashboard_company_scope('company_id');
+
     return [
         'unassigned_jobs' => fetch_count(
             "SELECT COUNT(*)
              FROM jobs
              WHERE status IN ('draft', 'planned')
-               AND assigned_user_id IS NULL"
+               AND assigned_user_id IS NULL" . $companyClause,
+            $companyParams
         ),
         'scheduled_jobs' => fetch_count(
             "SELECT COUNT(*)
              FROM jobs
              WHERE status IN ('draft', 'planned')
                AND planned_date IS NOT NULL
-               AND planned_date >= CURRENT_DATE()"
+               AND planned_date >= CURRENT_DATE()" . $companyClause,
+            $companyParams
         ),
         'in_progress_jobs' => fetch_count(
             "SELECT COUNT(*)
              FROM jobs
-             WHERE status = 'in_progress'"
+             WHERE status = 'in_progress'" . $companyClause,
+            $companyParams
         ),
         'overdue_jobs' => fetch_count(
             "SELECT COUNT(*)
@@ -63,14 +76,16 @@ function dashboard_summary_counts(): array
                         AND planned_start_time IS NOT NULL
                         AND planned_start_time < CURRENT_TIME()
                     )
-               )"
+               )" . $companyClause,
+            $companyParams
         ),
         'completed_today' => fetch_count(
             "SELECT COUNT(*)
              FROM jobs
              WHERE status = 'completed'
                AND actual_completed_at IS NOT NULL
-               AND DATE(actual_completed_at) = CURRENT_DATE()"
+               AND DATE(actual_completed_at) = CURRENT_DATE()" . $companyClause,
+            $companyParams
         ),
     ];
 }
@@ -78,6 +93,7 @@ function dashboard_summary_counts(): array
 function dashboard_attention_jobs(int $limit = 8): array
 {
     $limit = max(1, $limit);
+    [$companyClause, $params] = dashboard_company_scope('j.company_id');
 
     return dashboard_fetch_all(
         "SELECT
@@ -94,6 +110,7 @@ function dashboard_attention_jobs(int $limit = 8): array
          LEFT JOIN locations l ON l.id = j.location_id
          LEFT JOIN users u ON u.id = j.assigned_user_id
          WHERE j.status NOT IN ('completed', 'cancelled')
+           {$companyClause}
            AND (
                 (
                     j.planned_date IS NOT NULL
@@ -134,12 +151,15 @@ function dashboard_attention_jobs(int $limit = 8): array
             CASE WHEN j.planned_start_time IS NULL THEN 1 ELSE 0 END ASC,
             j.planned_start_time ASC,
             j.id DESC
-         LIMIT {$limit}"
+         LIMIT {$limit}",
+        $params
     );
 }
 
 function dashboard_todays_schedule(): array
 {
+    [$companyClause, $params] = dashboard_company_scope('j.company_id');
+
     return dashboard_fetch_all(
         "SELECT
             j.id,
@@ -155,16 +175,20 @@ function dashboard_todays_schedule(): array
          LEFT JOIN locations l ON l.id = j.location_id
          LEFT JOIN users u ON u.id = j.assigned_user_id
          WHERE j.status NOT IN ('cancelled', 'completed')
+           {$companyClause}
            AND j.planned_date = CURRENT_DATE()
          ORDER BY
             CASE WHEN j.planned_start_time IS NULL THEN 1 ELSE 0 END ASC,
             j.planned_start_time ASC,
-            j.id ASC"
+            j.id ASC",
+        $params
     );
 }
 
 function dashboard_active_workers(): array
 {
+    [$companyClause, $params] = dashboard_company_scope('j.company_id');
+
     return dashboard_fetch_all(
         "SELECT
             u.id,
@@ -173,17 +197,24 @@ function dashboard_active_workers(): array
             GROUP_CONCAT(j.job_number ORDER BY j.planned_date ASC, j.planned_start_time ASC, j.id ASC SEPARATOR ', ') AS job_numbers
          FROM users u
          INNER JOIN jobs j ON j.assigned_user_id = u.id
-         WHERE u.role = 'worker'
-           AND u.is_active = 1
+         INNER JOIN company_users cu
+            ON cu.user_id = u.id
+           AND cu.company_id = j.company_id
+           AND cu.role = 'worker'
+           AND cu.is_active = 1
+         WHERE u.is_active = 1
            AND j.status = 'in_progress'
+           {$companyClause}
          GROUP BY u.id, u.name
-         ORDER BY u.name ASC"
+         ORDER BY u.name ASC",
+        $params
     );
 }
 
 function dashboard_recently_completed_jobs(int $limit = 8): array
 {
     $limit = max(1, $limit);
+    [$companyClause, $params] = dashboard_company_scope('j.company_id');
 
     return dashboard_fetch_all(
         "SELECT
@@ -196,30 +227,34 @@ function dashboard_recently_completed_jobs(int $limit = 8): array
          INNER JOIN customers c ON c.id = j.customer_id
          LEFT JOIN users u ON u.id = j.assigned_user_id
          WHERE j.status = 'completed'
+           {$companyClause}
          ORDER BY
             CASE WHEN j.actual_completed_at IS NULL THEN 1 ELSE 0 END ASC,
             j.actual_completed_at DESC,
             j.id DESC
-         LIMIT {$limit}"
+         LIMIT {$limit}",
+        $params
     );
 }
 
 function worker_dashboard_counts(int $userId): array
 {
+    [$companyClause, $companyParams] = dashboard_company_scope('company_id', current_user(), false);
+
     return [
         'assigned_jobs' => fetch_count(
-            'SELECT COUNT(*) FROM jobs WHERE assigned_user_id = :user_id',
-            ['user_id' => $userId]
+            'SELECT COUNT(*) FROM jobs WHERE assigned_user_id = :user_id' . $companyClause,
+            array_merge(['user_id' => $userId], $companyParams)
         ),
         'planned_jobs' => fetch_count(
-            "SELECT COUNT(*) FROM jobs WHERE assigned_user_id = :user_id AND status = 'planned'",
-            ['user_id' => $userId]
+            "SELECT COUNT(*) FROM jobs WHERE assigned_user_id = :user_id AND status = 'planned'" . $companyClause,
+            array_merge(['user_id' => $userId], $companyParams)
         ),
         'scheduled_today' => fetch_count(
             'SELECT COUNT(*) FROM jobs
              WHERE assigned_user_id = :user_id
-               AND planned_date = CURRENT_DATE()',
-            ['user_id' => $userId]
+               AND planned_date = CURRENT_DATE()' . $companyClause,
+            array_merge(['user_id' => $userId], $companyParams)
         ),
     ];
 }

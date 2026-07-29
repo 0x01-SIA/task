@@ -212,8 +212,8 @@ function count_assigned_active_jobs_for_user(int $userId): int
 
 function recent_assigned_jobs_for_user(int $userId, int $limit = 5): array
 {
-    $statement = users_connection()->prepare(
-        "SELECT
+    $params = ['user_id' => $userId];
+    $sql = "SELECT
             j.id,
             j.job_number,
             j.title,
@@ -228,15 +228,17 @@ function recent_assigned_jobs_for_user(int $userId, int $limit = 5): array
          INNER JOIN customers c ON c.id = j.customer_id
          LEFT JOIN locations l ON l.id = j.location_id
          WHERE j.assigned_user_id = :user_id
-         ORDER BY
+    ";
+    $sql .= scoped_company_sql('j.company_id', $params);
+    $sql .= " ORDER BY
             CASE WHEN j.status IN ('completed', 'cancelled') THEN 1 ELSE 0 END ASC,
             CASE WHEN j.planned_date IS NULL THEN 1 ELSE 0 END ASC,
             j.planned_date DESC,
             j.updated_at DESC,
             j.id DESC
-         LIMIT :limit"
-    );
-    $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
+         LIMIT :limit";
+    $statement = users_connection()->prepare($sql);
+    $statement->bindValue(':user_id', $params['user_id'], PDO::PARAM_INT);
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->execute();
     $jobs = $statement->fetchAll();

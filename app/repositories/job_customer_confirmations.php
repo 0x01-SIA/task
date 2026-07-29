@@ -43,9 +43,10 @@ function ensure_job_customer_confirmation_directory(int $jobId): string
 
 function find_job_customer_confirmation(int $jobId): ?array
 {
-    $statement = job_customer_confirmation_connection()->prepare(
-        'SELECT
+    $params = ['job_id' => $jobId];
+    $sql = 'SELECT
             c.id,
+            c.company_id,
             c.job_id,
             c.customer_name,
             c.customer_email,
@@ -59,10 +60,11 @@ function find_job_customer_confirmation(int $jobId): ?array
             u.name AS confirmed_by_user_name
          FROM job_customer_confirmations c
          LEFT JOIN users u ON u.id = c.confirmed_by_user_id
-         WHERE c.job_id = :job_id
-         LIMIT 1'
-    );
-    $statement->execute(['job_id' => $jobId]);
+         WHERE c.job_id = :job_id';
+    $sql .= scoped_company_sql('c.company_id', $params);
+    $sql .= ' LIMIT 1';
+    $statement = job_customer_confirmation_connection()->prepare($sql);
+    $statement->execute($params);
     $confirmation = $statement->fetch();
 
     return is_array($confirmation) ? $confirmation : null;
@@ -89,6 +91,7 @@ function create_job_customer_confirmation(
 
         $statement = $connection->prepare(
             'INSERT INTO job_customer_confirmations (
+                company_id,
                 job_id,
                 customer_name,
                 customer_email,
@@ -97,6 +100,7 @@ function create_job_customer_confirmation(
                 signature_file_size,
                 confirmed_by_user_id
              ) VALUES (
+                :company_id,
                 :job_id,
                 :customer_name,
                 :customer_email,
@@ -107,6 +111,7 @@ function create_job_customer_confirmation(
              )'
         );
         $statement->execute([
+            'company_id' => current_company_id(),
             'job_id' => $jobId,
             'customer_name' => $customerName,
             'customer_email' => $customerEmail,
@@ -144,9 +149,13 @@ function delete_job_customer_confirmation(int $jobId): bool
     try {
         $statement = $connection->prepare(
             'DELETE FROM job_customer_confirmations
-             WHERE job_id = :job_id'
+             WHERE job_id = :job_id
+               AND company_id = :company_id'
         );
-        $statement->execute(['job_id' => $jobId]);
+        $statement->execute([
+            'job_id' => $jobId,
+            'company_id' => current_company_id(),
+        ]);
 
         if ($statement->rowCount() < 1) {
             $connection->rollBack();
@@ -202,4 +211,3 @@ function job_can_accept_customer_confirmation(array $job): bool
 {
     return (string) ($job['status'] ?? '') === 'completed';
 }
-

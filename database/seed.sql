@@ -1,8 +1,8 @@
-INSERT INTO companies (name, registration_number, email, phone, address, is_active)
+INSERT INTO companies (name, slug, registration_number, email, phone, address, is_active)
 VALUES
-    ('Northwind Services', 'REG-2026-001', 'ops@northwind.example.test', '+371-555-0100', '12 Harbor Street, Riga, Latvia', 1),
-    ('Bluebird Manufacturing', 'REG-2026-002', 'hello@bluebird.example.test', '+371-555-0200', '8 Foundry Road, Jelgava, Latvia', 1),
-    ('Dormant Demo Company', 'REG-2026-003', 'inactive@example.test', '+371-555-0300', '5 Quiet Lane, Liepaja, Latvia', 0);
+    ('Northwind Services', 'northwind-services', 'REG-2026-001', 'ops@northwind.example.test', '+371-555-0100', '12 Harbor Street, Riga, Latvia', 1),
+    ('Bluebird Manufacturing', 'bluebird-manufacturing', 'REG-2026-002', 'hello@bluebird.example.test', '+371-555-0200', '8 Foundry Road, Jelgava, Latvia', 1),
+    ('Dormant Demo Company', 'dormant-demo-company', 'REG-2026-003', 'inactive@example.test', '+371-555-0300', '5 Quiet Lane, Liepaja, Latvia', 0);
 
 INSERT INTO users (name, email, password_hash, role, is_active)
 VALUES
@@ -122,7 +122,7 @@ VALUES
     (1, 2, 2, 1.000, 4),
     (2, 3, 3, 2.000, 5);
 
-INSERT INTO job_notes (job_id, user_id, note)
+INSERT INTO job_notes (company_id, job_id, user_id, note)
 VALUES
-    (2, 4, 'Old keypad removed and wiring checked.'),
-    (3, 5, 'Inspection completed and report is ready to send.');
+    (1, 2, 4, 'Old keypad removed and wiring checked.'),
+    (2, 3, 5, 'Inspection completed and report is ready to send.');

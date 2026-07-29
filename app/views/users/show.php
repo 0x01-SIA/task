@@ -29,8 +29,8 @@ $isSelf = current_user() !== null && (int) current_user()['id'] === (int) $manag
         <div class="card-body p-4">
             <div class="info-grid">
                 <div>
-                    <p class="info-label">Role</p>
-                    <p class="mb-0"><?= h(role_label((string) $managedUser['role'])) ?></p>
+                    <p class="info-label">Global Role</p>
+                    <p class="mb-0"><?= h(role_label((string) ($managedUser['global_role'] ?? 'worker'))) ?></p>
                 </div>
                 <div>
                     <p class="info-label">Status</p>
@@ -67,6 +67,47 @@ $isSelf = current_user() !== null && (int) current_user()['id'] === (int) $manag
                     </p>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                <div>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Memberships</p>
+                    <h2 class="h5 mb-1">Company Access</h2>
+                    <p class="text-secondary mb-0">Membership visibility is limited by your current level of access.</p>
+                </div>
+            </div>
+
+            <?php if (($memberships ?? []) === []): ?>
+                <p class="text-secondary mb-0">No visible company memberships for this user.</p>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Company</th>
+                            <th scope="col">Role</th>
+                            <th scope="col">Membership Status</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($memberships as $membership): ?>
+                            <tr>
+                                <td class="fw-semibold"><?= h($membership['company_name'] ?? 'Current company') ?></td>
+                                <td><?= h(role_label((string) ($membership['role'] ?? 'worker'))) ?></td>
+                                <td>
+                                    <span class="badge <?= (int) ($membership['is_active'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                        <?= (int) ($membership['is_active'] ?? 0) === 1 ? 'Active membership' : 'Inactive membership' ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         </div>
     </section>
 

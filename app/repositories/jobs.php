@@ -17,6 +17,7 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
 {
     $sql = 'SELECT
                 j.id,
+                j.company_id,
                 j.job_number,
                 j.task_id,
                 j.customer_id,
@@ -46,6 +47,7 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
             LEFT JOIN tasks t ON t.id = j.task_id
             WHERE 1 = 1';
     $params = [];
+    $sql .= scoped_company_sql('j.company_id', $params, $viewer);
 
     if (($viewer['role'] ?? null) === 'worker') {
         $sql .= ' AND j.assigned_user_id = :viewer_user_id';
@@ -116,6 +118,7 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
 {
     $sql = 'SELECT
                 j.id,
+                j.company_id,
                 j.job_number,
                 j.task_id,
                 j.customer_id,
@@ -151,6 +154,7 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
             LEFT JOIN tasks t ON t.id = j.task_id
             WHERE j.id = :id';
     $params = ['id' => $id];
+    $sql .= scoped_company_sql('j.company_id', $params, $viewer);
 
     if (($viewer['role'] ?? null) === 'worker') {
         $sql .= ' AND j.assigned_user_id = :viewer_user_id';
@@ -191,6 +195,7 @@ function find_jobs_for_calendar(PDO $pdo, string $startDate, string $endDate, ?a
         'start_date' => $startDate,
         'end_date' => $endDate,
     ];
+    $sql .= scoped_company_sql('j.company_id', $params, $viewer);
 
     if (($viewer['role'] ?? '') === 'worker') {
         $sql .= ' AND j.assigned_user_id = :viewer_user_id';
@@ -217,6 +222,7 @@ function count_unscheduled_active_jobs(PDO $pdo, ?array $viewer = null): int
          WHERE planned_date IS NULL
            AND status NOT IN ('completed', 'cancelled')";
     $params = [];
+    $sql .= scoped_company_sql('company_id', $params, $viewer);
 
     if (($viewer['role'] ?? '') === 'worker') {
         $sql .= ' AND assigned_user_id = :viewer_user_id';
@@ -239,6 +245,7 @@ function create_job(array $data): int
         try {
             $statement = $connection->prepare(
                 'INSERT INTO jobs (
+                    company_id,
                     job_number,
                     task_id,
                     customer_id,
@@ -255,6 +262,7 @@ function create_job(array $data): int
                     internal_notes,
                     created_by_user_id
                 ) VALUES (
+                    :company_id,
                     :job_number,
                     :task_id,
                     :customer_id,
@@ -273,6 +281,7 @@ function create_job(array $data): int
                 )'
             );
             $statement->execute([
+                'company_id' => $data['company_id'],
                 'job_number' => $jobNumber,
                 'task_id' => $data['task_id'],
                 'customer_id' => $data['customer_id'],
@@ -307,7 +316,8 @@ function update_job(int $id, array $data): void
 {
     $statement = jobs_connection()->prepare(
         'UPDATE jobs
-         SET task_id = :task_id,
+         SET company_id = :company_id,
+             task_id = :task_id,
              customer_id = :customer_id,
              location_id = :location_id,
              title = :title,
@@ -324,6 +334,7 @@ function update_job(int $id, array $data): void
     );
     $statement->execute([
         'id' => $id,
+        'company_id' => $data['company_id'],
         'task_id' => $data['task_id'],
         'customer_id' => $data['customer_id'],
         'location_id' => $data['location_id'],
@@ -342,27 +353,29 @@ function update_job(int $id, array $data): void
 
 function cancel_job(int $id): void
 {
-    $statement = jobs_connection()->prepare(
-        "UPDATE jobs
-         SET status = 'cancelled'
-         WHERE id = :id"
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = "UPDATE jobs
+            SET status = 'cancelled'
+            WHERE id = :id";
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = jobs_connection()->prepare($sql);
+    $statement->execute($params);
 }
 
 function reactivate_job(int $id): void
 {
-    $statement = jobs_connection()->prepare(
-        "UPDATE jobs
-         SET status = CASE
-                WHEN assigned_user_id IS NOT NULL AND planned_date IS NOT NULL THEN 'planned'
-                ELSE 'draft'
-             END,
-             actual_start_at = NULL,
-             actual_completed_at = NULL
-         WHERE id = :id"
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = "UPDATE jobs
+            SET status = CASE
+                   WHEN assigned_user_id IS NOT NULL AND planned_date IS NOT NULL THEN 'planned'
+                   ELSE 'draft'
+                END,
+                actual_start_at = NULL,
+                actual_completed_at = NULL
+            WHERE id = :id";
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = jobs_connection()->prepare($sql);
+    $statement->execute($params);
 }
 
 function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
@@ -370,6 +383,7 @@ function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
     $statement = jobs_connection()->prepare(
         "SELECT
             j.id,
+            j.company_id,
             j.job_number,
             j.task_id,
             j.customer_id,
@@ -397,7 +411,11 @@ function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
         INNER JOIN customers c ON c.id = j.customer_id
         LEFT JOIN locations l ON l.id = j.location_id
         LEFT JOIN tasks t ON t.id = j.task_id
-        WHERE j.assigned_user_id = :user_id
+        WHERE j.assigned_user_id = :user_id"
+    );
+    $params = ['user_id' => $userId];
+    $sql .= scoped_company_sql('j.company_id', $params, current_user(), false);
+    $sql .= "
         ORDER BY
             CASE
                 WHEN j.status = 'completed' THEN 2
@@ -410,9 +428,9 @@ function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
             j.planned_start_time ASC,
             j.actual_completed_at DESC,
             j.updated_at DESC,
-            j.id DESC"
-    );
-    $statement->execute(['user_id' => $userId]);
+            j.id DESC";
+    $statement = jobs_connection()->prepare($sql);
+    $statement->execute($params);
     $jobs = $statement->fetchAll();
 
     if (!is_array($jobs)) {
@@ -463,6 +481,7 @@ function find_worker_accessible_job_by_id(int $id, array $viewer): ?array
 {
     $sql = 'SELECT
                 j.id,
+                j.company_id,
                 j.job_number,
                 j.task_id,
                 j.customer_id,
@@ -498,6 +517,7 @@ function find_worker_accessible_job_by_id(int $id, array $viewer): ?array
             LEFT JOIN tasks t ON t.id = j.task_id
             WHERE j.id = :id';
     $params = ['id' => $id];
+    $sql .= scoped_company_sql('j.company_id', $params, $viewer, false);
 
     if (($viewer['role'] ?? '') === 'worker') {
         $sql .= ' AND j.assigned_user_id = :viewer_user_id';
@@ -532,6 +552,7 @@ function start_worker_job(int $jobId, int $viewerId, string $viewerRole): bool
             WHERE id = :id
               AND status = 'planned'";
     $params = ['id' => $jobId];
+    $sql .= scoped_company_sql('company_id', $params, current_user(), false);
 
     if ($viewerRole === 'worker') {
         $sql .= ' AND assigned_user_id = :viewer_user_id';
@@ -553,6 +574,7 @@ function complete_worker_job(int $jobId, int $viewerId, string $viewerRole): boo
             WHERE id = :id
               AND status = 'in_progress'";
     $params = ['id' => $jobId];
+    $sql .= scoped_company_sql('company_id', $params, current_user(), false);
 
     if ($viewerRole === 'worker') {
         $sql .= ' AND assigned_user_id = :viewer_user_id';
@@ -567,9 +589,10 @@ function complete_worker_job(int $jobId, int $viewerId, string $viewerRole): boo
 
 function list_job_notes(int $jobId): array
 {
-    $statement = jobs_connection()->prepare(
-        'SELECT
+    $params = ['job_id' => $jobId];
+    $sql = 'SELECT
             n.id,
+            n.company_id,
             n.job_id,
             n.user_id,
             n.note,
@@ -577,10 +600,11 @@ function list_job_notes(int $jobId): array
             u.name AS author_name
          FROM job_notes n
          LEFT JOIN users u ON u.id = n.user_id
-         WHERE n.job_id = :job_id
-         ORDER BY n.created_at ASC, n.id ASC'
-    );
-    $statement->execute(['job_id' => $jobId]);
+         WHERE n.job_id = :job_id';
+    $sql .= scoped_company_sql('n.company_id', $params);
+    $sql .= ' ORDER BY n.created_at ASC, n.id ASC';
+    $statement = jobs_connection()->prepare($sql);
+    $statement->execute($params);
     $notes = $statement->fetchAll();
 
     return is_array($notes) ? $notes : [];
@@ -589,10 +613,11 @@ function list_job_notes(int $jobId): array
 function create_job_note(int $jobId, ?int $userId, string $note): void
 {
     $statement = jobs_connection()->prepare(
-        'INSERT INTO job_notes (job_id, user_id, note)
-         VALUES (:job_id, :user_id, :note)'
+        'INSERT INTO job_notes (company_id, job_id, user_id, note)
+         VALUES (:company_id, :job_id, :user_id, :note)'
     );
     $statement->execute([
+        'company_id' => current_company_id(),
         'job_id' => $jobId,
         'user_id' => $userId,
         'note' => $note,
@@ -629,19 +654,20 @@ function job_number_conflict(PDOException $exception): bool
 
 function recent_jobs_for_location(int $locationId, int $limit = 5): array
 {
-    $statement = jobs_connection()->prepare(
-        'SELECT id, job_number, task_id, title, status, planned_date, planned_start_time
-         FROM jobs
-         WHERE location_id = :location_id
-         ORDER BY
+    $params = ['location_id' => $locationId];
+    $sql = 'SELECT id, company_id, job_number, task_id, title, status, planned_date, planned_start_time
+            FROM jobs
+            WHERE location_id = :location_id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' ORDER BY
             CASE WHEN planned_date IS NULL THEN 1 ELSE 0 END ASC,
             planned_date ASC,
             CASE WHEN planned_start_time IS NULL THEN 1 ELSE 0 END ASC,
             planned_start_time ASC,
             id DESC
-         LIMIT ' . max(1, $limit)
-    );
-    $statement->execute(['location_id' => $locationId]);
+         LIMIT ' . max(1, $limit);
+    $statement = jobs_connection()->prepare($sql);
+    $statement->execute($params);
     $jobs = $statement->fetchAll();
 
     return is_array($jobs) ? $jobs : [];

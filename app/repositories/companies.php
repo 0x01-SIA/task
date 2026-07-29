@@ -18,6 +18,7 @@ function list_companies(bool $includeInactive = true): array
     $sql = 'SELECT
                 c.id,
                 c.name,
+                c.slug,
                 c.registration_number,
                 c.email,
                 c.phone,
@@ -50,6 +51,7 @@ function list_companies_for_user(int $userId, bool $includeInactive = false): ar
     $sql = 'SELECT
                 c.id,
                 c.name,
+                c.slug,
                 c.registration_number,
                 c.email,
                 c.phone,
@@ -79,7 +81,7 @@ function list_companies_for_user(int $userId, bool $includeInactive = false): ar
 function find_company_by_id(int $id): ?array
 {
     $statement = companies_connection()->prepare(
-        'SELECT id, name, registration_number, email, phone, address, is_active, created_at, updated_at
+        'SELECT id, name, slug, registration_number, email, phone, address, is_active, created_at, updated_at
          FROM companies
          WHERE id = :id
          LIMIT 1'
@@ -93,11 +95,12 @@ function find_company_by_id(int $id): ?array
 function create_company(array $data): int
 {
     $statement = companies_connection()->prepare(
-        'INSERT INTO companies (name, registration_number, email, phone, address, is_active)
-         VALUES (:name, :registration_number, :email, :phone, :address, :is_active)'
+        'INSERT INTO companies (name, slug, registration_number, email, phone, address, is_active)
+         VALUES (:name, :slug, :registration_number, :email, :phone, :address, :is_active)'
     );
     $statement->execute([
         'name' => $data['name'],
+        'slug' => $data['slug'],
         'registration_number' => $data['registration_number'],
         'email' => $data['email'],
         'phone' => $data['phone'],
@@ -113,6 +116,7 @@ function update_company(int $id, array $data): void
     $statement = companies_connection()->prepare(
         'UPDATE companies
          SET name = :name,
+             slug = :slug,
              registration_number = :registration_number,
              email = :email,
              phone = :phone,
@@ -123,6 +127,7 @@ function update_company(int $id, array $data): void
     $statement->execute([
         'id' => $id,
         'name' => $data['name'],
+        'slug' => $data['slug'],
         'registration_number' => $data['registration_number'],
         'email' => $data['email'],
         'phone' => $data['phone'],
@@ -142,6 +147,24 @@ function set_company_active_status(int $id, bool $isActive): void
         'id' => $id,
         'is_active' => $isActive ? 1 : 0,
     ]);
+}
+
+function company_slug_exists(string $slug, ?int $excludeCompanyId = null): bool
+{
+    $sql = 'SELECT 1 FROM companies WHERE slug = :slug';
+    $params = ['slug' => $slug];
+
+    if ($excludeCompanyId !== null) {
+        $sql .= ' AND id <> :id';
+        $params['id'] = $excludeCompanyId;
+    }
+
+    $sql .= ' LIMIT 1';
+
+    $statement = companies_connection()->prepare($sql);
+    $statement->execute($params);
+
+    return $statement->fetchColumn() !== false;
 }
 
 function list_company_memberships(int $companyId): array
@@ -228,4 +251,20 @@ function remove_company_membership(int $companyId, int $userId): void
         'company_id' => $companyId,
         'user_id' => $userId,
     ]);
+}
+
+function count_active_company_admin_memberships(int $companyId): int
+{
+    $statement = companies_connection()->prepare(
+        "SELECT COUNT(*)
+         FROM company_users cu
+         INNER JOIN users u ON u.id = cu.user_id
+         WHERE cu.company_id = :company_id
+           AND cu.role = 'admin'
+           AND cu.is_active = 1
+           AND u.is_active = 1"
+    );
+    $statement->execute(['company_id' => $companyId]);
+
+    return (int) $statement->fetchColumn();
 }

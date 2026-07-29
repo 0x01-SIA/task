@@ -1,6 +1,7 @@
 CREATE TABLE companies (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(255) NOT NULL,
+    slug VARCHAR(120) NOT NULL,
     registration_number VARCHAR(100) DEFAULT NULL,
     email VARCHAR(255) DEFAULT NULL,
     phone VARCHAR(50) DEFAULT NULL,
@@ -9,6 +10,7 @@ CREATE TABLE companies (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_companies_slug (slug),
     KEY idx_companies_name (name),
     KEY idx_companies_is_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -201,13 +203,19 @@ CREATE TABLE jobs (
 
 CREATE TABLE job_notes (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
     job_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED DEFAULT NULL,
     note TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    KEY idx_job_notes_company_id (company_id),
     KEY idx_job_notes_job_id (job_id),
     KEY idx_job_notes_user_id (user_id),
+    CONSTRAINT fk_job_notes_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_job_notes_job
         FOREIGN KEY (job_id) REFERENCES jobs (id)
         ON DELETE RESTRICT

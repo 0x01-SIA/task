@@ -1,6 +1,8 @@
 <?php
 
 declare(strict_types=1);
+
+$roleFieldLabel = $roleFieldLabel ?? 'Role';
 ?>
 <div class="d-grid gap-4">
     <section class="card shadow-sm border-0">
@@ -49,7 +51,7 @@ declare(strict_types=1);
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label" for="role">Role</label>
+                        <label class="form-label" for="role"><?= h($roleFieldLabel) ?></label>
                         <select class="form-select<?= isset($errors['role']) ? ' is-invalid' : '' ?>" id="role" name="role" required>
                             <?php foreach (user_role_options() as $value => $label): ?>
                                 <option value="<?= h($value) ?>" <?= ($values['role'] ?? 'worker') === $value ? 'selected' : '' ?>><?= h($label) ?></option>

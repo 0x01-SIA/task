@@ -294,6 +294,7 @@ function store_uploaded_job_attachment(int $jobId, array $file, int $userId): vo
     }
 
     create_job_asset_record('attachment', [
+        'company_id' => current_company_id(),
         'job_id' => $jobId,
         'original_filename' => basename($originalName),
         'stored_filename' => $storedName,
@@ -317,6 +318,7 @@ function store_uploaded_job_photo(int $jobId, array $file, int $userId, ?string 
     }
 
     create_job_asset_record('photo', [
+        'company_id' => current_company_id(),
         'job_id' => $jobId,
         'original_filename' => basename($originalName),
         'stored_filename' => $storedName,
@@ -333,6 +335,7 @@ function create_job_asset_record(string $type, array $data): void
     $table = job_asset_table($type);
 
     $columns = [
+        'company_id',
         'job_id',
         'original_filename',
         'stored_filename',
@@ -342,6 +345,7 @@ function create_job_asset_record(string $type, array $data): void
         'uploaded_by_user_id',
     ];
     $placeholders = [
+        ':company_id',
         ':job_id',
         ':original_filename',
         ':stored_filename',
@@ -357,6 +361,7 @@ function create_job_asset_record(string $type, array $data): void
     }
 
     $params = [
+        'company_id' => $data['company_id'],
         'job_id' => $data['job_id'],
         'original_filename' => $data['original_filename'],
         'stored_filename' => $data['stored_filename'],
@@ -391,10 +396,10 @@ function list_job_assets(int $jobId, string $type): array
 {
     $table = job_asset_table($type);
     $captionSelect = $type === 'photo' ? ', a.caption' : '';
-
-    $statement = job_asset_connection()->prepare(
-        'SELECT
+    $params = ['job_id' => $jobId];
+    $sql = 'SELECT
             a.id,
+            a.company_id,
             a.job_id,
             a.original_filename,
             a.stored_filename,
@@ -406,10 +411,11 @@ function list_job_assets(int $jobId, string $type): array
             u.name AS uploader_name
          FROM ' . $table . ' a
          LEFT JOIN users u ON u.id = a.uploaded_by_user_id
-         WHERE a.job_id = :job_id
-         ORDER BY a.uploaded_at DESC, a.id DESC'
-    );
-    $statement->execute(['job_id' => $jobId]);
+         WHERE a.job_id = :job_id';
+    $sql .= scoped_company_sql('a.company_id', $params);
+    $sql .= ' ORDER BY a.uploaded_at DESC, a.id DESC';
+    $statement = job_asset_connection()->prepare($sql);
+    $statement->execute($params);
     $rows = $statement->fetchAll();
 
     return is_array($rows) ? $rows : [];
@@ -429,10 +435,13 @@ function find_job_asset_by_id(int $jobId, int $assetId, string $type): ?array
 {
     $table = job_asset_table($type);
     $captionSelect = $type === 'photo' ? ', a.caption' : '';
-
-    $statement = job_asset_connection()->prepare(
-        'SELECT
+    $params = [
+        'job_id' => $jobId,
+        'asset_id' => $assetId,
+    ];
+    $sql = 'SELECT
             a.id,
+            a.company_id,
             a.job_id,
             a.original_filename,
             a.stored_filename,
@@ -445,13 +454,11 @@ function find_job_asset_by_id(int $jobId, int $assetId, string $type): ?array
          FROM ' . $table . ' a
          LEFT JOIN users u ON u.id = a.uploaded_by_user_id
          WHERE a.job_id = :job_id
-           AND a.id = :asset_id
-         LIMIT 1'
-    );
-    $statement->execute([
-        'job_id' => $jobId,
-        'asset_id' => $assetId,
-    ]);
+           AND a.id = :asset_id';
+    $sql .= scoped_company_sql('a.company_id', $params);
+    $sql .= ' LIMIT 1';
+    $statement = job_asset_connection()->prepare($sql);
+    $statement->execute($params);
     $asset = $statement->fetch();
 
     return is_array($asset) ? $asset : null;
@@ -476,15 +483,16 @@ function delete_job_asset(int $jobId, int $assetId, string $type): bool
     }
 
     $table = job_asset_table($type);
-    $statement = job_asset_connection()->prepare(
-        'DELETE FROM ' . $table . '
-         WHERE job_id = :job_id
-           AND id = :asset_id'
-    );
-    $statement->execute([
+    $params = [
         'job_id' => $jobId,
         'asset_id' => $assetId,
-    ]);
+    ];
+    $sql = 'DELETE FROM ' . $table . '
+            WHERE job_id = :job_id
+              AND id = :asset_id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = job_asset_connection()->prepare($sql);
+    $statement->execute($params);
 
     if ($statement->rowCount() < 1) {
         return false;
