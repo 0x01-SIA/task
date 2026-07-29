@@ -11,13 +11,20 @@ declare(strict_types=1);
                     <h1 class="h3 mb-2">Customer Directory</h1>
                     <p class="text-secondary mb-0">Open a customer to review account details and managed service locations.</p>
                 </div>
-                <span class="badge text-bg-light border"><?= h((string) count($customers)) ?> customers</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge text-bg-light border"><?= h((string) count($customers)) ?> customers</span>
+                    <a class="btn btn-primary" href="<?= h(app_url('/customers/create')) ?>">New Customer</a>
+                </div>
             </div>
         </div>
     </section>
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
+            <?php if (($successMessage ?? null) !== null): ?>
+                <div class="alert alert-success mb-4" role="status"><?= h($successMessage) ?></div>
+            <?php endif; ?>
+
             <?php if ($customers === []): ?>
                 <p class="text-secondary mb-0">No customers have been added yet.</p>
             <?php else: ?>

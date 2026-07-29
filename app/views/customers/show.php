@@ -21,6 +21,10 @@ declare(strict_types=1);
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
+            <?php if (($successMessage ?? null) !== null): ?>
+                <div class="alert alert-success mb-4" role="status"><?= h($successMessage) ?></div>
+            <?php endif; ?>
+
             <div class="info-grid">
                 <div>
                     <p class="info-label">Registration</p>

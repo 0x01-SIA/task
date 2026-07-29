@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+
+$newCustomerUrl = app_url('/customers/create?' . http_build_query([
+    'return_to' => 'jobs_create',
+    'return_state' => encode_customer_return_state(job_inline_customer_return_state($values)),
+]));
 ?>
 <div class="d-grid gap-4">
     <section class="card shadow-sm border-0">
@@ -34,6 +39,10 @@ declare(strict_types=1);
                     <div class="alert alert-info mb-0" role="status">
                         Creating a job for task <strong><?= h($taskContext['task_number']) ?></strong> - <?= h($taskContext['title']) ?>.
                     </div>
+                <?php endif; ?>
+
+                <?php if (($successMessage ?? null) !== null): ?>
+                    <div class="alert alert-success mb-0" role="status"><?= h($successMessage) ?></div>
                 <?php endif; ?>
 
                 <div class="row g-3">
@@ -71,6 +80,10 @@ declare(strict_types=1);
                         <?php if (isset($errors['customer_id'])): ?>
                             <div class="invalid-feedback"><?= h($errors['customer_id']) ?></div>
                         <?php endif; ?>
+                        <div class="form-text d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <span>Choose an existing customer or add a new one without losing this form.</span>
+                            <a class="btn btn-outline-secondary btn-sm" href="<?= h($newCustomerUrl) ?>">New Customer</a>
+                        </div>
                     </div>
 
                     <div class="col-md-6">

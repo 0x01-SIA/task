@@ -73,3 +73,46 @@ function customer_exists(int $id): bool
 
     return $statement->fetchColumn() !== false;
 }
+
+function create_customer(array $data): int
+{
+    $companyId = current_company_id();
+
+    if ($companyId === null) {
+        throw new RuntimeException('An active company must be selected before creating a customer.');
+    }
+
+    $statement = customers_connection()->prepare(
+        'INSERT INTO customers (
+            company_id,
+            name,
+            registration_number,
+            contact_name,
+            contact_email,
+            contact_phone,
+            notes,
+            is_active
+        ) VALUES (
+            :company_id,
+            :name,
+            :registration_number,
+            :contact_name,
+            :contact_email,
+            :contact_phone,
+            :notes,
+            :is_active
+        )'
+    );
+    $statement->execute([
+        'company_id' => $companyId,
+        'name' => $data['name'],
+        'registration_number' => $data['registration_number'],
+        'contact_name' => $data['contact_name'],
+        'contact_email' => $data['contact_email'],
+        'contact_phone' => $data['contact_phone'],
+        'notes' => $data['notes'],
+        'is_active' => $data['is_active'],
+    ]);
+
+    return (int) customers_connection()->lastInsertId();
+}

@@ -70,6 +70,178 @@ function save_location_payload(array $values): array
     ];
 }
 
+function customer_form_values(array $source, array $defaults = []): array
+{
+    $isActive = array_key_exists('is_active', $source)
+        ? (string) $source['is_active']
+        : (string) ($defaults['is_active'] ?? '1');
+
+    return [
+        'name' => trim((string) ($source['name'] ?? ($defaults['name'] ?? ''))),
+        'registration_number' => trim((string) ($source['registration_number'] ?? ($defaults['registration_number'] ?? ''))),
+        'contact_name' => trim((string) ($source['contact_name'] ?? ($defaults['contact_name'] ?? ''))),
+        'contact_email' => trim((string) ($source['contact_email'] ?? ($defaults['contact_email'] ?? ''))),
+        'contact_phone' => trim((string) ($source['contact_phone'] ?? ($defaults['contact_phone'] ?? ''))),
+        'notes' => trim((string) ($source['notes'] ?? ($defaults['notes'] ?? ''))),
+        'is_active' => $isActive === '0' ? '0' : '1',
+    ];
+}
+
+function validate_customer_form(array $values): array
+{
+    $errors = [];
+
+    if (($values['name'] ?? '') === '') {
+        $errors['name'] = 'Customer name is required.';
+    } elseif (strlen((string) $values['name']) > 255) {
+        $errors['name'] = 'Customer name must be 255 characters or fewer.';
+    }
+
+    if (($values['registration_number'] ?? '') !== '' && strlen((string) $values['registration_number']) > 100) {
+        $errors['registration_number'] = 'Registration number must be 100 characters or fewer.';
+    }
+
+    if (($values['contact_name'] ?? '') !== '' && strlen((string) $values['contact_name']) > 255) {
+        $errors['contact_name'] = 'Contact name must be 255 characters or fewer.';
+    }
+
+    if (($values['contact_email'] ?? '') !== '') {
+        if (strlen((string) $values['contact_email']) > 255) {
+            $errors['contact_email'] = 'Contact email must be 255 characters or fewer.';
+        } elseif (filter_var((string) $values['contact_email'], FILTER_VALIDATE_EMAIL) === false) {
+            $errors['contact_email'] = 'Enter a valid contact email address.';
+        }
+    }
+
+    if (($values['contact_phone'] ?? '') !== '' && strlen((string) $values['contact_phone']) > 50) {
+        $errors['contact_phone'] = 'Contact phone must be 50 characters or fewer.';
+    }
+
+    return $errors;
+}
+
+function save_customer_payload(array $values): array
+{
+    return [
+        'name' => $values['name'],
+        'registration_number' => $values['registration_number'] !== '' ? $values['registration_number'] : null,
+        'contact_name' => $values['contact_name'] !== '' ? $values['contact_name'] : null,
+        'contact_email' => $values['contact_email'] !== '' ? $values['contact_email'] : null,
+        'contact_phone' => $values['contact_phone'] !== '' ? $values['contact_phone'] : null,
+        'notes' => $values['notes'] !== '' ? $values['notes'] : null,
+        'is_active' => $values['is_active'] === '1' ? 1 : 0,
+    ];
+}
+
+function customer_return_route_map(): array
+{
+    return [
+        'jobs_create' => '/jobs/create',
+        'tasks_create' => '/tasks/create',
+    ];
+}
+
+function permitted_customer_return_key(?string $value): ?string
+{
+    $returnKey = is_string($value) ? trim($value) : '';
+
+    return array_key_exists($returnKey, customer_return_route_map()) ? $returnKey : null;
+}
+
+function encode_customer_return_state(array $state): string
+{
+    return rtrim(strtr(base64_encode(json_encode($state, JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
+}
+
+function decode_customer_return_state(?string $value): array
+{
+    $encoded = is_string($value) ? trim($value) : '';
+
+    if ($encoded === '') {
+        return [];
+    }
+
+    $decoded = base64_decode(strtr($encoded, '-_', '+/') . str_repeat('=', (4 - strlen($encoded) % 4) % 4), true);
+
+    if ($decoded === false) {
+        return [];
+    }
+
+    try {
+        $state = json_decode($decoded, true, 512, JSON_THROW_ON_ERROR);
+    } catch (JsonException) {
+        return [];
+    }
+
+    return is_array($state) ? $state : [];
+}
+
+function job_inline_customer_return_state(array $values): array
+{
+    return [
+        'task_id' => $values['task_id'] !== null ? (string) $values['task_id'] : '',
+        'customer_id' => $values['customer_id'] !== null ? (string) $values['customer_id'] : '',
+        'location_id' => $values['location_id'] !== null ? (string) $values['location_id'] : '',
+        'title' => $values['title'],
+        'description' => $values['description'],
+        'job_type' => $values['job_type'],
+        'priority' => $values['priority'],
+        'assigned_user_id' => $values['assigned_user_id'] !== null ? (string) $values['assigned_user_id'] : '',
+        'planned_date' => $values['planned_date'],
+        'planned_start_time' => $values['planned_start_time'],
+        'estimated_duration_minutes' => $values['estimated_duration_minutes'],
+        'internal_notes' => $values['internal_notes'],
+    ];
+}
+
+function task_inline_customer_return_state(array $values): array
+{
+    return [
+        'customer_id' => $values['customer_id'] !== null ? (string) $values['customer_id'] : '',
+        'location_id' => $values['location_id'] !== null ? (string) $values['location_id'] : '',
+        'title' => $values['title'],
+        'description' => $values['description'],
+        'status' => $values['status'],
+        'priority' => $values['priority'],
+        'requested_date' => $values['requested_date'],
+        'due_date' => $values['due_date'],
+    ];
+}
+
+function customer_creation_return_query(?string $returnTo, ?string $returnState): string
+{
+    $query = [];
+
+    if ($returnTo !== null) {
+        $query['return_to'] = $returnTo;
+    }
+
+    if ($returnState !== null && $returnState !== '') {
+        $query['return_state'] = $returnState;
+    }
+
+    return $query === [] ? '' : '?' . http_build_query($query);
+}
+
+function customer_creation_redirect_path(int $customerId, ?string $returnTo, ?string $returnState): string
+{
+    if ($returnTo === null) {
+        return '/customers/' . $customerId;
+    }
+
+    $route = customer_return_route_map()[$returnTo] ?? null;
+
+    if ($route === null) {
+        return '/customers/' . $customerId;
+    }
+
+    $state = decode_customer_return_state($returnState);
+    $state['customer_id'] = (string) $customerId;
+    $state['location_id'] = '';
+
+    return $route . '?' . http_build_query($state);
+}
+
 function material_filter_values(array $source): array
 {
     $status = trim((string) ($source['status'] ?? ''));
@@ -1390,6 +1562,41 @@ try {
         case $path === '/customers':
             require_role(['admin', 'dispatcher']);
 
+            if ($method === 'POST') {
+                require_active_company_context();
+                $csrfToken = $_POST['_token'] ?? null;
+
+                if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                    abort(419, 'Session expired', 'The form token is invalid or has expired.');
+                }
+
+                $returnTo = permitted_customer_return_key($_POST['return_to'] ?? null);
+                $returnState = is_string($_POST['return_state'] ?? null) ? (string) $_POST['return_state'] : null;
+                $values = customer_form_values($_POST);
+                $errors = validate_customer_form($values);
+
+                if ($errors !== []) {
+                    render('customers/form', [
+                        'pageTitle' => 'New Customer',
+                        'formTitle' => 'New Customer',
+                        'formAction' => '/customers',
+                        'submitLabel' => 'Create Customer',
+                        'values' => $values,
+                        'errors' => $errors,
+                        'customer' => null,
+                        'returnTo' => $returnTo,
+                        'returnState' => $returnState,
+                    ], 422);
+                    break;
+                }
+
+                $customerId = create_customer(save_customer_payload($values));
+                flash('success', $returnTo === null
+                    ? 'Customer created successfully.'
+                    : 'Customer created. Continue filling out the form below.');
+                redirect(customer_creation_redirect_path($customerId, $returnTo, $returnState));
+            }
+
             if ($method !== 'GET') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
@@ -1397,6 +1604,31 @@ try {
             render('customers/index', [
                 'pageTitle' => 'Customers',
                 'customers' => all_customers(),
+                'successMessage' => flash('success'),
+            ]);
+            break;
+
+        case $path === '/customers/create':
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $returnTo = permitted_customer_return_key($_GET['return_to'] ?? null);
+            $returnState = is_string($_GET['return_state'] ?? null) ? (string) $_GET['return_state'] : null;
+
+            render('customers/form', [
+                'pageTitle' => 'New Customer',
+                'formTitle' => 'New Customer',
+                'formAction' => '/customers',
+                'submitLabel' => 'Create Customer',
+                'values' => customer_form_values([]),
+                'errors' => [],
+                'customer' => null,
+                'returnTo' => $returnTo,
+                'returnState' => $returnState,
             ]);
             break;
 
@@ -1417,6 +1649,7 @@ try {
                 'pageTitle' => $customer['name'],
                 'customer' => $customer,
                 'locations' => list_locations_for_customer((int) $customer['id']),
+                'successMessage' => flash('success'),
             ]);
             break;
 
@@ -1810,6 +2043,7 @@ try {
                         'values' => $values,
                         'errors' => $errors,
                         'task' => null,
+                        'successMessage' => flash('success'),
                     ], 422);
                     break;
                 }
@@ -1829,6 +2063,7 @@ try {
                         'values' => $values,
                         'errors' => ['task_number' => 'Could not generate a task number. Please try again.'],
                         'task' => null,
+                        'successMessage' => flash('success'),
                     ], 422);
                     break;
                 }
@@ -1869,6 +2104,7 @@ try {
                 'values' => task_form_values($_GET),
                 'errors' => [],
                 'task' => null,
+                'successMessage' => flash('success'),
             ]);
             break;
 
@@ -2035,6 +2271,7 @@ try {
                         'errors' => $errors,
                         'job' => null,
                         'taskContext' => $values['task_id'] !== null ? find_task_by_id((int) $values['task_id']) : null,
+                        'successMessage' => flash('success'),
                     ], 422);
                     break;
                 }
@@ -2057,6 +2294,7 @@ try {
                         'errors' => ['job_number' => 'Could not generate a job number. Please try again.'],
                         'job' => null,
                         'taskContext' => $values['task_id'] !== null ? find_task_by_id((int) $values['task_id']) : null,
+                        'successMessage' => flash('success'),
                     ], 422);
                     break;
                 }
@@ -2129,6 +2367,7 @@ try {
                 'errors' => [],
                 'job' => null,
                 'taskContext' => $preselectedTask,
+                'successMessage' => flash('success'),
             ]);
             break;
 
