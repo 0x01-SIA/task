@@ -305,3 +305,15 @@ function list_user_memberships(int $userId): array
 
     return is_array($memberships) ? $memberships : [];
 }
+
+function list_all_users_basic(): array
+{
+    $statement = users_connection()->query(
+        'SELECT id, name, email, role AS global_role, is_active
+         FROM users
+         ORDER BY name ASC, id ASC'
+    );
+    $users = $statement->fetchAll();
+
+    return is_array($users) ? $users : [];
+}

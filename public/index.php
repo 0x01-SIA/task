@@ -1189,7 +1189,9 @@ try {
                 'pageTitle' => $company['name'],
                 'company' => $company,
                 'memberships' => list_company_memberships((int) $company['id']),
+                'assignableUsers' => list_all_users_basic(),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
             break;
 
@@ -1283,6 +1285,86 @@ try {
 
             set_company_active_status((int) $company['id'], ($_POST['is_active'] ?? '0') === '1');
             flash('success', 'Company status updated successfully.');
+            redirect('/companies/' . $company['id']);
+            break;
+
+        case preg_match('#^/companies/([1-9][0-9]*)/memberships$#', $path, $matches) === 1:
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $company = find_company_by_id((int) $matches[1]);
+
+            if ($company === null) {
+                not_found('Company');
+            }
+
+            $userId = positive_int_or_null($_POST['user_id'] ?? null);
+            $role = trim((string) ($_POST['role'] ?? ''));
+            $isActive = ($_POST['is_active'] ?? '1') === '1';
+
+            if ($userId === null || !array_key_exists($role, user_role_options())) {
+                flash('error', 'Select a valid user and role.');
+                redirect('/companies/' . $company['id']);
+            }
+
+            $managedUser = find_managed_user_by_id($userId);
+
+            if ($managedUser === null) {
+                flash('error', 'The selected user was not found.');
+                redirect('/companies/' . $company['id']);
+            }
+
+            upsert_company_membership((int) $company['id'], $userId, $role, $isActive);
+            flash('success', 'Membership saved successfully.');
+            redirect('/companies/' . $company['id']);
+            break;
+
+        case preg_match('#^/companies/([1-9][0-9]*)/memberships/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_auth();
+
+            if (!is_super_admin()) {
+                render('errors/403', [
+                    'pageTitle' => 'Access denied',
+                    'allowedRoles' => ['super_admin'],
+                ], 403);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $company = find_company_by_id((int) $matches[1]);
+
+            if ($company === null) {
+                not_found('Company');
+            }
+
+            remove_company_membership((int) $company['id'], (int) $matches[2]);
+            flash('success', 'Membership removed successfully.');
             redirect('/companies/' . $company['id']);
             break;
 

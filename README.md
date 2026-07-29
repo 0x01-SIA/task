@@ -111,19 +111,32 @@ php bin/setup-database.php
 
 This command loads both the schema and the local development seed data. Use `php bin/setup-database.php --no-seed` only when you explicitly want schema-only setup.
 
-To upgrade an existing development database in place without dropping data, run:
+To upgrade an existing development or production database in place, run:
 
 ```bash
 php bin/upgrade-database.php
 ```
 
-The SQL files remain usable on their own even if you use the helper script.
+This upgrade path is idempotent and is the supported deployment path for existing installations. It applies the multi-company schema changes, adds `super_admin` support, and clears only disposable test application data when an older pre-company schema is detected.
 
-Existing production upgrades continue to use:
+Create the first super admin without manual SQL:
+
+```bash
+php bin/create-super-admin.php --email=you@example.com --name="Your Name" --password='change-me-now'
+```
+
+Existing production deployments should use:
 
 ```bash
 cd /var/www/task-app
 php bin/upgrade-database.php
+```
+
+If the installation does not yet have an active super admin after the upgrade, run:
+
+```bash
+cd /var/www/task-app
+php bin/create-super-admin.php --email=you@example.com --name="Your Name" --password='change-me-now'
 ```
 
 ## Upload storage
@@ -143,6 +156,7 @@ This project includes simple session-based authentication with role checks and a
 
 Supported roles:
 
+- `super_admin`
 - `admin`
 - `dispatcher`
 - `worker`
