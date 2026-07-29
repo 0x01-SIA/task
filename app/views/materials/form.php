@@ -26,6 +26,12 @@ declare(strict_types=1);
             <form method="post" action="<?= h(app_url($formAction)) ?>" class="d-grid gap-4">
                 <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
 
+                <?php if (isset($errors['form'])): ?>
+                    <div class="alert alert-danger mb-0" role="alert">
+                        <?= h($errors['form']) ?>
+                    </div>
+                <?php endif; ?>
+
                 <div class="row g-3">
                     <div class="col-md-8">
                         <label class="form-label" for="name">Name</label>

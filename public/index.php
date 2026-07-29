@@ -274,9 +274,15 @@ function material_form_values(array $source, array $defaults = []): array
     ];
 }
 
-function validate_material_form(array $values): array
+function validate_material_form(array $values, ?int $activeCompanyId): array
 {
     $errors = [];
+
+    if ($activeCompanyId === null) {
+        $errors['form'] = 'Select an active company before creating or updating a material.';
+
+        return $errors;
+    }
 
     if (($values['name'] ?? '') === '') {
         $errors['name'] = 'Material name is required.';
@@ -289,9 +295,10 @@ function validate_material_form(array $values): array
     return $errors;
 }
 
-function save_material_payload(array $values): array
+function save_material_payload(array $values, int $companyId): array
 {
     return [
+        'company_id' => $companyId,
         'name' => $values['name'],
         'sku' => $values['sku'] !== '' ? $values['sku'] : null,
         'unit' => $values['unit'],
@@ -1871,7 +1878,8 @@ try {
                 }
 
                 $values = material_form_values($_POST);
-                $errors = validate_material_form($values);
+                $activeCompanyId = current_company_id();
+                $errors = validate_material_form($values, $activeCompanyId);
 
                 if ($errors !== []) {
                     render('materials/form', [
@@ -1886,13 +1894,17 @@ try {
                     break;
                 }
 
-                $materialId = create_material(save_material_payload($values));
+                $materialId = create_material(save_material_payload($values, $activeCompanyId));
                 flash('success', 'Material created successfully.');
                 redirect('/materials/' . $materialId);
             }
 
             if ($method !== 'GET') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            if (current_company_id() === null) {
+                abort(409, 'Active company required', 'Select an active company before creating a material.');
             }
 
             render('materials/form', [
@@ -1982,7 +1994,8 @@ try {
             }
 
             $values = material_form_values($_POST);
-            $errors = validate_material_form($values);
+            $activeCompanyId = current_company_id();
+            $errors = validate_material_form($values, $activeCompanyId);
 
             if ($errors !== []) {
                 render('materials/form', [
@@ -1997,7 +2010,7 @@ try {
                 break;
             }
 
-            update_material((int) $material['id'], save_material_payload($values));
+            update_material((int) $material['id'], save_material_payload($values, $activeCompanyId));
             flash('success', 'Material updated successfully.');
             redirect('/materials/' . $material['id']);
             break;

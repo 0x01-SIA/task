@@ -154,6 +154,8 @@ function list_material_movements(int $materialId, int $limit, int $offset): arra
 
 function create_material(array $data): int
 {
+    $companyId = require_material_company_id($data);
+
     $statement = materials_connection()->prepare(
         'INSERT INTO materials (
             company_id,
@@ -172,7 +174,7 @@ function create_material(array $data): int
          )'
     );
     $statement->execute([
-        'company_id' => $data['company_id'],
+        'company_id' => $companyId,
         'name' => $data['name'],
         'sku' => $data['sku'],
         'unit' => $data['unit'],
@@ -185,19 +187,21 @@ function create_material(array $data): int
 
 function update_material(int $id, array $data): void
 {
+    $companyId = require_material_company_id($data);
+
     $statement = materials_connection()->prepare(
         'UPDATE materials
          SET name = :name,
-             company_id = :company_id,
              sku = :sku,
              unit = :unit,
              description = :description,
              is_active = :is_active
-         WHERE id = :id'
+         WHERE id = :id
+           AND company_id = :company_id'
     );
     $statement->execute([
         'id' => $id,
-        'company_id' => $data['company_id'],
+        'company_id' => $companyId,
         'name' => $data['name'],
         'sku' => $data['sku'],
         'unit' => $data['unit'],
@@ -412,4 +416,15 @@ function user_can_modify_job_material(array $user, array $job): bool
     }
 
     return user_can_record_job_material($user, $job);
+}
+
+function require_material_company_id(array $data): int
+{
+    $companyId = $data['company_id'] ?? null;
+
+    if (!is_int($companyId) || $companyId <= 0) {
+        throw new InvalidArgumentException('A valid active company is required to save a material.');
+    }
+
+    return $companyId;
 }
