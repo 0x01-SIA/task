@@ -146,6 +146,11 @@ function list_material_movements(int $materialId, int $limit, int $offset): arra
     $statement->bindValue(':material_id', $params['material_id'], PDO::PARAM_INT);
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+    if (isset($params['__scoped_company_id'])) {
+        $statement->bindValue(':__scoped_company_id', $params['__scoped_company_id'], PDO::PARAM_INT);
+    }
+
     $statement->execute();
     $movements = $statement->fetchAll();
 
