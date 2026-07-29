@@ -78,7 +78,16 @@ declare(strict_types=1);
                             <tr>
                                 <td class="fw-semibold"><?= h($managedUser['name']) ?></td>
                                 <td><?= h($managedUser['email']) ?></td>
-                                <td><?= h(role_label((string) $managedUser['role'])) ?></td>
+                                <td>
+                                    <?php
+                                    $systemRole = (string) ($managedUser['system_role'] ?? '');
+                                    $companyRole = (string) ($managedUser['company_role'] ?? '');
+                                    $displayRole = $systemRole === 'super_admin'
+                                        ? $systemRole
+                                        : ($companyRole !== '' ? $companyRole : $systemRole);
+                                    ?>
+                                    <?= h(role_label($displayRole)) ?>
+                                </td>
                                 <td>
                                     <span class="badge <?= (int) $managedUser['is_active'] === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
                                         <?= (int) $managedUser['is_active'] === 1 ? 'Active' : 'Inactive' ?>

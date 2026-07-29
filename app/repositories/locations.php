@@ -143,6 +143,12 @@ function find_location_by_id(int $id): ?array
 
 function create_location(array $data): int
 {
+    foreach (['company_id', 'customer_id', 'name', 'address_line', 'is_active'] as $requiredField) {
+        if (!array_key_exists($requiredField, $data)) {
+            throw new InvalidArgumentException(sprintf('Missing required location field: %s', $requiredField));
+        }
+    }
+
     $statement = locations_connection()->prepare(
         'INSERT INTO locations (
             company_id,
@@ -180,6 +186,12 @@ function create_location(array $data): int
 
 function update_location(int $id, array $data): void
 {
+    foreach (['company_id', 'customer_id', 'name', 'address_line', 'is_active'] as $requiredField) {
+        if (!array_key_exists($requiredField, $data)) {
+            throw new InvalidArgumentException(sprintf('Missing required location field: %s', $requiredField));
+        }
+    }
+
     $statement = locations_connection()->prepare(
         'UPDATE locations
          SET customer_id = :customer_id,

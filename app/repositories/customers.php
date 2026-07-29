@@ -60,6 +60,24 @@ function find_customer_by_id(int $id): ?array
     return is_array($customer) ? $customer : null;
 }
 
+function find_customer_by_id_in_company(int $id, int $companyId): ?array
+{
+    $statement = customers_connection()->prepare(
+        'SELECT id, company_id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
+         FROM customers
+         WHERE id = :id
+           AND company_id = :company_id
+         LIMIT 1'
+    );
+    $statement->execute([
+        'id' => $id,
+        'company_id' => $companyId,
+    ]);
+    $customer = $statement->fetch();
+
+    return is_array($customer) ? $customer : null;
+}
+
 function customer_exists(int $id): bool
 {
     $params = ['id' => $id];

@@ -36,13 +36,19 @@ function location_form_values(array $source, ?int $defaultCustomerId = null): ar
     ];
 }
 
-function validate_location_form(array $values): array
+function validate_location_form(array $values, ?int $activeCompanyId): array
 {
     $errors = [];
 
+    if ($activeCompanyId === null) {
+        $errors['form'] = 'Select an active company before creating or updating a location.';
+
+        return $errors;
+    }
+
     if (($values['customer_id'] ?? null) === null) {
         $errors['customer_id'] = 'Select a valid customer.';
-    } elseif (!customer_exists((int) $values['customer_id'])) {
+    } elseif (find_customer_by_id_in_company((int) $values['customer_id'], $activeCompanyId) === null) {
         $errors['customer_id'] = 'The selected customer was not found.';
     }
 
@@ -57,9 +63,10 @@ function validate_location_form(array $values): array
     return $errors;
 }
 
-function save_location_payload(array $values): array
+function save_location_payload(array $values, int $companyId): array
 {
     return [
+        'company_id' => $companyId,
         'customer_id' => (int) $values['customer_id'],
         'name' => $values['name'],
         'address_line' => $values['address'],
@@ -1695,7 +1702,8 @@ try {
             }
 
             $values = location_form_values($_POST);
-            $errors = validate_location_form($values);
+            $activeCompanyId = current_company_id();
+            $errors = validate_location_form($values, $activeCompanyId);
             $customers = all_customers();
 
             if ($errors !== []) {
@@ -1712,7 +1720,7 @@ try {
                 break;
             }
 
-            $locationId = create_location(save_location_payload($values));
+            $locationId = create_location(save_location_payload($values, $activeCompanyId));
             redirect('/locations/' . $locationId);
             break;
 
@@ -1724,11 +1732,16 @@ try {
             }
 
             $preselectedCustomerId = null;
+            $activeCompanyId = current_company_id();
+
+            if ($activeCompanyId === null) {
+                abort(409, 'Active company required', 'Select an active company before creating a location.');
+            }
 
             if (array_key_exists('customer_id', $_GET) && $_GET['customer_id'] !== '') {
                 $preselectedCustomerId = positive_int_or_null($_GET['customer_id']);
 
-                if ($preselectedCustomerId === null || !customer_exists($preselectedCustomerId)) {
+                if ($preselectedCustomerId === null || find_customer_by_id_in_company($preselectedCustomerId, $activeCompanyId) === null) {
                     not_found('Customer');
                 }
             }
@@ -1809,7 +1822,8 @@ try {
             }
 
             $values = location_form_values($_POST);
-            $errors = validate_location_form($values);
+            $activeCompanyId = current_company_id();
+            $errors = validate_location_form($values, $activeCompanyId);
 
             if ($errors !== []) {
                 render('locations/form', [
@@ -1825,7 +1839,7 @@ try {
                 break;
             }
 
-            update_location((int) $location['id'], save_location_payload($values));
+            update_location((int) $location['id'], save_location_payload($values, $activeCompanyId));
             redirect('/locations/' . $location['id']);
             break;
 

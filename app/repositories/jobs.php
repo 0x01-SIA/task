@@ -380,8 +380,7 @@ function reactivate_job(int $id): void
 
 function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
 {
-    $statement = jobs_connection()->prepare(
-        "SELECT
+    $sql = "SELECT
             j.id,
             j.company_id,
             j.job_number,
@@ -411,8 +410,7 @@ function list_worker_jobs_grouped(int $userId, int $completedLimit = 20): array
         INNER JOIN customers c ON c.id = j.customer_id
         LEFT JOIN locations l ON l.id = j.location_id
         LEFT JOIN tasks t ON t.id = j.task_id
-        WHERE j.assigned_user_id = :user_id"
-    );
+        WHERE j.assigned_user_id = :user_id";
     $params = ['user_id' => $userId];
     $sql .= scoped_company_sql('j.company_id', $params, current_user(), false);
     $sql .= "

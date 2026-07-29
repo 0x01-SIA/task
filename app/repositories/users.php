@@ -15,36 +15,98 @@ function users_connection(): PDO
 
 function list_users(array $filters = []): array
 {
+    $viewer = current_user();
+    $isSuperAdmin = is_super_admin($viewer);
+    $params = [];
+    $scopedCompanyId = current_company_id();
+
+    if (!$isSuperAdmin) {
+        if ($scopedCompanyId === null) {
+            return [];
+        }
+    }
+
+    if ($scopedCompanyId !== null) {
+        $params['company_scope_id'] = $scopedCompanyId;
+    }
+
     $sql = "SELECT
                 u.id,
                 u.name,
                 u.email,
-                u.role AS global_role,
+                u.role AS system_role,
                 u.is_active,
                 u.created_at,
                 u.updated_at,
-                GROUP_CONCAT(DISTINCT CONCAT(c.name, ' (', cu.role, ')') ORDER BY c.name ASC SEPARATOR ', ') AS company_memberships,
-                SUM(CASE WHEN j.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) AS active_job_count
+                (
+                    SELECT cu_current.role
+                    FROM company_users cu_current
+                    WHERE cu_current.user_id = u.id";
+
+    if ($scopedCompanyId !== null) {
+        $sql .= '
+                      AND cu_current.company_id = :company_scope_id';
+    }
+
+    $sql .= '
+                    LIMIT 1
+                ) AS company_role,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT CONCAT(c2.name, \' (\', cu2.role, \')\') ORDER BY c2.name ASC SEPARATOR \', \')
+                    FROM company_users cu2
+                    INNER JOIN companies c2 ON c2.id = cu2.company_id
+                    WHERE cu2.user_id = u.id';
+
+    if ($scopedCompanyId !== null) {
+        $sql .= '
+                      AND cu2.company_id = :company_scope_id';
+    }
+
+    $sql .= "
+                ) AS company_memberships,
+                (
+                    SELECT COUNT(*)
+                    FROM jobs j
+                    WHERE j.assigned_user_id = u.id
+                      AND j.status NOT IN ('completed', 'cancelled')";
+
+    if ($scopedCompanyId !== null) {
+        $sql .= '
+                      AND j.company_id = :company_scope_id';
+    }
+
+    $sql .= "
+                ) AS active_job_count
             FROM users u
-            LEFT JOIN company_users cu ON cu.user_id = u.id
-            LEFT JOIN companies c ON c.id = cu.company_id
-            LEFT JOIN jobs j ON j.assigned_user_id = u.id
             WHERE 1 = 1";
-    $params = [];
 
-    if (!is_super_admin()) {
-        $companyId = current_company_id();
-
-        if ($companyId === null) {
-            return [];
-        }
-
-        $sql .= ' AND cu.company_id = :company_id';
-        $params['company_id'] = $companyId;
+    if ($scopedCompanyId !== null) {
+        $sql .= '
+              AND EXISTS (
+                    SELECT 1
+                    FROM company_users scoped_cu
+                    WHERE scoped_cu.user_id = u.id
+                      AND scoped_cu.company_id = :company_scope_id
+                )';
     }
 
     if (($filters['role'] ?? '') !== '') {
-        $sql .= ' AND (u.role = :role OR cu.role = :role)';
+        $sql .= ' AND (
+            u.role = :role
+            OR EXISTS (
+                SELECT 1
+                FROM company_users role_cu
+                WHERE role_cu.user_id = u.id
+                  AND role_cu.role = :role';
+
+        if ($scopedCompanyId !== null) {
+            $sql .= '
+                  AND role_cu.company_id = :company_scope_id';
+        }
+
+        $sql .= '
+            )
+        )';
         $params['role'] = $filters['role'];
     }
 
@@ -61,7 +123,7 @@ function list_users(array $filters = []): array
         $params['search_email'] = '%' . $search . '%';
     }
 
-    $sql .= ' GROUP BY u.id
+    $sql .= '
               ORDER BY u.is_active DESC, u.name ASC, u.id ASC';
 
     $statement = users_connection()->prepare($sql);
