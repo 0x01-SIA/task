@@ -48,13 +48,18 @@ function list_tasks(array $filters = []): array
 
     if ($search !== '') {
         $sql .= ' AND (
-            t.task_number LIKE :search
-            OR t.title LIKE :search
-            OR c.name LIKE :search
-            OR COALESCE(l.name, \'\') LIKE :search
-            OR COALESCE(l.address_line, \'\') LIKE :search
+            t.task_number LIKE :search_task_number
+            OR t.title LIKE :search_title
+            OR c.name LIKE :search_customer
+            OR COALESCE(l.name, \'\') LIKE :search_location_name
+            OR COALESCE(l.address_line, \'\') LIKE :search_address
         )';
-        $params['search'] = '%' . $search . '%';
+        $searchTerm = '%' . $search . '%';
+        $params['search_task_number'] = $searchTerm;
+        $params['search_title'] = $searchTerm;
+        $params['search_customer'] = $searchTerm;
+        $params['search_location_name'] = $searchTerm;
+        $params['search_address'] = $searchTerm;
     }
 
     if (($filters['status'] ?? '') !== '') {

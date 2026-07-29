@@ -58,16 +58,24 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
 
     if ($search !== '') {
         $sql .= ' AND (
-            j.job_number LIKE :search
-            OR j.title LIKE :search
-            OR c.name LIKE :search
-            OR COALESCE(l.name, \'\') LIKE :search
-            OR COALESCE(l.address_line, \'\') LIKE :search
-            OR COALESCE(l.city, \'\') LIKE :search
-            OR COALESCE(l.postal_code, \'\') LIKE :search
-            OR COALESCE(l.country, \'\') LIKE :search
+            j.job_number LIKE :search_job_number
+            OR j.title LIKE :search_title
+            OR c.name LIKE :search_customer
+            OR COALESCE(l.name, \'\') LIKE :search_location_name
+            OR COALESCE(l.address_line, \'\') LIKE :search_address
+            OR COALESCE(l.city, \'\') LIKE :search_city
+            OR COALESCE(l.postal_code, \'\') LIKE :search_postal_code
+            OR COALESCE(l.country, \'\') LIKE :search_country
         )';
-        $params['search'] = '%' . $search . '%';
+        $searchTerm = '%' . $search . '%';
+        $params['search_job_number'] = $searchTerm;
+        $params['search_title'] = $searchTerm;
+        $params['search_customer'] = $searchTerm;
+        $params['search_location_name'] = $searchTerm;
+        $params['search_address'] = $searchTerm;
+        $params['search_city'] = $searchTerm;
+        $params['search_postal_code'] = $searchTerm;
+        $params['search_country'] = $searchTerm;
     }
 
     if (($filters['status'] ?? '') !== '') {

@@ -34,10 +34,11 @@ function list_materials(array $filters = []): array
 
     if ($search !== '') {
         $sql .= ' AND (
-            name LIKE :search
-            OR COALESCE(sku, \'\') LIKE :search
+            name LIKE :search_name
+            OR COALESCE(sku, \'\') LIKE :search_sku
         )';
-        $params['search'] = '%' . $search . '%';
+        $params['search_name'] = '%' . $search . '%';
+        $params['search_sku'] = '%' . $search . '%';
     }
 
     if ($status === 'active') {

@@ -302,6 +302,11 @@ function recent_assigned_jobs_for_user(int $userId, int $limit = 5): array
     $statement = users_connection()->prepare($sql);
     $statement->bindValue(':user_id', $params['user_id'], PDO::PARAM_INT);
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+
+    if (isset($params['__scoped_company_id'])) {
+        $statement->bindValue(':__scoped_company_id', $params['__scoped_company_id'], PDO::PARAM_INT);
+    }
+
     $statement->execute();
     $jobs = $statement->fetchAll();
 
