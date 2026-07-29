@@ -17,6 +17,7 @@ function list_tasks(array $filters = []): array
 {
     $sql = 'SELECT
                 t.id,
+                t.company_id,
                 t.task_number,
                 t.customer_id,
                 t.location_id,
@@ -41,6 +42,7 @@ function list_tasks(array $filters = []): array
             LEFT JOIN jobs j ON j.task_id = t.id
             WHERE 1 = 1';
     $params = [];
+    $sql .= scoped_company_sql('t.company_id', $params);
 
     $search = trim((string) ($filters['search'] ?? ''));
 
@@ -135,9 +137,10 @@ function list_tasks(array $filters = []): array
 
 function find_task_by_id(int $id): ?array
 {
-    $statement = tasks_connection()->prepare(
-        'SELECT
+    $params = ['id' => $id];
+    $sql = 'SELECT
             t.id,
+            t.company_id,
             t.task_number,
             t.customer_id,
             t.location_id,
@@ -163,7 +166,9 @@ function find_task_by_id(int $id): ?array
          LEFT JOIN locations l ON l.id = t.location_id
          LEFT JOIN users u ON u.id = t.created_by_user_id
          LEFT JOIN jobs j ON j.task_id = t.id
-         WHERE t.id = :id
+         WHERE t.id = :id';
+    $sql .= scoped_company_sql('t.company_id', $params);
+    $sql .= '
          GROUP BY
             t.id,
             t.task_number,
@@ -185,9 +190,9 @@ function find_task_by_id(int $id): ?array
             l.postal_code,
             l.country,
             u.name
-         LIMIT 1'
-    );
-    $statement->execute(['id' => $id]);
+         LIMIT 1';
+    $statement = tasks_connection()->prepare($sql);
+    $statement->execute($params);
     $task = $statement->fetch();
 
     return is_array($task) ? $task : null;
@@ -195,13 +200,14 @@ function find_task_by_id(int $id): ?array
 
 function find_task_brief_by_id(int $id): ?array
 {
-    $statement = tasks_connection()->prepare(
-        'SELECT id, task_number, customer_id, location_id, title, status, priority, due_date
-         FROM tasks
-         WHERE id = :id
-         LIMIT 1'
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = 'SELECT id, company_id, task_number, customer_id, location_id, title, status, priority, due_date
+            FROM tasks
+            WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' LIMIT 1';
+    $statement = tasks_connection()->prepare($sql);
+    $statement->execute($params);
     $task = $statement->fetch();
 
     return is_array($task) ? $task : null;
@@ -217,6 +223,7 @@ function create_task(array $data): int
         try {
             $statement = $connection->prepare(
                 'INSERT INTO tasks (
+                    company_id,
                     task_number,
                     customer_id,
                     location_id,
@@ -228,6 +235,7 @@ function create_task(array $data): int
                     due_date,
                     created_by_user_id
                 ) VALUES (
+                    :company_id,
                     :task_number,
                     :customer_id,
                     :location_id,
@@ -241,6 +249,7 @@ function create_task(array $data): int
                 )'
             );
             $statement->execute([
+                'company_id' => $data['company_id'],
                 'task_number' => $taskNumber,
                 'customer_id' => $data['customer_id'],
                 'location_id' => $data['location_id'],
@@ -271,6 +280,7 @@ function update_task(int $id, array $data): void
     $statement = tasks_connection()->prepare(
         'UPDATE tasks
          SET customer_id = :customer_id,
+             company_id = :company_id,
              location_id = :location_id,
              title = :title,
              description = :description,
@@ -282,6 +292,7 @@ function update_task(int $id, array $data): void
     );
     $statement->execute([
         'id' => $id,
+        'company_id' => $data['company_id'],
         'customer_id' => $data['customer_id'],
         'location_id' => $data['location_id'],
         'title' => $data['title'],
@@ -308,7 +319,8 @@ function update_task_status(int $id, string $status): void
 
 function list_jobs_for_task(int $taskId): array
 {
-    $statement = tasks_connection()->prepare(
+    $params = ['task_id' => $taskId];
+    $sql = (
         "SELECT
             j.id,
             j.job_number,
@@ -323,7 +335,11 @@ function list_jobs_for_task(int $taskId): array
             u.name AS assigned_worker_name
          FROM jobs j
          LEFT JOIN users u ON u.id = j.assigned_user_id
-         WHERE j.task_id = :task_id
+         WHERE j.task_id = :task_id"
+    );
+    $sql .= scoped_company_sql('j.company_id', $params);
+    $sql .= (
+        "
          ORDER BY
             CASE
                 WHEN j.status IN ('completed', 'cancelled') THEN 2
@@ -345,7 +361,8 @@ function list_jobs_for_task(int $taskId): array
             j.updated_at DESC,
             j.id DESC"
     );
-    $statement->execute(['task_id' => $taskId]);
+    $statement = tasks_connection()->prepare($sql);
+    $statement->execute($params);
     $jobs = $statement->fetchAll();
 
     return is_array($jobs) ? $jobs : [];

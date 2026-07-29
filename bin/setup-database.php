@@ -71,7 +71,22 @@ function reset_database(PDO $connection): void
     $connection->exec('SET FOREIGN_KEY_CHECKS = 0');
 
     try {
-        $connection->exec('DROP TABLE IF EXISTS job_notes, jobs, tasks, locations, customers, users');
+        $connection->exec(
+            'DROP TABLE IF EXISTS
+                job_materials,
+                materials,
+                job_customer_confirmations,
+                job_photos,
+                job_attachments,
+                job_notes,
+                jobs,
+                tasks,
+                locations,
+                customers,
+                company_users,
+                users,
+                companies'
+        );
     } finally {
         restore_foreign_key_checks($connection);
     }

@@ -1,42 +1,30 @@
+INSERT INTO companies (name, registration_number, email, phone, address, is_active)
+VALUES
+    ('Northwind Services', 'REG-2026-001', 'ops@northwind.example.test', '+371-555-0100', '12 Harbor Street, Riga, Latvia', 1),
+    ('Bluebird Manufacturing', 'REG-2026-002', 'hello@bluebird.example.test', '+371-555-0200', '8 Foundry Road, Jelgava, Latvia', 1),
+    ('Dormant Demo Company', 'REG-2026-003', 'inactive@example.test', '+371-555-0300', '5 Quiet Lane, Liepaja, Latvia', 0);
+
 INSERT INTO users (name, email, password_hash, role, is_active)
 VALUES
-    (
-        'Admin User',
-        'admin@example.test',
-        '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK',
-        'admin',
-        1
-    ),
-    (
-        'Dispatcher User',
-        'dispatcher@example.test',
-        '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK',
-        'dispatcher',
-        1
-    ),
-    (
-        'Worker User',
-        'worker@example.test',
-        '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK',
-        'worker',
-        1
-    ),
-    (
-        'Worker Two',
-        'worker.two@example.test',
-        '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK',
-        'worker',
-        1
-    ),
-    (
-        'Inactive Worker',
-        'worker.inactive@example.test',
-        '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK',
-        'worker',
-        0
-    );
+    ('Super Admin', 'superadmin@example.test', '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK', 'super_admin', 1),
+    ('Northwind Admin', 'admin@example.test', '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK', 'worker', 1),
+    ('Dispatcher User', 'dispatcher@example.test', '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK', 'worker', 1),
+    ('Worker User', 'worker@example.test', '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK', 'worker', 1),
+    ('Cross Company Worker', 'worker.two@example.test', '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK', 'worker', 1),
+    ('Inactive Worker', 'worker.inactive@example.test', '$2y$12$z/YuT0KPVQtVqXu/6DH/Fut8sthjnPZbakLl6VQAwoneW1aLpmojK', 'worker', 0);
+
+INSERT INTO company_users (company_id, user_id, role, is_active)
+VALUES
+    (1, 2, 'admin', 1),
+    (1, 3, 'dispatcher', 1),
+    (1, 4, 'worker', 1),
+    (1, 5, 'worker', 1),
+    (2, 3, 'dispatcher', 1),
+    (2, 5, 'worker', 1),
+    (2, 6, 'worker', 0);
 
 INSERT INTO customers (
+    company_id,
     name,
     registration_number,
     contact_name,
@@ -46,26 +34,11 @@ INSERT INTO customers (
     is_active
 )
 VALUES
-    (
-        'Northwind Facilities',
-        'REG-2026-001',
-        'Nina North',
-        'nina.north@example.test',
-        '+371-555-0101',
-        'Sample customer for local development only.',
-        1
-    ),
-    (
-        'Bluebird Manufacturing',
-        'REG-2026-002',
-        'Ben Bluebird',
-        'ben.bluebird@example.test',
-        '+371-555-0103',
-        'Second sample customer for local development only.',
-        1
-    );
+    (1, 'Northwind Facilities', 'CUST-001', 'Nina North', 'nina.north@example.test', '+371-555-0101', 'Sample customer for Northwind.', 1),
+    (2, 'Bluebird Production', 'CUST-002', 'Ben Bluebird', 'ben.bluebird@example.test', '+371-555-0201', 'Sample customer for Bluebird.', 1);
 
 INSERT INTO locations (
+    company_id,
     customer_id,
     name,
     address_line,
@@ -78,44 +51,12 @@ INSERT INTO locations (
     is_active
 )
 VALUES
-    (
-        1,
-        'Northwind Warehouse',
-        '12 Harbor Street',
-        'Riga',
-        'LV-1010',
-        'Latvia',
-        'Site Supervisor',
-        '+371-555-0102',
-        'Primary sample service location.',
-        1
-    ),
-    (
-        1,
-        'Northwind Office',
-        '45 Central Avenue',
-        'Riga',
-        'LV-1011',
-        'Latvia',
-        'Office Manager',
-        '+371-555-0104',
-        'Secondary Northwind location.',
-        1
-    ),
-    (
-        2,
-        'Bluebird Plant',
-        '8 Foundry Road',
-        'Jelgava',
-        'LV-3001',
-        'Latvia',
-        'Plant Foreman',
-        '+371-555-0105',
-        'Manufacturing plant service location.',
-        1
-    );
+    (1, 1, 'Northwind Warehouse', '12 Harbor Street', 'Riga', 'LV-1010', 'Latvia', 'Site Supervisor', '+371-555-0102', 'Primary demo location.', 1),
+    (1, 1, 'Northwind Office', '45 Central Avenue', 'Riga', 'LV-1011', 'Latvia', 'Office Manager', '+371-555-0104', 'Secondary office.', 1),
+    (2, 2, 'Bluebird Plant', '8 Foundry Road', 'Jelgava', 'LV-3001', 'Latvia', 'Plant Foreman', '+371-555-0202', 'Manufacturing plant.', 1);
 
 INSERT INTO tasks (
+    company_id,
     task_number,
     customer_id,
     location_id,
@@ -128,32 +69,11 @@ INSERT INTO tasks (
     created_by_user_id
 )
 VALUES
-    (
-        'TASK-000001',
-        1,
-        1,
-        'Prepare warehouse loading dock',
-        'Customer requested an inspection and a follow-up service visit for the loading dock.',
-        'planned',
-        'high',
-        '2026-07-20',
-        '2026-07-28',
-        1
-    ),
-    (
-        'TASK-000002',
-        2,
-        3,
-        'Inspect conveyor controls',
-        'Bluebird requested a planned inspection and one deferred repair visit.',
-        'planned',
-        'normal',
-        '2026-07-22',
-        '2026-07-30',
-        2
-    );
+    (1, 'TASK-000001', 1, 1, 'Prepare warehouse loading dock', 'Inspection and service visit for the loading dock.', 'planned', 'high', '2026-07-20', '2026-07-28', 2),
+    (2, 'TASK-000002', 2, 3, 'Inspect conveyor controls', 'Planned inspection and deferred repair visit.', 'planned', 'normal', '2026-07-22', '2026-07-30', 3);
 
 INSERT INTO jobs (
+    company_id,
     job_number,
     task_id,
     customer_id,
@@ -173,172 +93,12 @@ INSERT INTO jobs (
     created_by_user_id
 )
 VALUES
-    (
-        'JOB-000001',
-        1,
-        1,
-        1,
-        'Inspect dock leveler',
-        'Check safety interlocks and general wear before service work.',
-        'inspection',
-        'planned',
-        'high',
-        3,
-        CURRENT_DATE(),
-        '09:00:00',
-        60,
-        NULL,
-        NULL,
-        'Bring inspection checklist.',
-        2
-    ),
-    (
-        'JOB-000002',
-        1,
-        1,
-        2,
-        'Deliver access control parts',
-        'Drop off the replacement access control parts at the office reception desk.',
-        'delivery',
-        'draft',
-        'normal',
-        NULL,
-        DATE_ADD(CURRENT_DATE(), INTERVAL 1 DAY),
-        '13:30:00',
-        120,
-        NULL,
-        NULL,
-        'Leave unassigned until the delivery window is confirmed.',
-        2
-    ),
-    (
-        'JOB-000003',
-        1,
-        1,
-        2,
-        'Replace office keypad',
-        'Install the new keypad and test badge access before leaving site.',
-        'installation',
-        'in_progress',
-        'urgent',
-        3,
-        CURRENT_DATE(),
-        '11:00:00',
-        90,
-        CURRENT_TIMESTAMP(),
-        NULL,
-        'Customer approved same-day replacement.',
-        2
-    ),
-    (
-        'JOB-000004',
-        2,
-        2,
-        3,
-        'Complete conveyor inspection report',
-        'Finish the post-visit report and confirm the repaired conveyor is back online.',
-        'inspection',
-        'completed',
-        'normal',
-        3,
-        CURRENT_DATE(),
-        '10:00:00',
-        45,
-        TIMESTAMP(CURRENT_DATE(), '10:02:00'),
-        TIMESTAMP(CURRENT_DATE(), '10:41:00'),
-        'Upload the signed inspection sheet after the visit.',
-        2
-    ),
-    (
-        'JOB-000005',
-        2,
-        2,
-        3,
-        'Replace worn conveyor sensor',
-        'Repair visit postponed by customer after the initial assessment.',
-        'repair',
-        'cancelled',
-        'urgent',
-        3,
-        DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY),
-        '14:30:00',
-        90,
-        NULL,
-        NULL,
-        'Cancelled after customer requested a reschedule.',
-        2
-    ),
-    (
-        'JOB-000006',
-        2,
-        3,
-        'Inspect loading conveyor motor',
-        'Assigned to another worker and used to verify access restrictions.',
-        'inspection',
-        'planned',
-        'high',
-        4,
-        DATE_ADD(CURRENT_DATE(), INTERVAL 1 DAY),
-        '15:00:00',
-        75,
-        NULL,
-        NULL,
-        'Verify belt tension during the visit.',
-        2
-    ),
-    (
-        'JOB-000007',
-        2,
-        3,
-        'Review emergency stop fault',
-        'This planned job is intentionally overdue so the operations dashboard has an incomplete past-due item.',
-        'repair',
-        'planned',
-        'urgent',
-        NULL,
-        DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),
-        '08:30:00',
-        90,
-        NULL,
-        NULL,
-        'Dispatch to the next available worker after triage.',
-        2
-    );
-
-INSERT INTO job_notes (job_id, user_id, note)
-VALUES
-    (
-        1,
-        3,
-        'Initial note added for the sample inspection job.'
-    ),
-    (
-        3,
-        3,
-        'Worker confirmed the old keypad has been removed and wiring is ready.'
-    ),
-    (
-        4,
-        3,
-        'Completed functional testing and reported the result to dispatch.'
-    ),
-    (
-        5,
-        3,
-        'Customer asked to move the cancelled visit to next week once new parts arrive.'
-    ),
-    (
-        6,
-        4,
-        'Secondary worker assignment used for permission testing.'
-    ),
-    (
-        7,
-        2,
-        'Dispatcher flagged this overdue job for follow-up.'
-    );
+    (1, 'JOB-000001', 1, 1, 1, 'Inspect dock leveler', 'Check safety interlocks and wear.', 'inspection', 'planned', 'high', 4, CURRENT_DATE(), '09:00:00', 60, NULL, NULL, 'Bring inspection checklist.', 3),
+    (1, 'JOB-000002', 1, 1, 2, 'Replace office keypad', 'Install the new keypad and test access.', 'installation', 'in_progress', 'urgent', 4, CURRENT_DATE(), '11:00:00', 90, CURRENT_TIMESTAMP(), NULL, 'Customer approved same-day replacement.', 3),
+    (2, 'JOB-000003', 2, 2, 3, 'Complete conveyor inspection report', 'Finish report and confirm repaired conveyor.', 'inspection', 'completed', 'normal', 5, CURRENT_DATE(), '10:00:00', 45, TIMESTAMP(CURRENT_DATE(), '10:02:00'), TIMESTAMP(CURRENT_DATE(), '10:41:00'), 'Upload signed inspection sheet.', 3);
 
 INSERT INTO materials (
+    company_id,
     name,
     sku,
     unit,
@@ -346,57 +106,23 @@ INSERT INTO materials (
     is_active
 )
 VALUES
-    (
-        'Cable ties',
-        'CAB-TIE-100',
-        'pcs',
-        'General-purpose cable ties for clean cable management.',
-        1
-    ),
-    (
-        'Installation cable',
-        'CAB-001',
-        'm',
-        'Field installation cable supplied by the metre.',
-        1
-    ),
-    (
-        'Mounting bracket',
-        'BRKT-220',
-        'pcs',
-        'Standard mounting bracket for wall and frame installations.',
-        1
-    ),
-    (
-        'Cleaning solvent',
-        'SOLV-010',
-        'l',
-        'Solvent used for degreasing before component replacement.',
-        0
-    );
+    (1, 'Access Control Keypad', 'MAT-001', 'pcs', 'Replacement keypad unit.', 1),
+    (1, 'Mounting Kit', 'MAT-002', 'kit', 'Keypad mounting hardware.', 1),
+    (2, 'Conveyor Sensor', 'MAT-003', 'pcs', 'Replacement sensor for conveyor line.', 1);
 
 INSERT INTO job_materials (
+    company_id,
     job_id,
     material_id,
     quantity,
     recorded_by_user_id
 )
 VALUES
-    (
-        3,
-        1,
-        20.000,
-        3
-    ),
-    (
-        3,
-        2,
-        12.500,
-        3
-    ),
-    (
-        4,
-        4,
-        1.250,
-        2
-    );
+    (1, 2, 1, 1.000, 4),
+    (1, 2, 2, 1.000, 4),
+    (2, 3, 3, 2.000, 5);
+
+INSERT INTO job_notes (job_id, user_id, note)
+VALUES
+    (2, 4, 'Old keypad removed and wiring checked.'),
+    (3, 5, 'Inspection completed and report is ready to send.');

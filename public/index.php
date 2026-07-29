@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/app/helpers.php';
 require base_path('app/database/connection.php');
+require base_path('app/repositories/companies.php');
 require base_path('app/repositories/customers.php');
 require base_path('app/repositories/dashboard.php');
 require base_path('app/repositories/job_assets.php');
@@ -950,6 +951,58 @@ try {
 
             logout_user();
             redirect('/login');
+            break;
+
+        case $path === '/company-context':
+            require_auth();
+
+            if ($method === 'GET') {
+                render('company-context', [
+                    'pageTitle' => 'Select Company',
+                    'options' => company_context_options(),
+                    'selectedValue' => (string) (current_company_context_value() ?? ''),
+                    'errorMessage' => flash('error'),
+                ]);
+                break;
+            }
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $user = current_user();
+            $companyValue = trim((string) ($_POST['company_id'] ?? ''));
+
+            if ($user !== null && is_super_admin($user) && $companyValue === 'all') {
+                set_current_company_context('all');
+                redirect('/dashboard');
+            }
+
+            $companyId = positive_int_or_null($companyValue);
+
+            if ($companyId === null) {
+                flash('error', 'Select a valid company.');
+                redirect('/company-context');
+            }
+
+            $allowedCompanyIds = array_map(
+                static fn (array $company): int => (int) $company['id'],
+                company_context_options($user)
+            );
+
+            if (!in_array($companyId, $allowedCompanyIds, true)) {
+                flash('error', 'You do not have access to that company.');
+                redirect('/company-context');
+            }
+
+            set_current_company_context($companyId);
+            redirect('/dashboard');
             break;
 
         case $path === '/dashboard':

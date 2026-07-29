@@ -15,11 +15,14 @@ function customers_connection(): PDO
 
 function all_customers(): array
 {
-    $statement = customers_connection()->query(
-        'SELECT id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
-         FROM customers
-         ORDER BY name ASC, id ASC'
-    );
+    $params = [];
+    $sql = 'SELECT id, company_id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
+            FROM customers
+            WHERE 1 = 1';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' ORDER BY name ASC, id ASC';
+    $statement = customers_connection()->prepare($sql);
+    $statement->execute($params);
 
     $customers = $statement->fetchAll();
 
@@ -28,12 +31,14 @@ function all_customers(): array
 
 function active_customers(): array
 {
-    $statement = customers_connection()->query(
-        'SELECT id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
-         FROM customers
-         WHERE is_active = 1
-         ORDER BY name ASC, id ASC'
-    );
+    $params = [];
+    $sql = 'SELECT id, company_id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
+            FROM customers
+            WHERE is_active = 1';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' ORDER BY name ASC, id ASC';
+    $statement = customers_connection()->prepare($sql);
+    $statement->execute($params);
 
     $customers = $statement->fetchAll();
 
@@ -42,13 +47,14 @@ function active_customers(): array
 
 function find_customer_by_id(int $id): ?array
 {
-    $statement = customers_connection()->prepare(
-        'SELECT id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
-         FROM customers
-         WHERE id = :id
-         LIMIT 1'
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = 'SELECT id, company_id, name, registration_number, contact_name, contact_email, contact_phone, notes, is_active, created_at, updated_at
+            FROM customers
+            WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' LIMIT 1';
+    $statement = customers_connection()->prepare($sql);
+    $statement->execute($params);
     $customer = $statement->fetch();
 
     return is_array($customer) ? $customer : null;
@@ -56,13 +62,14 @@ function find_customer_by_id(int $id): ?array
 
 function customer_exists(int $id): bool
 {
-    $statement = customers_connection()->prepare(
-        'SELECT 1
-         FROM customers
-         WHERE id = :id
-         LIMIT 1'
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = 'SELECT 1
+            FROM customers
+            WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' LIMIT 1';
+    $statement = customers_connection()->prepare($sql);
+    $statement->execute($params);
 
     return $statement->fetchColumn() !== false;
 }

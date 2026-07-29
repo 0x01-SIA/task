@@ -267,6 +267,53 @@ function current_user_id(): ?int
     return is_int($userId) ? $userId : null;
 }
 
+function current_company_context_value(): int|string|null
+{
+    start_session();
+
+    $value = $_SESSION['active_company_id'] ?? null;
+
+    if ($value === 'all') {
+        return 'all';
+    }
+
+    if (is_int($value) && $value > 0) {
+        return $value;
+    }
+
+    if (is_string($value) && preg_match('/^[1-9][0-9]*$/', $value) === 1) {
+        return (int) $value;
+    }
+
+    return null;
+}
+
+function set_current_company_context(int|string|null $companyId): void
+{
+    start_session();
+
+    if ($companyId === 'all') {
+        $_SESSION['active_company_id'] = 'all';
+
+        return;
+    }
+
+    if (is_int($companyId) && $companyId > 0) {
+        $_SESSION['active_company_id'] = $companyId;
+
+        return;
+    }
+
+    unset($_SESSION['active_company_id']);
+}
+
+function is_super_admin(?array $user = null): bool
+{
+    $user ??= current_user();
+
+    return $user !== null && (string) ($user['global_role'] ?? $user['role'] ?? '') === 'super_admin';
+}
+
 function find_user_by_email(string $email): ?array
 {
     $connection = database_connection();
@@ -311,6 +358,80 @@ function find_user_by_id(int $id): ?array
     return $user;
 }
 
+function normalize_user_company_context(array $user): array
+{
+    $user['global_role'] = (string) ($user['role'] ?? '');
+    $user['is_super_admin'] = $user['global_role'] === 'super_admin';
+    $user['available_companies'] = list_companies_for_user((int) $user['id'], false);
+    $user['active_company'] = null;
+    $user['active_company_id'] = null;
+    $user['active_company_name'] = null;
+    $user['current_membership_role'] = null;
+    $user['can_access_all_companies'] = $user['is_super_admin'];
+
+    $activeCompanies = array_values(array_filter(
+        $user['available_companies'],
+        static fn (array $company): bool => (int) ($company['is_active'] ?? 0) === 1
+            && (int) ($company['membership_is_active'] ?? 0) === 1
+    ));
+    $requestedContext = current_company_context_value();
+
+    if ($user['is_super_admin']) {
+        if ($requestedContext === 'all') {
+            $user['role'] = 'super_admin';
+
+            return $user;
+        }
+
+        if (is_int($requestedContext)) {
+            $selectedCompany = find_company_by_id($requestedContext);
+
+            if ($selectedCompany !== null && (int) ($selectedCompany['is_active'] ?? 0) === 1) {
+                $user['active_company'] = $selectedCompany;
+                $user['active_company_id'] = (int) $selectedCompany['id'];
+                $user['active_company_name'] = (string) $selectedCompany['name'];
+            }
+        }
+
+        if ($user['active_company'] === null) {
+            set_current_company_context('all');
+        }
+
+        $user['role'] = 'super_admin';
+
+        return $user;
+    }
+
+    $selectedCompany = null;
+
+    if (is_int($requestedContext)) {
+        foreach ($activeCompanies as $company) {
+            if ((int) $company['id'] === $requestedContext) {
+                $selectedCompany = $company;
+                break;
+            }
+        }
+    }
+
+    if ($selectedCompany === null && count($activeCompanies) === 1) {
+        $selectedCompany = $activeCompanies[0];
+        set_current_company_context((int) $selectedCompany['id']);
+    }
+
+    if ($selectedCompany !== null) {
+        $user['active_company'] = $selectedCompany;
+        $user['active_company_id'] = (int) $selectedCompany['id'];
+        $user['active_company_name'] = (string) $selectedCompany['name'];
+        $user['current_membership_role'] = (string) $selectedCompany['membership_role'];
+        $user['role'] = (string) $selectedCompany['membership_role'];
+    } else {
+        $user['role'] = '';
+        set_current_company_context(null);
+    }
+
+    return $user;
+}
+
 function current_user(): ?array
 {
     static $resolved = false;
@@ -327,11 +448,15 @@ function current_user(): ?array
         return null;
     }
 
-    $user = find_user_by_id($userId);
+    $resolvedUser = find_user_by_id($userId);
 
-    if ($user === null) {
+    if ($resolvedUser === null) {
         logout_user();
+
+        return null;
     }
+
+    $user = normalize_user_company_context($resolvedUser);
 
     return $user;
 }
@@ -346,6 +471,27 @@ function login_user(int $userId): void
     start_session();
     session_regenerate_id(true);
     $_SESSION['user_id'] = $userId;
+    $user = find_user_by_id($userId);
+
+    if ($user === null) {
+        return;
+    }
+
+    if ((string) ($user['role'] ?? '') === 'super_admin') {
+        set_current_company_context('all');
+
+        return;
+    }
+
+    $companies = list_companies_for_user($userId, false);
+
+    if (count($companies) === 1) {
+        set_current_company_context((int) $companies[0]['id']);
+
+        return;
+    }
+
+    set_current_company_context(null);
 }
 
 function logout_user(): void
@@ -389,7 +535,15 @@ function require_role(array $allowedRoles): void
         redirect('/login');
     }
 
-    if (!in_array($user['role'], $allowedRoles, true)) {
+    if (!is_super_admin($user) && (string) ($user['role'] ?? '') === '') {
+        redirect('/company-context');
+    }
+
+    if (is_super_admin($user)) {
+        return;
+    }
+
+    if (!in_array((string) $user['role'], $allowedRoles, true)) {
         render('errors/403', [
             'pageTitle' => 'Access denied',
             'allowedRoles' => $allowedRoles,
@@ -425,8 +579,12 @@ function auth_navigation_items(?array $user = null): array
         ['label' => 'Calendar', 'path' => '/jobs/calendar'],
     ];
 
-    if ($role === 'admin') {
+    if ($role === 'admin' || is_super_admin($user)) {
         $items[] = ['label' => 'Users', 'path' => '/users'];
+    }
+
+    if (is_super_admin($user)) {
+        $items[] = ['label' => 'Companies', 'path' => '/companies'];
     }
 
     return $items;
@@ -435,9 +593,11 @@ function auth_navigation_items(?array $user = null): array
 function role_label(string $role): string
 {
     return match ($role) {
+        'super_admin' => 'Super Admin',
         'admin' => 'Administrator',
         'dispatcher' => 'Dispatcher',
         'worker' => 'Field Worker',
+        '' => 'No company selected',
         default => ucfirst($role),
     };
 }
@@ -449,6 +609,111 @@ function user_role_options(): array
         'dispatcher' => 'Dispatcher',
         'worker' => 'Field Worker',
     ];
+}
+
+function current_company_id(): ?int
+{
+    $user = current_user();
+
+    return $user !== null && is_int($user['active_company_id'] ?? null)
+        ? (int) $user['active_company_id']
+        : null;
+}
+
+function has_active_company_context(?array $user = null, bool $allowAll = false): bool
+{
+    $user ??= current_user();
+
+    if ($user === null) {
+        return false;
+    }
+
+    if (is_super_admin($user) && $allowAll && current_company_context_value() === 'all') {
+        return true;
+    }
+
+    return is_int($user['active_company_id'] ?? null);
+}
+
+function require_active_company_context(bool $allowAll = false): void
+{
+    if (!has_active_company_context(current_user(), $allowAll)) {
+        redirect('/company-context');
+    }
+}
+
+function company_context_options(?array $user = null): array
+{
+    $user ??= current_user();
+
+    if ($user === null) {
+        return [];
+    }
+
+    $options = [];
+
+    if (is_super_admin($user)) {
+        $options[] = [
+            'id' => 'all',
+            'name' => 'All companies',
+        ];
+
+        foreach (list_companies(false) as $company) {
+            $options[] = [
+                'id' => (int) $company['id'],
+                'name' => (string) $company['name'],
+            ];
+        }
+
+        return $options;
+    }
+
+    foreach ($user['available_companies'] as $company) {
+        $options[] = [
+            'id' => (int) $company['id'],
+            'name' => (string) $company['name'],
+        ];
+    }
+
+    return $options;
+}
+
+function current_company_context_label(?array $user = null): string
+{
+    $user ??= current_user();
+
+    if ($user === null) {
+        return '';
+    }
+
+    if (is_super_admin($user) && current_company_context_value() === 'all') {
+        return 'All companies';
+    }
+
+    return (string) ($user['active_company_name'] ?? 'Select company');
+}
+
+function scoped_company_sql(string $column, array &$params, ?array $user = null, bool $allowAll = true): string
+{
+    $user ??= current_user();
+
+    if ($user === null) {
+        return ' AND 1 = 0';
+    }
+
+    if (is_super_admin($user) && $allowAll && current_company_context_value() === 'all') {
+        return '';
+    }
+
+    $companyId = $user['active_company_id'] ?? null;
+
+    if (!is_int($companyId)) {
+        return ' AND 1 = 0';
+    }
+
+    $params['__scoped_company_id'] = $companyId;
+
+    return sprintf(' AND %s = :__scoped_company_id', $column);
 }
 
 function password_min_length(): int

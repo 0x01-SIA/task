@@ -43,9 +43,30 @@ $navigationItems = auth_navigation_items($user);
 
                 <?php if ($user !== null): ?>
                     <div class="app-account-controls">
+                        <?php $companyOptions = company_context_options($user); ?>
+                        <?php if ($companyOptions !== []): ?>
+                            <form method="post" action="<?= h(app_url('/company-context')) ?>" class="d-flex align-items-center gap-2">
+                                <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                <label class="small text-secondary" for="header-company-context">Company</label>
+                                <select class="form-select form-select-sm" id="header-company-context" name="company_id" onchange="this.form.submit()">
+                                    <?php foreach ($companyOptions as $option): ?>
+                                        <?php
+                                        $selected = ($option['id'] === 'all' && current_company_context_value() === 'all')
+                                            || ((int) $option['id'] > 0 && (int) $option['id'] === (int) ($user['active_company_id'] ?? 0));
+                                        ?>
+                                        <option value="<?= h((string) $option['id']) ?>" <?= $selected ? 'selected' : '' ?>><?= h($option['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </form>
+                        <?php endif; ?>
                         <div class="app-account-meta">
                             <div class="fw-semibold"><?= htmlspecialchars((string) $user['name'], ENT_QUOTES, 'UTF-8') ?></div>
-                            <div class="small text-secondary"><?= htmlspecialchars(role_label((string) $user['role']), ENT_QUOTES, 'UTF-8') ?></div>
+                            <div class="small text-secondary">
+                                <?= htmlspecialchars(role_label((string) $user['role']), ENT_QUOTES, 'UTF-8') ?>
+                                <?php if (current_company_context_label($user) !== ''): ?>
+                                    · <?= h(current_company_context_label($user)) ?>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <form method="post" action="<?= htmlspecialchars(app_url('/logout'), ENT_QUOTES, 'UTF-8') ?>">
                             <input type="hidden" name="_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">

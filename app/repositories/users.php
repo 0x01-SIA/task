@@ -19,18 +19,32 @@ function list_users(array $filters = []): array
                 u.id,
                 u.name,
                 u.email,
-                u.role,
+                u.role AS global_role,
                 u.is_active,
                 u.created_at,
                 u.updated_at,
+                GROUP_CONCAT(DISTINCT CONCAT(c.name, ' (', cu.role, ')') ORDER BY c.name ASC SEPARATOR ', ') AS company_memberships,
                 SUM(CASE WHEN j.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) AS active_job_count
             FROM users u
+            LEFT JOIN company_users cu ON cu.user_id = u.id
+            LEFT JOIN companies c ON c.id = cu.company_id
             LEFT JOIN jobs j ON j.assigned_user_id = u.id
             WHERE 1 = 1";
     $params = [];
 
+    if (!is_super_admin()) {
+        $companyId = current_company_id();
+
+        if ($companyId === null) {
+            return [];
+        }
+
+        $sql .= ' AND cu.company_id = :company_id';
+        $params['company_id'] = $companyId;
+    }
+
     if (($filters['role'] ?? '') !== '') {
-        $sql .= ' AND u.role = :role';
+        $sql .= ' AND (u.role = :role OR cu.role = :role)';
         $params['role'] = $filters['role'];
     }
 
@@ -59,12 +73,13 @@ function list_users(array $filters = []): array
 
 function find_managed_user_by_id(int $id): ?array
 {
-    $statement = users_connection()->prepare(
+    $params = ['id' => $id];
+    $sql = (
         "SELECT
             u.id,
             u.name,
             u.email,
-            u.role,
+            u.role AS global_role,
             u.is_active,
             u.created_at,
             u.updated_at,
@@ -73,11 +88,30 @@ function find_managed_user_by_id(int $id): ?array
             SUM(CASE WHEN j.status = 'completed' THEN 1 ELSE 0 END) AS completed_job_count
          FROM users u
          LEFT JOIN jobs j ON j.assigned_user_id = u.id
-         WHERE u.id = :id
-         GROUP BY u.id
-         LIMIT 1"
+         WHERE u.id = :id"
     );
-    $statement->execute(['id' => $id]);
+
+    if (!is_super_admin()) {
+        $companyId = current_company_id();
+
+        if ($companyId === null) {
+            return null;
+        }
+
+        $sql .= ' AND EXISTS (
+            SELECT 1
+            FROM company_users scoped_cu
+            WHERE scoped_cu.user_id = u.id
+              AND scoped_cu.company_id = :company_id
+        )';
+        $params['company_id'] = $companyId;
+    }
+
+    $sql .= '
+         GROUP BY u.id
+         LIMIT 1';
+    $statement = users_connection()->prepare($sql);
+    $statement->execute($params);
     $user = $statement->fetch();
 
     return is_array($user) ? $user : null;
@@ -156,7 +190,7 @@ function count_active_admin_users(): int
     $statement = users_connection()->query(
         "SELECT COUNT(*)
          FROM users
-         WHERE role = 'admin'
+         WHERE role = 'super_admin'
            AND is_active = 1"
     );
 
@@ -212,12 +246,18 @@ function recent_assigned_jobs_for_user(int $userId, int $limit = 5): array
 
 function list_active_workers(): array
 {
-    $statement = users_connection()->query(
-        "SELECT id, name, email, role
-         FROM users
-         WHERE role = 'worker' AND is_active = 1
-         ORDER BY name ASC, id ASC"
-    );
+    $params = [];
+    $sql = "SELECT DISTINCT u.id, u.name, u.email, cu.role
+            FROM users u
+            INNER JOIN company_users cu
+                ON cu.user_id = u.id
+               AND cu.role = 'worker'
+               AND cu.is_active = 1
+            WHERE u.is_active = 1";
+    $sql .= scoped_company_sql('cu.company_id', $params, current_user(), false);
+    $sql .= ' ORDER BY u.name ASC, u.id ASC';
+    $statement = users_connection()->prepare($sql);
+    $statement->execute($params);
     $workers = $statement->fetchAll();
 
     return is_array($workers) ? $workers : [];
@@ -225,15 +265,41 @@ function list_active_workers(): array
 
 function active_worker_exists(int $id): bool
 {
-    $statement = users_connection()->prepare(
-        "SELECT 1
-         FROM users
-         WHERE id = :id
-           AND role = 'worker'
-           AND is_active = 1
-         LIMIT 1"
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = "SELECT 1
+            FROM users u
+            INNER JOIN company_users cu
+                ON cu.user_id = u.id
+               AND cu.role = 'worker'
+               AND cu.is_active = 1
+            WHERE u.id = :id
+              AND u.is_active = 1";
+    $sql .= scoped_company_sql('cu.company_id', $params, current_user(), false);
+    $sql .= ' LIMIT 1';
+    $statement = users_connection()->prepare($sql);
+    $statement->execute($params);
 
     return $statement->fetchColumn() !== false;
+}
+
+function list_user_memberships(int $userId): array
+{
+    $statement = users_connection()->prepare(
+        "SELECT
+            cu.company_id,
+            c.name AS company_name,
+            c.is_active AS company_is_active,
+            cu.role,
+            cu.is_active,
+            cu.created_at,
+            cu.updated_at
+         FROM company_users cu
+         INNER JOIN companies c ON c.id = cu.company_id
+         WHERE cu.user_id = :user_id
+         ORDER BY c.name ASC"
+    );
+    $statement->execute(['user_id' => $userId]);
+    $memberships = $statement->fetchAll();
+
+    return is_array($memberships) ? $memberships : [];
 }

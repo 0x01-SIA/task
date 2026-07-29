@@ -17,6 +17,7 @@ function list_locations(?int $customerId = null): array
 {
     $sql = 'SELECT
                 l.id,
+                l.company_id,
                 l.customer_id,
                 l.name,
                 l.address_line,
@@ -31,11 +32,14 @@ function list_locations(?int $customerId = null): array
                 l.updated_at,
                 c.name AS customer_name
             FROM locations l
-            INNER JOIN customers c ON c.id = l.customer_id';
+            INNER JOIN customers c ON c.id = l.customer_id
+            WHERE 1 = 1';
     $params = [];
 
+    $sql .= scoped_company_sql('l.company_id', $params);
+
     if ($customerId !== null) {
-        $sql .= ' WHERE l.customer_id = :customer_id';
+        $sql .= ' AND l.customer_id = :customer_id';
         $params['customer_id'] = $customerId;
     }
 
@@ -50,26 +54,28 @@ function list_locations(?int $customerId = null): array
 
 function list_locations_for_customer(int $customerId): array
 {
-    $statement = locations_connection()->prepare(
-        'SELECT
-            id,
-            customer_id,
-            name,
-            address_line,
-            city,
-            postal_code,
-            country,
-            contact_name,
-            contact_phone,
-            notes,
-            is_active,
-            created_at,
-            updated_at
-         FROM locations
-         WHERE customer_id = :customer_id
-         ORDER BY name ASC, id ASC'
-    );
-    $statement->execute(['customer_id' => $customerId]);
+    $params = ['customer_id' => $customerId];
+    $sql = 'SELECT
+                id,
+                company_id,
+                customer_id,
+                name,
+                address_line,
+                city,
+                postal_code,
+                country,
+                contact_name,
+                contact_phone,
+                notes,
+                is_active,
+                created_at,
+                updated_at
+            FROM locations
+            WHERE customer_id = :customer_id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' ORDER BY name ASC, id ASC';
+    $statement = locations_connection()->prepare($sql);
+    $statement->execute($params);
     $locations = $statement->fetchAll();
 
     return is_array($locations) ? $locations : [];
@@ -77,25 +83,28 @@ function list_locations_for_customer(int $customerId): array
 
 function list_active_locations(): array
 {
-    $statement = locations_connection()->query(
-        'SELECT
-            id,
-            customer_id,
-            name,
-            address_line,
-            city,
-            postal_code,
-            country,
-            contact_name,
-            contact_phone,
-            notes,
-            is_active,
-            created_at,
-            updated_at
-         FROM locations
-         WHERE is_active = 1
-         ORDER BY name ASC, id ASC'
-    );
+    $params = [];
+    $sql = 'SELECT
+                id,
+                company_id,
+                customer_id,
+                name,
+                address_line,
+                city,
+                postal_code,
+                country,
+                contact_name,
+                contact_phone,
+                notes,
+                is_active,
+                created_at,
+                updated_at
+            FROM locations
+            WHERE is_active = 1';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' ORDER BY name ASC, id ASC';
+    $statement = locations_connection()->prepare($sql);
+    $statement->execute($params);
     $locations = $statement->fetchAll();
 
     return is_array($locations) ? $locations : [];
@@ -103,28 +112,30 @@ function list_active_locations(): array
 
 function find_location_by_id(int $id): ?array
 {
-    $statement = locations_connection()->prepare(
-        'SELECT
-            l.id,
-            l.customer_id,
-            l.name,
-            l.address_line,
-            l.city,
-            l.postal_code,
-            l.country,
-            l.contact_name,
-            l.contact_phone,
-            l.notes,
-            l.is_active,
-            l.created_at,
-            l.updated_at,
-            c.name AS customer_name
-         FROM locations l
-         INNER JOIN customers c ON c.id = l.customer_id
-         WHERE l.id = :id
-         LIMIT 1'
-    );
-    $statement->execute(['id' => $id]);
+    $params = ['id' => $id];
+    $sql = 'SELECT
+                l.id,
+                l.company_id,
+                l.customer_id,
+                l.name,
+                l.address_line,
+                l.city,
+                l.postal_code,
+                l.country,
+                l.contact_name,
+                l.contact_phone,
+                l.notes,
+                l.is_active,
+                l.created_at,
+                l.updated_at,
+                c.name AS customer_name
+            FROM locations l
+            INNER JOIN customers c ON c.id = l.customer_id
+            WHERE l.id = :id';
+    $sql .= scoped_company_sql('l.company_id', $params);
+    $sql .= ' LIMIT 1';
+    $statement = locations_connection()->prepare($sql);
+    $statement->execute($params);
     $location = $statement->fetch();
 
     return is_array($location) ? $location : null;
@@ -134,6 +145,7 @@ function create_location(array $data): int
 {
     $statement = locations_connection()->prepare(
         'INSERT INTO locations (
+            company_id,
             customer_id,
             name,
             address_line,
@@ -142,6 +154,7 @@ function create_location(array $data): int
             notes,
             is_active
         ) VALUES (
+            :company_id,
             :customer_id,
             :name,
             :address_line,
@@ -152,6 +165,7 @@ function create_location(array $data): int
         )'
     );
     $statement->execute([
+        'company_id' => $data['company_id'],
         'customer_id' => $data['customer_id'],
         'name' => $data['name'],
         'address_line' => $data['address_line'],
@@ -169,6 +183,7 @@ function update_location(int $id, array $data): void
     $statement = locations_connection()->prepare(
         'UPDATE locations
          SET customer_id = :customer_id,
+             company_id = :company_id,
              name = :name,
              address_line = :address_line,
              contact_name = :contact_name,
@@ -179,6 +194,7 @@ function update_location(int $id, array $data): void
     );
     $statement->execute([
         'id' => $id,
+        'company_id' => $data['company_id'],
         'customer_id' => $data['customer_id'],
         'name' => $data['name'],
         'address_line' => $data['address_line'],
