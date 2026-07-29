@@ -48,7 +48,158 @@ body.app-shell {
 }
 
 .app-account-meta {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
     line-height: 1.2;
+}
+
+.app-account-name {
+    min-width: 0;
+    max-width: 15rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.app-account-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.account-company-link,
+.account-company-trigger {
+    color: #475569;
+    text-decoration: none;
+}
+
+.account-company-link {
+    min-width: 0;
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-company-link:hover,
+.account-company-link:focus {
+    color: #0f172a;
+    text-decoration: underline;
+}
+
+.account-company-switcher {
+    position: relative;
+}
+
+.account-company-switcher[open] {
+    z-index: 20;
+}
+
+.account-company-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    list-style: none;
+    min-width: 0;
+}
+
+.account-company-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.account-company-trigger__label {
+    min-width: 0;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-company-trigger__chevron {
+    font-size: 0.75rem;
+    transition: transform 0.16s ease;
+}
+
+.account-company-switcher[open] .account-company-trigger__chevron {
+    transform: rotate(180deg);
+}
+
+.account-company-trigger:hover,
+.account-company-trigger:focus,
+.account-company-trigger:focus-visible {
+    color: #0f172a;
+    text-decoration: underline;
+    outline: none;
+}
+
+.account-company-menu {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    min-width: 14rem;
+    max-width: min(20rem, calc(100vw - 2rem));
+    padding: 0.4rem;
+    border: 1px solid #dbe4ee;
+    border-radius: 0.8rem;
+    background: #ffffff;
+    box-shadow: 0 0.7rem 2rem rgba(15, 23, 42, 0.12);
+}
+
+.account-company-menu__form + .account-company-menu__form {
+    margin-top: 0.2rem;
+}
+
+.account-company-menu__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border: 0;
+    border-radius: 0.6rem;
+    background: transparent;
+    color: #334155;
+    text-align: left;
+}
+
+.account-company-menu__item:hover,
+.account-company-menu__item:focus,
+.account-company-menu__item:focus-visible {
+    background: #eef2f7;
+    color: #0f172a;
+    outline: none;
+}
+
+.account-company-menu__item.is-active {
+    background: #e2e8f0;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.account-company-menu__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-company-menu__status {
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .auth-nav-link:hover,
@@ -1137,6 +1288,17 @@ body.app-shell {
         width: 100%;
         justify-content: space-between;
         text-align: left;
+    }
+
+    .app-account-secondary,
+    .account-company-trigger {
+        justify-content: flex-start;
+    }
+
+    .account-company-menu {
+        right: auto;
+        left: 0;
+        min-width: min(18rem, calc(100vw - 2rem));
     }
 
     .worker-job-card__top,

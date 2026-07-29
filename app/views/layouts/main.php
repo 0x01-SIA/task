@@ -42,29 +42,59 @@ $navigationItems = auth_navigation_items($user);
                 <?php endif; ?>
 
                 <?php if ($user !== null): ?>
+                    <?php
+                    $companyLabel = current_company_context_label($user);
+                    $companyOptions = company_context_options($user);
+                    $showSuperAdminSwitcher = is_super_admin($user) && $companyOptions !== [];
+                    $showAdminCompanyLink = !$showSuperAdminSwitcher
+                        && (string) ($user['role'] ?? '') === 'admin'
+                        && $companyLabel !== '';
+                    $companyDetailHref = user_can_view_current_company_page($user) && is_int($user['active_company_id'] ?? null)
+                        ? app_url('/companies/' . $user['active_company_id'])
+                        : null;
+                    ?>
                     <div class="app-account-controls">
-                        <?php $companyOptions = company_context_options($user); ?>
-                        <?php if ($companyOptions !== []): ?>
-                            <form method="post" action="<?= h(app_url('/company-context')) ?>" class="d-flex align-items-center gap-2">
-                                <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                                <label class="small text-secondary" for="header-company-context">Company</label>
-                                <select class="form-select form-select-sm" id="header-company-context" name="company_id" onchange="this.form.submit()">
-                                    <?php foreach ($companyOptions as $option): ?>
-                                        <?php
-                                        $selected = ($option['id'] === 'all' && current_company_context_value() === 'all')
-                                            || ((int) $option['id'] > 0 && (int) $option['id'] === (int) ($user['active_company_id'] ?? 0));
-                                        ?>
-                                        <option value="<?= h((string) $option['id']) ?>" <?= $selected ? 'selected' : '' ?>><?= h($option['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </form>
-                        <?php endif; ?>
                         <div class="app-account-meta">
-                            <div class="fw-semibold"><?= htmlspecialchars((string) $user['name'], ENT_QUOTES, 'UTF-8') ?></div>
-                            <div class="small text-secondary">
-                                <?= htmlspecialchars(role_label((string) $user['role']), ENT_QUOTES, 'UTF-8') ?>
-                                <?php if (current_company_context_label($user) !== ''): ?>
-                                    · <?= h(current_company_context_label($user)) ?>
+                            <div class="app-account-name" title="<?= h((string) $user['name']) ?>"><?= htmlspecialchars((string) $user['name'], ENT_QUOTES, 'UTF-8') ?></div>
+                            <div class="app-account-secondary small text-secondary">
+                                <?php if ($showSuperAdminSwitcher): ?>
+                                    <details class="account-company-switcher">
+                                        <summary class="account-company-trigger" aria-label="Switch active company">
+                                            <span><?= h(role_label((string) $user['role'])) ?></span>
+                                            <span aria-hidden="true">·</span>
+                                            <span class="account-company-trigger__label" title="<?= h($companyLabel) ?>"><?= h($companyLabel) ?></span>
+                                            <span class="account-company-trigger__chevron" aria-hidden="true">▾</span>
+                                        </summary>
+                                        <div class="account-company-menu" role="menu" aria-label="Active company options">
+                                            <?php foreach ($companyOptions as $option): ?>
+                                                <?php
+                                                $selected = ($option['id'] === 'all' && current_company_context_value() === 'all')
+                                                    || ((int) $option['id'] > 0 && (int) $option['id'] === (int) ($user['active_company_id'] ?? 0));
+                                                ?>
+                                                <form method="post" action="<?= h(app_url('/company-context')) ?>" class="account-company-menu__form">
+                                                    <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                                    <input type="hidden" name="company_id" value="<?= h((string) $option['id']) ?>">
+                                                    <button class="account-company-menu__item<?= $selected ? ' is-active' : '' ?>" type="submit" role="menuitem">
+                                                        <span class="account-company-menu__name" title="<?= h($option['name']) ?>"><?= h($option['name']) ?></span>
+                                                        <?php if ($selected): ?>
+                                                            <span class="account-company-menu__status" aria-hidden="true">Current</span>
+                                                        <?php endif; ?>
+                                                    </button>
+                                                </form>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </details>
+                                <?php elseif ($showAdminCompanyLink): ?>
+                                    <span><?= h(role_label((string) $user['role'])) ?></span>
+                                    <?php if ($companyDetailHref !== null): ?>
+                                        <span aria-hidden="true">·</span>
+                                        <a class="account-company-link" href="<?= h($companyDetailHref) ?>" title="<?= h($companyLabel) ?>"><?= h($companyLabel) ?></a>
+                                    <?php elseif ($companyLabel !== ''): ?>
+                                        <span aria-hidden="true">·</span>
+                                        <span title="<?= h($companyLabel) ?>"><?= h($companyLabel) ?></span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <?= htmlspecialchars(role_label((string) $user['role']), ENT_QUOTES, 'UTF-8') ?>
                                 <?php endif; ?>
                             </div>
                         </div>

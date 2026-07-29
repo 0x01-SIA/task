@@ -1167,10 +1167,16 @@ try {
         case preg_match('#^/companies/([1-9][0-9]*)$#', $path, $matches) === 1:
             require_auth();
 
-            if (!is_super_admin()) {
+            $viewer = current_user();
+            $companyId = (int) $matches[1];
+            $isCurrentCompanyAdmin = $viewer !== null
+                && (string) ($viewer['role'] ?? '') === 'admin'
+                && (int) ($viewer['active_company_id'] ?? 0) === $companyId;
+
+            if (!is_super_admin() && !$isCurrentCompanyAdmin) {
                 render('errors/403', [
                     'pageTitle' => 'Access denied',
-                    'allowedRoles' => ['super_admin'],
+                    'allowedRoles' => ['super_admin', 'admin'],
                 ], 403);
                 break;
             }
@@ -1179,7 +1185,7 @@ try {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
 
-            $company = find_company_by_id((int) $matches[1]);
+            $company = find_company_by_id($companyId);
 
             if ($company === null) {
                 not_found('Company');
@@ -1189,7 +1195,8 @@ try {
                 'pageTitle' => $company['name'],
                 'company' => $company,
                 'memberships' => list_company_memberships((int) $company['id']),
-                'assignableUsers' => list_all_users_basic(),
+                'assignableUsers' => is_super_admin($viewer) ? list_all_users_basic() : [],
+                'canManageMemberships' => is_super_admin($viewer),
                 'successMessage' => flash('success'),
                 'errorMessage' => flash('error'),
             ]);

@@ -68,7 +68,11 @@ declare(strict_types=1);
                 <div>
                     <p class="text-uppercase text-secondary small fw-semibold mb-2">Members</p>
                     <h2 class="h5 mb-1">Company Memberships</h2>
-                    <p class="text-secondary mb-0">Current memberships are shown here for quick verification while the wider membership UI is being completed.</p>
+                    <p class="text-secondary mb-0">
+                        <?= ($canManageMemberships ?? false)
+                            ? 'Manage the people assigned to this company.'
+                            : 'Review the people currently assigned to this company.' ?>
+                    </p>
                 </div>
             </div>
 
@@ -84,7 +88,9 @@ declare(strict_types=1);
                             <th scope="col">Company Role</th>
                             <th scope="col">Global Status</th>
                             <th scope="col">Membership Status</th>
-                            <th scope="col" class="text-end">Actions</th>
+                            <?php if (($canManageMemberships ?? false)): ?>
+                                <th scope="col" class="text-end">Actions</th>
+                            <?php endif; ?>
                         </tr>
                         </thead>
                         <tbody>
@@ -103,26 +109,28 @@ declare(strict_types=1);
                                         <?= (int) $membership['membership_is_active'] === 1 ? 'Active membership' : 'Inactive membership' ?>
                                     </span>
                                 </td>
-                                <td class="text-end">
-                                    <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships')) ?>" class="d-inline-flex flex-wrap gap-2 justify-content-end">
-                                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                                        <input type="hidden" name="user_id" value="<?= h((string) $membership['id']) ?>">
-                                        <select class="form-select form-select-sm" name="role">
-                                            <?php foreach (user_role_options() as $value => $label): ?>
-                                                <option value="<?= h($value) ?>" <?= (string) $membership['membership_role'] === $value ? 'selected' : '' ?>><?= h($label) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <select class="form-select form-select-sm" name="is_active">
-                                            <option value="1" <?= (int) $membership['membership_is_active'] === 1 ? 'selected' : '' ?>>Active</option>
-                                            <option value="0" <?= (int) $membership['membership_is_active'] === 1 ? '' : 'selected' ?>>Inactive</option>
-                                        </select>
-                                        <button class="btn btn-outline-primary btn-sm" type="submit">Save</button>
-                                    </form>
-                                    <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships/' . $membership['id'] . '/delete')) ?>" class="d-inline-flex ms-2">
-                                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                                        <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
-                                    </form>
-                                </td>
+                                <?php if (($canManageMemberships ?? false)): ?>
+                                    <td class="text-end">
+                                        <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships')) ?>" class="d-inline-flex flex-wrap gap-2 justify-content-end">
+                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                            <input type="hidden" name="user_id" value="<?= h((string) $membership['id']) ?>">
+                                            <select class="form-select form-select-sm" name="role">
+                                                <?php foreach (user_role_options() as $value => $label): ?>
+                                                    <option value="<?= h($value) ?>" <?= (string) $membership['membership_role'] === $value ? 'selected' : '' ?>><?= h($label) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <select class="form-select form-select-sm" name="is_active">
+                                                <option value="1" <?= (int) $membership['membership_is_active'] === 1 ? 'selected' : '' ?>>Active</option>
+                                                <option value="0" <?= (int) $membership['membership_is_active'] === 1 ? '' : 'selected' ?>>Inactive</option>
+                                            </select>
+                                            <button class="btn btn-outline-primary btn-sm" type="submit">Save</button>
+                                        </form>
+                                        <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships/' . $membership['id'] . '/delete')) ?>" class="d-inline-flex ms-2">
+                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                            <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
+                                        </form>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -132,54 +140,56 @@ declare(strict_types=1);
         </div>
     </section>
 
-    <section class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
-                <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Memberships</p>
-                    <h2 class="h5 mb-1">Add or Reassign User</h2>
-                    <p class="text-secondary mb-0">Assign an existing account to this company or update an inactive membership.</p>
+    <?php if (($canManageMemberships ?? false)): ?>
+        <section class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <p class="text-uppercase text-secondary small fw-semibold mb-2">Memberships</p>
+                        <h2 class="h5 mb-1">Add or Reassign User</h2>
+                        <p class="text-secondary mb-0">Assign an existing account to this company or update an inactive membership.</p>
+                    </div>
                 </div>
+
+                <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships')) ?>" class="row g-3 align-items-end">
+                    <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+
+                    <div class="col-md-5">
+                        <label class="form-label" for="user_id">User</label>
+                        <select class="form-select" id="user_id" name="user_id" required>
+                            <option value="">Select user</option>
+                            <?php foreach ($assignableUsers as $user): ?>
+                                <option value="<?= h((string) $user['id']) ?>">
+                                    <?= h($user['name']) ?> · <?= h($user['email']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label" for="role">Role</label>
+                        <select class="form-select" id="role" name="role" required>
+                            <?php foreach (user_role_options() as $value => $label): ?>
+                                <option value="<?= h($value) ?>"><?= h($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label" for="membership_status">Status</label>
+                        <select class="form-select" id="membership_status" name="is_active">
+                            <option value="1">Active</option>
+                            <option value="0">Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100" type="submit">Save Membership</button>
+                    </div>
+                </form>
             </div>
-
-            <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships')) ?>" class="row g-3 align-items-end">
-                <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-
-                <div class="col-md-5">
-                    <label class="form-label" for="user_id">User</label>
-                    <select class="form-select" id="user_id" name="user_id" required>
-                        <option value="">Select user</option>
-                        <?php foreach ($assignableUsers as $user): ?>
-                            <option value="<?= h((string) $user['id']) ?>">
-                                <?= h($user['name']) ?> · <?= h($user['email']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label" for="role">Role</label>
-                    <select class="form-select" id="role" name="role" required>
-                        <?php foreach (user_role_options() as $value => $label): ?>
-                            <option value="<?= h($value) ?>"><?= h($label) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label" for="membership_status">Status</label>
-                    <select class="form-select" id="membership_status" name="is_active">
-                        <option value="1">Active</option>
-                        <option value="0">Inactive</option>
-                    </select>
-                </div>
-
-                <div class="col-md-2">
-                    <button class="btn btn-primary w-100" type="submit">Save Membership</button>
-                </div>
-            </form>
-        </div>
-    </section>
+        </section>
+    <?php endif; ?>
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">

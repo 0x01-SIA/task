@@ -693,6 +693,22 @@ function current_company_context_label(?array $user = null): string
     return (string) ($user['active_company_name'] ?? 'Select company');
 }
 
+function user_can_view_current_company_page(?array $user = null): bool
+{
+    $user ??= current_user();
+
+    if ($user === null) {
+        return false;
+    }
+
+    if (is_super_admin($user)) {
+        return is_int($user['active_company_id'] ?? null);
+    }
+
+    return (string) ($user['role'] ?? '') === 'admin'
+        && is_int($user['active_company_id'] ?? null);
+}
+
 function scoped_company_sql(string $column, array &$params, ?array $user = null, bool $allowAll = true): string
 {
     $user ??= current_user();
