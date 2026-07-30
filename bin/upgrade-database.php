@@ -41,7 +41,9 @@ try {
     ensure_job_photos_company_scope($connection);
     ensure_job_customer_confirmations_company_scope($connection);
     ensure_materials_company_scope($connection);
+    ensure_material_stock_tables($connection);
     ensure_job_materials_company_scope($connection);
+    migrate_existing_job_material_movements($connection);
     ensure_default_company_exists($connection);
 
     fwrite(STDOUT, "Database upgrade completed successfully.\n");
@@ -279,12 +281,26 @@ function ensure_materials_company_scope(PDO $connection): void
     ensure_foreign_key($connection, 'materials', 'fk_materials_company', 'ALTER TABLE materials ADD CONSTRAINT fk_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
 
+function ensure_material_stock_tables(PDO $connection): void
+{
+    ensure_material_movements_table($connection);
+    ensure_material_inventories_table($connection);
+    ensure_material_inventory_lines_table($connection);
+}
+
 function ensure_job_materials_company_scope(PDO $connection): void
 {
     ensure_job_materials_table($connection);
     ensure_column($connection, 'job_materials', 'company_id', 'ALTER TABLE job_materials ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensure_column($connection, 'job_materials', 'movement_id', 'ALTER TABLE job_materials ADD COLUMN movement_id BIGINT UNSIGNED DEFAULT NULL AFTER material_id');
+    ensure_column($connection, 'job_materials', 'occurred_at', 'ALTER TABLE job_materials ADD COLUMN occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
+    $connection->exec('ALTER TABLE job_materials MODIFY quantity DECIMAL(14,3) NOT NULL');
+    ensure_index_absent($connection, 'job_materials', 'uq_job_materials_job_id_material_id', 'ALTER TABLE job_materials DROP INDEX uq_job_materials_job_id_material_id');
     ensure_index($connection, 'job_materials', 'idx_job_materials_company_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_company_id (company_id)');
+    ensure_index($connection, 'job_materials', 'idx_job_materials_job_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_job_id (job_id)');
+    ensure_index($connection, 'job_materials', 'idx_job_materials_movement_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_movement_id (movement_id)');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_company', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_movement', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_movement FOREIGN KEY (movement_id) REFERENCES material_movements (id) ON DELETE SET NULL ON UPDATE CASCADE');
 }
 
 function ensure_default_company_exists(PDO $connection): void
@@ -520,6 +536,113 @@ function ensure_materials_table(PDO $connection): void
     ensure_index($connection, 'materials', 'idx_materials_is_active', 'ALTER TABLE materials ADD KEY idx_materials_is_active (is_active)');
 }
 
+function ensure_material_movements_table(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS material_movements (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            company_id BIGINT UNSIGNED NOT NULL,
+            material_id BIGINT UNSIGNED NOT NULL,
+            movement_type ENUM('in','out') NOT NULL,
+            quantity DECIMAL(14,3) NOT NULL,
+            job_id BIGINT UNSIGNED DEFAULT NULL,
+            job_material_id BIGINT UNSIGNED DEFAULT NULL,
+            created_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            note TEXT DEFAULT NULL,
+            occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_material_movements_job_material_id (job_material_id),
+            KEY idx_material_movements_company_material_occurred_at (company_id, material_id, occurred_at),
+            KEY idx_material_movements_company_job_id (company_id, job_id),
+            KEY idx_material_movements_company_occurred_at (company_id, occurred_at),
+            KEY idx_material_movements_created_by_user_id (created_by_user_id),
+            CONSTRAINT fk_material_movements_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_movements_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_movements_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_movements_created_by_user FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensure_index($connection, 'material_movements', 'uq_material_movements_job_material_id', 'ALTER TABLE material_movements ADD UNIQUE KEY uq_material_movements_job_material_id (job_material_id)');
+    ensure_index($connection, 'material_movements', 'idx_material_movements_company_material_occurred_at', 'ALTER TABLE material_movements ADD KEY idx_material_movements_company_material_occurred_at (company_id, material_id, occurred_at)');
+    ensure_index($connection, 'material_movements', 'idx_material_movements_company_job_id', 'ALTER TABLE material_movements ADD KEY idx_material_movements_company_job_id (company_id, job_id)');
+    ensure_index($connection, 'material_movements', 'idx_material_movements_company_occurred_at', 'ALTER TABLE material_movements ADD KEY idx_material_movements_company_occurred_at (company_id, occurred_at)');
+    ensure_index($connection, 'material_movements', 'idx_material_movements_created_by_user_id', 'ALTER TABLE material_movements ADD KEY idx_material_movements_created_by_user_id (created_by_user_id)');
+    ensure_foreign_key($connection, 'material_movements', 'fk_material_movements_company', 'ALTER TABLE material_movements ADD CONSTRAINT fk_material_movements_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_movements', 'fk_material_movements_material', 'ALTER TABLE material_movements ADD CONSTRAINT fk_material_movements_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_movements', 'fk_material_movements_job', 'ALTER TABLE material_movements ADD CONSTRAINT fk_material_movements_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_movements', 'fk_material_movements_created_by_user', 'ALTER TABLE material_movements ADD CONSTRAINT fk_material_movements_created_by_user FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensure_material_inventories_table(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS material_inventories (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            company_id BIGINT UNSIGNED NOT NULL,
+            status ENUM('draft','pending_approval','approved','cancelled') NOT NULL DEFAULT 'draft',
+            started_by_user_id BIGINT UNSIGNED NOT NULL,
+            submitted_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            approved_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            submitted_at TIMESTAMP NULL DEFAULT NULL,
+            approved_at TIMESTAMP NULL DEFAULT NULL,
+            note TEXT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_material_inventories_company_status (company_id, status),
+            KEY idx_material_inventories_started_by_user_id (started_by_user_id),
+            KEY idx_material_inventories_submitted_by_user_id (submitted_by_user_id),
+            KEY idx_material_inventories_approved_by_user_id (approved_by_user_id),
+            CONSTRAINT fk_material_inventories_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_inventories_started_by_user FOREIGN KEY (started_by_user_id) REFERENCES users (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_inventories_submitted_by_user FOREIGN KEY (submitted_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
+            CONSTRAINT fk_material_inventories_approved_by_user FOREIGN KEY (approved_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensure_index($connection, 'material_inventories', 'idx_material_inventories_company_status', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_company_status (company_id, status)');
+    ensure_index($connection, 'material_inventories', 'idx_material_inventories_started_by_user_id', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_started_by_user_id (started_by_user_id)');
+    ensure_index($connection, 'material_inventories', 'idx_material_inventories_submitted_by_user_id', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_submitted_by_user_id (submitted_by_user_id)');
+    ensure_index($connection, 'material_inventories', 'idx_material_inventories_approved_by_user_id', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_approved_by_user_id (approved_by_user_id)');
+    ensure_foreign_key($connection, 'material_inventories', 'fk_material_inventories_company', 'ALTER TABLE material_inventories ADD CONSTRAINT fk_material_inventories_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_inventories', 'fk_material_inventories_started_by_user', 'ALTER TABLE material_inventories ADD CONSTRAINT fk_material_inventories_started_by_user FOREIGN KEY (started_by_user_id) REFERENCES users (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_inventories', 'fk_material_inventories_submitted_by_user', 'ALTER TABLE material_inventories ADD CONSTRAINT fk_material_inventories_submitted_by_user FOREIGN KEY (submitted_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_inventories', 'fk_material_inventories_approved_by_user', 'ALTER TABLE material_inventories ADD CONSTRAINT fk_material_inventories_approved_by_user FOREIGN KEY (approved_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensure_material_inventory_lines_table(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS material_inventory_lines (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            inventory_id BIGINT UNSIGNED NOT NULL,
+            company_id BIGINT UNSIGNED NOT NULL,
+            material_id BIGINT UNSIGNED NOT NULL,
+            counted_quantity DECIMAL(14,3) DEFAULT NULL,
+            system_quantity_at_start DECIMAL(14,3) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_material_inventory_lines_inventory_material (inventory_id, material_id),
+            KEY idx_material_inventory_lines_company_inventory (company_id, inventory_id),
+            KEY idx_material_inventory_lines_company_material (company_id, material_id),
+            CONSTRAINT fk_material_inventory_lines_inventory FOREIGN KEY (inventory_id) REFERENCES material_inventories (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_inventory_lines_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_material_inventory_lines_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensure_index($connection, 'material_inventory_lines', 'uq_material_inventory_lines_inventory_material', 'ALTER TABLE material_inventory_lines ADD UNIQUE KEY uq_material_inventory_lines_inventory_material (inventory_id, material_id)');
+    ensure_index($connection, 'material_inventory_lines', 'idx_material_inventory_lines_company_inventory', 'ALTER TABLE material_inventory_lines ADD KEY idx_material_inventory_lines_company_inventory (company_id, inventory_id)');
+    ensure_index($connection, 'material_inventory_lines', 'idx_material_inventory_lines_company_material', 'ALTER TABLE material_inventory_lines ADD KEY idx_material_inventory_lines_company_material (company_id, material_id)');
+    ensure_foreign_key($connection, 'material_inventory_lines', 'fk_material_inventory_lines_inventory', 'ALTER TABLE material_inventory_lines ADD CONSTRAINT fk_material_inventory_lines_inventory FOREIGN KEY (inventory_id) REFERENCES material_inventories (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_inventory_lines', 'fk_material_inventory_lines_company', 'ALTER TABLE material_inventory_lines ADD CONSTRAINT fk_material_inventory_lines_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'material_inventory_lines', 'fk_material_inventory_lines_material', 'ALTER TABLE material_inventory_lines ADD CONSTRAINT fk_material_inventory_lines_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+}
+
 function ensure_job_materials_table(PDO $connection): void
 {
     $connection->exec(
@@ -528,35 +651,125 @@ function ensure_job_materials_table(PDO $connection): void
             company_id BIGINT UNSIGNED NOT NULL,
             job_id BIGINT UNSIGNED NOT NULL,
             material_id BIGINT UNSIGNED NOT NULL,
-            quantity DECIMAL(12,3) NOT NULL,
+            movement_id BIGINT UNSIGNED DEFAULT NULL,
+            quantity DECIMAL(14,3) NOT NULL,
             recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY uq_job_materials_job_id_material_id (job_id, material_id),
             KEY idx_job_materials_company_id (company_id),
+            KEY idx_job_materials_job_id (job_id),
             KEY idx_job_materials_material_id (material_id),
+            KEY idx_job_materials_movement_id (movement_id),
             KEY idx_job_materials_recorded_by_user_id (recorded_by_user_id),
             CONSTRAINT fk_job_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
             CONSTRAINT fk_job_materials_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE,
             CONSTRAINT fk_job_materials_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_job_materials_movement FOREIGN KEY (movement_id) REFERENCES material_movements (id) ON DELETE SET NULL ON UPDATE CASCADE,
             CONSTRAINT fk_job_materials_recorded_by_user FOREIGN KEY (recorded_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
     ensure_column($connection, 'job_materials', 'job_id', 'ALTER TABLE job_materials ADD COLUMN job_id BIGINT UNSIGNED NOT NULL AFTER id');
     ensure_column($connection, 'job_materials', 'material_id', 'ALTER TABLE job_materials ADD COLUMN material_id BIGINT UNSIGNED NOT NULL AFTER job_id');
-    ensure_column($connection, 'job_materials', 'quantity', 'ALTER TABLE job_materials ADD COLUMN quantity DECIMAL(12,3) NOT NULL AFTER material_id');
+    ensure_column($connection, 'job_materials', 'movement_id', 'ALTER TABLE job_materials ADD COLUMN movement_id BIGINT UNSIGNED DEFAULT NULL AFTER material_id');
+    ensure_column($connection, 'job_materials', 'quantity', 'ALTER TABLE job_materials ADD COLUMN quantity DECIMAL(14,3) NOT NULL AFTER movement_id');
     ensure_column($connection, 'job_materials', 'recorded_by_user_id', 'ALTER TABLE job_materials ADD COLUMN recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL AFTER quantity');
-    ensure_column($connection, 'job_materials', 'created_at', 'ALTER TABLE job_materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
+    ensure_column($connection, 'job_materials', 'occurred_at', 'ALTER TABLE job_materials ADD COLUMN occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
+    ensure_column($connection, 'job_materials', 'created_at', 'ALTER TABLE job_materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER occurred_at');
     ensure_column($connection, 'job_materials', 'updated_at', 'ALTER TABLE job_materials ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
 
-    ensure_index($connection, 'job_materials', 'uq_job_materials_job_id_material_id', 'ALTER TABLE job_materials ADD UNIQUE KEY uq_job_materials_job_id_material_id (job_id, material_id)');
+    ensure_index($connection, 'job_materials', 'idx_job_materials_job_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_job_id (job_id)');
     ensure_index($connection, 'job_materials', 'idx_job_materials_material_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_material_id (material_id)');
+    ensure_index($connection, 'job_materials', 'idx_job_materials_movement_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_movement_id (movement_id)');
     ensure_index($connection, 'job_materials', 'idx_job_materials_recorded_by_user_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_recorded_by_user_id (recorded_by_user_id)');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_job', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_material', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_movement', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_movement FOREIGN KEY (movement_id) REFERENCES material_movements (id) ON DELETE SET NULL ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_recorded_by_user', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_recorded_by_user FOREIGN KEY (recorded_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function migrate_existing_job_material_movements(PDO $connection): void
+{
+    if (!table_exists($connection, 'job_materials') || !table_exists($connection, 'material_movements')) {
+        return;
+    }
+
+    $statement = $connection->query(
+        'SELECT id, company_id, job_id, material_id, quantity, recorded_by_user_id, COALESCE(occurred_at, updated_at, created_at, CURRENT_TIMESTAMP) AS occurred_at
+         FROM job_materials
+         WHERE movement_id IS NULL
+         ORDER BY id ASC'
+    );
+    $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!is_array($rows) || $rows === []) {
+        return;
+    }
+
+    $insertMovement = $connection->prepare(
+        "INSERT INTO material_movements (
+            company_id,
+            material_id,
+            movement_type,
+            quantity,
+            job_id,
+            job_material_id,
+            created_by_user_id,
+            note,
+            occurred_at,
+            created_at
+        ) VALUES (
+            :company_id,
+            :material_id,
+            'out',
+            :quantity,
+            :job_id,
+            :job_material_id,
+            :created_by_user_id,
+            NULL,
+            :occurred_at,
+            :created_at
+        )"
+    );
+    $updateJobMaterial = $connection->prepare(
+        'UPDATE job_materials
+         SET movement_id = :movement_id,
+             occurred_at = :occurred_at
+         WHERE id = :id'
+    );
+
+    foreach ($rows as $row) {
+        $existingMovement = $connection->prepare(
+            'SELECT id
+             FROM material_movements
+             WHERE job_material_id = :job_material_id
+             LIMIT 1'
+        );
+        $existingMovement->execute(['job_material_id' => (int) $row['id']]);
+        $movementId = $existingMovement->fetchColumn();
+
+        if ($movementId === false) {
+            $insertMovement->execute([
+                'company_id' => (int) $row['company_id'],
+                'material_id' => (int) $row['material_id'],
+                'quantity' => (string) $row['quantity'],
+                'job_id' => (int) $row['job_id'],
+                'job_material_id' => (int) $row['id'],
+                'created_by_user_id' => $row['recorded_by_user_id'] !== null ? (int) $row['recorded_by_user_id'] : null,
+                'occurred_at' => (string) $row['occurred_at'],
+                'created_at' => (string) $row['occurred_at'],
+            ]);
+            $movementId = (int) $connection->lastInsertId();
+        }
+
+        $updateJobMaterial->execute([
+            'movement_id' => (int) $movementId,
+            'occurred_at' => (string) $row['occurred_at'],
+            'id' => (int) $row['id'],
+        ]);
+    }
 }
 
 function users_role_supports_super_admin(PDO $connection): bool
@@ -622,6 +835,26 @@ function ensure_index(PDO $connection, string $table, string $index, string $sql
     ]);
 
     if ($statement->fetchColumn() === false) {
+        $connection->exec($sql);
+    }
+}
+
+function ensure_index_absent(PDO $connection, string $table, string $index, string $sql): void
+{
+    $statement = $connection->prepare(
+        'SELECT 1
+         FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = :table_name
+           AND INDEX_NAME = :index_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => $table,
+        'index_name' => $index,
+    ]);
+
+    if ($statement->fetchColumn() !== false) {
         $connection->exec($sql);
     }
 }

@@ -12,6 +12,7 @@ require base_path('app/repositories/job_customer_confirmations.php');
 require base_path('app/repositories/jobs.php');
 require base_path('app/repositories/locations.php');
 require base_path('app/repositories/materials.php');
+require base_path('app/repositories/material_stock.php');
 require base_path('app/repositories/tasks.php');
 require base_path('app/repositories/users.php');
 
@@ -257,6 +258,128 @@ function material_filter_values(array $source): array
         'search' => trim((string) ($source['search'] ?? '')),
         'status' => in_array($status, ['active', 'inactive'], true) ? $status : '',
     ];
+}
+
+function material_movement_filter_values(array $source): array
+{
+    $movementType = trim((string) ($source['movement_type'] ?? ''));
+    $movementSource = trim((string) ($source['movement_source'] ?? ''));
+
+    return [
+        'movement_type' => in_array($movementType, ['in', 'out'], true) ? $movementType : '',
+        'movement_source' => in_array($movementSource, ['job', 'manual'], true) ? $movementSource : '',
+        'user_id' => positive_int_or_null($source['user_id'] ?? null),
+        'date_from' => trim((string) ($source['date_from'] ?? '')),
+        'date_to' => trim((string) ($source['date_to'] ?? '')),
+    ];
+}
+
+function material_inventory_filter_values(array $source): array
+{
+    $status = trim((string) ($source['status'] ?? ''));
+
+    return [
+        'status' => in_array($status, ['draft', 'pending_approval', 'approved', 'cancelled'], true) ? $status : '',
+    ];
+}
+
+function material_movement_form_values(array $source, array $viewer): array
+{
+    $occurredAt = trim((string) ($source['occurred_at'] ?? ''));
+
+    return [
+        'material_id' => positive_int_or_null($source['material_id'] ?? null),
+        'movement_type' => in_array(($source['movement_type'] ?? ''), ['in', 'out'], true) ? (string) $source['movement_type'] : 'out',
+        'quantity' => trim((string) ($source['quantity'] ?? '')),
+        'note' => trim((string) ($source['note'] ?? '')),
+        'occurred_at' => user_can_set_material_movement_datetime($viewer) ? $occurredAt : '',
+    ];
+}
+
+function validate_material_movement_form(array $values, array $viewer, ?int $activeCompanyId): array
+{
+    $errors = [];
+
+    if ($activeCompanyId === null) {
+        $errors['form'] = 'Select an active company before creating a movement.';
+
+        return $errors;
+    }
+
+    if (($values['material_id'] ?? null) === null) {
+        $errors['material_id'] = 'Select a valid material.';
+    } else {
+        $material = find_material_by_id((int) $values['material_id']);
+
+        if ($material === null) {
+            $errors['material_id'] = 'The selected material was not found.';
+        } elseif ((int) ($material['is_active'] ?? 0) !== 1 && !user_can_set_material_movement_datetime($viewer)) {
+            $errors['material_id'] = 'Inactive materials can only be corrected by administrators or dispatchers.';
+        }
+    }
+
+    if (!in_array((string) ($values['movement_type'] ?? ''), ['in', 'out'], true)) {
+        $errors['movement_type'] = 'Select a valid movement type.';
+    }
+
+    if (normalize_positive_material_quantity((string) ($values['quantity'] ?? '')) === null) {
+        $errors['quantity'] = 'Enter a quantity greater than zero using up to 3 decimal places.';
+    }
+
+    if (user_can_set_material_movement_datetime($viewer) && ($values['occurred_at'] ?? '') !== '') {
+        $occurredAt = DateTimeImmutable::createFromFormat('Y-m-d\TH:i', (string) $values['occurred_at']);
+
+        if (!$occurredAt instanceof DateTimeImmutable) {
+            $errors['occurred_at'] = 'Enter a valid movement date and time.';
+        } elseif (($values['material_id'] ?? null) !== null) {
+            $latestApproved = latest_approved_inventory_line($activeCompanyId, (int) $values['material_id']);
+
+            if ($latestApproved !== null && $occurredAt <= new DateTimeImmutable((string) $latestApproved['approved_at'])) {
+                $errors['occurred_at'] = 'The movement cannot be backdated to before the latest approved inventory.';
+            }
+        }
+    }
+
+    return $errors;
+}
+
+function material_inventory_counts_from_request(array $source, array $lines): array
+{
+    $lineMap = [];
+
+    foreach ($lines as $line) {
+        $lineMap[(int) $line['id']] = $line;
+    }
+
+    $counts = [];
+
+    foreach (($source['counted_quantity'] ?? []) as $lineId => $value) {
+        $lineId = (int) $lineId;
+
+        if (!isset($lineMap[$lineId])) {
+            continue;
+        }
+
+        $counts[$lineId] = trim((string) $value);
+    }
+
+    return $counts;
+}
+
+function validate_material_inventory_counts(array $counts, array $lines): array
+{
+    $errors = [];
+
+    foreach ($lines as $line) {
+        $lineId = (int) $line['id'];
+        $value = $counts[$lineId] ?? '';
+
+        if (normalize_material_quantity($value) === null) {
+            $errors[$lineId] = 'Enter a quantity of zero or more using up to 3 decimal places.';
+        }
+    }
+
+    return $errors;
 }
 
 function material_form_values(array $source, array $defaults = []): array
@@ -1949,20 +2072,369 @@ try {
             break;
 
         case $path === '/materials':
-            require_role(['admin', 'dispatcher']);
+            require_role(['admin', 'dispatcher', 'worker']);
 
             if ($method !== 'GET') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
 
+            $viewer = current_user();
             $filters = material_filter_values($_GET);
 
             render('materials/index', [
                 'pageTitle' => 'Materials',
+                'viewer' => $viewer,
                 'materials' => list_materials($filters),
                 'filters' => $filters,
+                'stockNavigationItems' => material_stock_navigation_items(),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
+            break;
+
+        case $path === '/materials/movements':
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $companyId = current_company_id();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before viewing stock movements.');
+            }
+
+            $viewer = current_user();
+            $filters = material_movement_filter_values($_GET);
+            $movementLimit = requested_material_movement_limit($_GET['limit'] ?? null);
+            $movementPage = requested_material_movement_page($_GET['page'] ?? null);
+            $movementTotal = count_material_movement_history($companyId, null, $filters);
+            $movementLastPage = max(1, (int) ceil($movementTotal / $movementLimit));
+            $movementPage = min($movementPage, $movementLastPage);
+            $movementOffset = ($movementPage - 1) * $movementLimit;
+
+            render('materials/movements', [
+                'pageTitle' => 'Material Movements',
+                'viewer' => $viewer,
+                'materials' => list_materials([]),
+                'filters' => $filters,
+                'movementLimit' => $movementLimit,
+                'movementPage' => $movementPage,
+                'movementTotal' => $movementTotal,
+                'movementLastPage' => $movementLastPage,
+                'movements' => material_movement_history($companyId, null, $filters, $movementLimit, $movementOffset),
+                'stockNavigationItems' => material_stock_navigation_items(),
+                'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
+            ]);
+            break;
+
+        case $path === '/materials/movements/create':
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            $viewer = current_user();
+
+            if (!user_can_create_manual_material_movement($viewer)) {
+                abort(403, 'Access denied', 'You do not have permission to create manual material movements.');
+            }
+
+            $activeCompanyId = current_company_id();
+
+            if ($activeCompanyId === null) {
+                abort(409, 'Active company required', 'Select an active company before creating a movement.');
+            }
+
+            if ($method === 'POST') {
+                $csrfToken = $_POST['_token'] ?? null;
+
+                if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                    abort(419, 'Session expired', 'The form token is invalid or has expired.');
+                }
+
+                $values = material_movement_form_values($_POST, $viewer);
+                $errors = validate_material_movement_form($values, $viewer, $activeCompanyId);
+
+                if ($errors !== []) {
+                    render('materials/movement-form', [
+                        'pageTitle' => 'Add Material Movement',
+                        'viewer' => $viewer,
+                        'materials' => list_materials([]),
+                        'values' => $values,
+                        'errors' => $errors,
+                        'stockNavigationItems' => material_stock_navigation_items(),
+                    ], 422);
+                    break;
+                }
+
+                $occurredAt = user_can_set_material_movement_datetime($viewer) && $values['occurred_at'] !== ''
+                    ? (DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $values['occurred_at']) ?: new DateTimeImmutable('now'))->format('Y-m-d H:i:s')
+                    : (new DateTimeImmutable('now'))->format('Y-m-d H:i:s');
+
+                create_material_movement([
+                    'company_id' => $activeCompanyId,
+                    'material_id' => (int) $values['material_id'],
+                    'movement_type' => $values['movement_type'],
+                    'quantity' => (string) normalize_positive_material_quantity($values['quantity']),
+                    'job_id' => null,
+                    'job_material_id' => null,
+                    'created_by_user_id' => isset($viewer['id']) ? (int) $viewer['id'] : null,
+                    'note' => $values['note'],
+                    'occurred_at' => $occurredAt,
+                ]);
+                flash('success', 'Material movement recorded successfully.');
+                redirect('/materials/' . (int) $values['material_id']);
+            }
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $prefill = [];
+            $prefillMaterialId = positive_int_or_null($_GET['material_id'] ?? null);
+
+            if ($prefillMaterialId !== null) {
+                $prefill['material_id'] = $prefillMaterialId;
+            }
+
+            render('materials/movement-form', [
+                'pageTitle' => 'Add Material Movement',
+                'viewer' => $viewer,
+                'materials' => list_materials([]),
+                'values' => material_movement_form_values($prefill, $viewer),
+                'errors' => [],
+                'stockNavigationItems' => material_stock_navigation_items(),
+            ]);
+            break;
+
+        case $path === '/materials/inventories':
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $companyId = current_company_id();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before viewing inventories.');
+            }
+
+            $viewer = current_user();
+            $filters = material_inventory_filter_values($_GET);
+
+            render('materials/inventories', [
+                'pageTitle' => 'Material Inventory',
+                'viewer' => $viewer,
+                'filters' => $filters,
+                'inventories' => list_material_inventories($companyId, $filters),
+                'stockNavigationItems' => material_stock_navigation_items(),
+                'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
+            ]);
+            break;
+
+        case $path === '/materials/inventories/create':
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+
+            if (!user_can_manage_material_inventory($viewer)) {
+                abort(403, 'Access denied', 'You do not have permission to start an inventory.');
+            }
+
+            $activeCompanyId = current_company_id();
+
+            if ($activeCompanyId === null) {
+                abort(409, 'Active company required', 'Select an active company before starting an inventory.');
+            }
+
+            $inventoryId = create_material_inventory($activeCompanyId, (int) $viewer['id']);
+            flash('success', 'Inventory started successfully.');
+            redirect('/materials/inventories/' . $inventoryId);
+            break;
+
+        case preg_match('#^/materials/inventories/([1-9][0-9]*)$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher', 'worker']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $companyId = current_company_id();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before viewing inventories.');
+            }
+
+            $viewer = current_user();
+            $inventory = find_material_inventory_by_id($companyId, (int) $matches[1]);
+
+            if ($inventory === null) {
+                not_found('Inventory');
+            }
+
+            render('materials/inventory-show', [
+                'pageTitle' => 'Inventory #' . $inventory['id'],
+                'viewer' => $viewer,
+                'inventory' => $inventory,
+                'lines' => list_material_inventory_lines($companyId, (int) $inventory['id']),
+                'lineErrors' => [],
+                'submittedValues' => [],
+                'stockNavigationItems' => material_stock_navigation_items(),
+                'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
+            ]);
+            break;
+
+        case preg_match('#^/materials/inventories/([1-9][0-9]*)/save$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $companyId = current_company_id();
+            $viewer = current_user();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before editing inventories.');
+            }
+
+            $inventory = find_material_inventory_by_id($companyId, (int) $matches[1]);
+
+            if ($inventory === null) {
+                not_found('Inventory');
+            }
+
+            $lines = list_material_inventory_lines($companyId, (int) $inventory['id']);
+            $counts = material_inventory_counts_from_request($_POST, $lines);
+            $lineErrors = validate_material_inventory_counts($counts, $lines);
+
+            if ($lineErrors !== []) {
+                render('materials/inventory-show', [
+                    'pageTitle' => 'Inventory #' . $inventory['id'],
+                    'viewer' => $viewer,
+                    'inventory' => $inventory,
+                    'lines' => $lines,
+                    'lineErrors' => $lineErrors,
+                    'submittedValues' => $counts,
+                    'stockNavigationItems' => material_stock_navigation_items(),
+                    'successMessage' => flash('success'),
+                    'errorMessage' => flash('error'),
+                ], 422);
+                break;
+            }
+
+            $normalizedCounts = [];
+
+            foreach ($counts as $lineId => $value) {
+                $normalizedCounts[$lineId] = normalize_material_quantity($value);
+            }
+
+            save_material_inventory_counts($companyId, (int) $inventory['id'], $normalizedCounts);
+            flash('success', 'Inventory counts saved.');
+            redirect('/materials/inventories/' . $inventory['id']);
+            break;
+
+        case preg_match('#^/materials/inventories/([1-9][0-9]*)/submit$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $companyId = current_company_id();
+            $viewer = current_user();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before submitting inventories.');
+            }
+
+            try {
+                submit_material_inventory($companyId, (int) $matches[1], (int) $viewer['id']);
+                flash('success', 'Inventory submitted for approval.');
+            } catch (Throwable $exception) {
+                flash('error', safe_error_message($exception->getMessage()));
+            }
+
+            redirect('/materials/inventories/' . (int) $matches[1]);
+            break;
+
+        case preg_match('#^/materials/inventories/([1-9][0-9]*)/approve$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $companyId = current_company_id();
+            $viewer = current_user();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before approving inventories.');
+            }
+
+            try {
+                approve_material_inventory($companyId, (int) $matches[1], (int) $viewer['id']);
+                flash('success', 'Inventory approved successfully.');
+            } catch (Throwable $exception) {
+                flash('error', safe_error_message($exception->getMessage()));
+            }
+
+            redirect('/materials/inventories/' . (int) $matches[1]);
+            break;
+
+        case preg_match('#^/materials/inventories/([1-9][0-9]*)/cancel$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $companyId = current_company_id();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before cancelling inventories.');
+            }
+
+            cancel_material_inventory($companyId, (int) $matches[1]);
+            flash('success', 'Inventory cancelled.');
+            redirect('/materials/inventories/' . (int) $matches[1]);
             break;
 
         case $path === '/materials/create':
@@ -2017,12 +2489,19 @@ try {
             break;
 
         case preg_match('#^/materials/([1-9][0-9]*)$#', $path, $matches) === 1:
-            require_role(['admin', 'dispatcher']);
+            require_role(['admin', 'dispatcher', 'worker']);
 
             if ($method !== 'GET') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
             }
 
+            $companyId = current_company_id();
+
+            if ($companyId === null) {
+                abort(409, 'Active company required', 'Select an active company before viewing materials.');
+            }
+
+            $viewer = current_user();
             $material = find_material_by_id((int) $matches[1]);
 
             if ($material === null) {
@@ -2033,21 +2512,21 @@ try {
             $movementPage = requested_material_movement_page($_GET['page'] ?? null);
             $movementTotal = count_material_movements((int) $material['id']);
             $movementLastPage = max(1, (int) ceil($movementTotal / $movementLimit));
-
-            if ($movementPage > $movementLastPage) {
-                $movementPage = $movementLastPage;
-            }
-
+            $movementPage = min($movementPage, $movementLastPage);
             $movementOffset = ($movementPage - 1) * $movementLimit;
 
             render('materials/show', [
                 'pageTitle' => $material['name'],
+                'viewer' => $viewer,
                 'material' => $material,
+                'currentStock' => material_current_stock($companyId, (int) $material['id']),
+                'latestApprovedInventory' => latest_approved_inventory_line($companyId, (int) $material['id']),
                 'movementLimit' => $movementLimit,
                 'movementPage' => $movementPage,
                 'movementTotal' => $movementTotal,
                 'movementLastPage' => $movementLastPage,
                 'materialMovements' => list_material_movements((int) $material['id'], $movementLimit, $movementOffset),
+                'stockNavigationItems' => material_stock_navigation_items(),
                 'successMessage' => flash('success'),
                 'errorMessage' => flash('error'),
             ]);

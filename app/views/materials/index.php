@@ -3,21 +3,44 @@
 declare(strict_types=1);
 ?>
 <div class="d-grid gap-4">
+    <nav class="nav nav-pills gap-2">
+        <?php foreach ($stockNavigationItems as $item): ?>
+            <a class="nav-link<?= is_current_path($item['path']) ? ' active' : '' ?>" href="<?= h(app_url($item['path'])) ?>"><?= h($item['label']) ?></a>
+        <?php endforeach; ?>
+    </nav>
+
     <section class="card shadow-sm border-0">
         <div class="card-body p-4 p-lg-5">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
                     <p class="text-uppercase text-secondary small fw-semibold mb-2">Materials</p>
                     <h1 class="h3 mb-2">Materials Catalogue</h1>
-                    <p class="text-secondary mb-0">Manage reusable catalogue items that can be recorded against jobs.</p>
+                    <p class="text-secondary mb-0">Current stock is calculated per company from approved inventories and later movements.</p>
                 </div>
-                <a class="btn btn-primary" href="<?= h(app_url('/materials/create')) ?>">Create Material</a>
+                <div class="d-flex flex-wrap gap-2">
+                    <?php if (user_can_create_manual_material_movement($viewer)): ?>
+                        <a class="btn btn-outline-primary" href="<?= h(app_url('/materials/movements/create')) ?>">Add Material Movement</a>
+                    <?php endif; ?>
+                    <?php if (user_can_manage_material_inventory($viewer)): ?>
+                        <form method="post" action="<?= h(app_url('/materials/inventories/create')) ?>">
+                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                            <button class="btn btn-outline-secondary" type="submit">Start Inventory</button>
+                        </form>
+                    <?php endif; ?>
+                    <?php if (user_can_manage_materials_catalogue($viewer)): ?>
+                        <a class="btn btn-primary" href="<?= h(app_url('/materials/create')) ?>">Create Material</a>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </section>
 
     <?php if ($successMessage !== null): ?>
         <div class="alert alert-success mb-0" role="status"><?= h($successMessage) ?></div>
+    <?php endif; ?>
+
+    <?php if ($errorMessage !== null): ?>
+        <div class="alert alert-danger mb-0" role="alert"><?= h($errorMessage) ?></div>
     <?php endif; ?>
 
     <section class="card shadow-sm border-0">
@@ -56,6 +79,7 @@ declare(strict_types=1);
                             <th scope="col">SKU/Code</th>
                             <th scope="col">Unit</th>
                             <th scope="col">Status</th>
+                            <th scope="col">Current Stock</th>
                             <th scope="col" class="text-end">Actions</th>
                         </tr>
                         </thead>
@@ -70,10 +94,21 @@ declare(strict_types=1);
                                         <?= (int) $material['is_active'] === 1 ? 'Active' : 'Inactive' ?>
                                     </span>
                                 </td>
+                                <td>
+                                    <div class="fw-semibold"><?= h(format_decimal_quantity($material['current_stock'])) ?> <?= h($material['unit']) ?></div>
+                                    <span class="badge <?= h(material_stock_status_class((string) $material['current_stock'])) ?>">
+                                        <?= h(material_stock_label((string) $material['current_stock'])) ?>
+                                    </span>
+                                </td>
                                 <td class="text-end">
                                     <div class="d-inline-flex flex-wrap gap-2 justify-content-end">
                                         <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/materials/' . $material['id'])) ?>">View</a>
-                                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/materials/' . $material['id'] . '/edit')) ?>">Edit</a>
+                                        <?php if (user_can_create_manual_material_movement($viewer)): ?>
+                                            <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/materials/movements/create?material_id=' . $material['id'])) ?>">Move</a>
+                                        <?php endif; ?>
+                                        <?php if (user_can_manage_materials_catalogue($viewer)): ?>
+                                            <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/materials/' . $material['id'] . '/edit')) ?>">Edit</a>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

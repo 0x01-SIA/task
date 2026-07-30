@@ -15,45 +15,9 @@ function materials_connection(): PDO
 
 function list_materials(array $filters = []): array
 {
-    $sql = 'SELECT
-                id,
-                company_id,
-                name,
-                sku,
-                unit,
-                description,
-                is_active,
-                created_at,
-                updated_at
-            FROM materials
-            WHERE 1 = 1';
-    $params = [];
-    $sql .= scoped_company_sql('company_id', $params);
-    $search = trim((string) ($filters['search'] ?? ''));
-    $status = (string) ($filters['status'] ?? '');
+    $companyId = current_company_id();
 
-    if ($search !== '') {
-        $sql .= ' AND (
-            name LIKE :search_name
-            OR COALESCE(sku, \'\') LIKE :search_sku
-        )';
-        $params['search_name'] = '%' . $search . '%';
-        $params['search_sku'] = '%' . $search . '%';
-    }
-
-    if ($status === 'active') {
-        $sql .= ' AND is_active = 1';
-    } elseif ($status === 'inactive') {
-        $sql .= ' AND is_active = 0';
-    }
-
-    $sql .= ' ORDER BY name ASC, id ASC';
-
-    $statement = materials_connection()->prepare($sql);
-    $statement->execute($params);
-    $materials = $statement->fetchAll();
-
-    return is_array($materials) ? $materials : [];
+    return $companyId === null ? [] : company_material_stock_list($companyId, $filters);
 }
 
 function list_active_materials(): array
@@ -106,56 +70,18 @@ function find_material_by_id(int $id): ?array
 
 function count_material_movements(int $materialId): int
 {
-    $params = ['material_id' => $materialId];
-    $sql = 'SELECT COUNT(*)
-            FROM job_materials
-            WHERE material_id = :material_id';
-    $params = ['material_id' => $materialId];
-    $sql .= scoped_company_sql('company_id', $params);
-    $statement = materials_connection()->prepare($sql);
-    $statement->execute($params);
+    $companyId = current_company_id();
 
-    return (int) $statement->fetchColumn();
+    return $companyId === null ? 0 : count_material_movement_history($companyId, $materialId);
 }
 
 function list_material_movements(int $materialId, int $limit, int $offset): array
 {
-    $sql = 'SELECT
-            jm.id,
-            jm.job_id,
-            jm.quantity,
-            jm.created_at,
-            jm.updated_at,
-            j.job_number,
-            c.name AS customer_name,
-            l.name AS location_name,
-            m.unit AS material_unit,
-            u.name AS recorded_by_name
-         FROM job_materials jm
-         INNER JOIN jobs j ON j.id = jm.job_id
-         LEFT JOIN customers c ON c.id = j.customer_id
-         LEFT JOIN locations l ON l.id = j.location_id
-         INNER JOIN materials m ON m.id = jm.material_id
-         LEFT JOIN users u ON u.id = jm.recorded_by_user_id
-         WHERE jm.material_id = :material_id';
-    $params = ['material_id' => $materialId];
-    $sql .= scoped_company_sql('jm.company_id', $params);
-    $sql .= '
-         ORDER BY jm.updated_at DESC, jm.id DESC
-         LIMIT :limit OFFSET :offset';
-    $statement = materials_connection()->prepare($sql);
-    $statement->bindValue(':material_id', $params['material_id'], PDO::PARAM_INT);
-    $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
-    $statement->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $companyId = current_company_id();
 
-    if (isset($params['__scoped_company_id'])) {
-        $statement->bindValue(':__scoped_company_id', $params['__scoped_company_id'], PDO::PARAM_INT);
-    }
-
-    $statement->execute();
-    $movements = $statement->fetchAll();
-
-    return is_array($movements) ? $movements : [];
+    return $companyId === null
+        ? []
+        : material_movement_history($companyId, $materialId, [], $limit, $offset);
 }
 
 function create_material(array $data): int
@@ -236,8 +162,10 @@ function list_job_materials(int $jobId): array
             jm.id,
             jm.job_id,
             jm.material_id,
+            jm.movement_id,
             jm.quantity,
             jm.recorded_by_user_id,
+            jm.occurred_at,
             jm.created_at,
             jm.updated_at,
             m.name AS material_name,
@@ -251,7 +179,7 @@ function list_job_materials(int $jobId): array
          WHERE jm.job_id = :job_id';
     $params = ['job_id' => $jobId];
     $sql .= scoped_company_sql('jm.company_id', $params);
-    $sql .= ' ORDER BY m.name ASC, jm.id ASC';
+    $sql .= ' ORDER BY jm.occurred_at DESC, jm.id DESC';
     $statement = materials_connection()->prepare($sql);
     $statement->execute($params);
     $materials = $statement->fetchAll();
@@ -265,8 +193,10 @@ function find_job_material_by_id(int $jobId, int $jobMaterialId): ?array
             jm.id,
             jm.job_id,
             jm.material_id,
+            jm.movement_id,
             jm.quantity,
             jm.recorded_by_user_id,
+            jm.occurred_at,
             jm.created_at,
             jm.updated_at,
             m.name AS material_name,
@@ -298,59 +228,61 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
     $connection->beginTransaction();
 
     try {
-        $existingStatement = $connection->prepare(
-            'SELECT id, quantity
-             FROM job_materials
-             WHERE job_id = :job_id
-               AND material_id = :material_id
-               AND company_id = :company_id
-             LIMIT 1
-             FOR UPDATE'
+        $companyId = current_company_id();
+
+        if ($companyId === null) {
+            throw new RuntimeException('An active company is required to record material usage.');
+        }
+
+        $statement = $connection->prepare(
+            'INSERT INTO job_materials (
+                company_id,
+                job_id,
+                material_id,
+                quantity,
+                recorded_by_user_id,
+                occurred_at
+             ) VALUES (
+                :company_id,
+                :job_id,
+                :material_id,
+                :quantity,
+                :recorded_by_user_id,
+                CURRENT_TIMESTAMP
+             )'
         );
-        $existingStatement->execute([
-            'company_id' => current_company_id(),
+        $statement->execute([
+            'company_id' => $companyId,
             'job_id' => $jobId,
             'material_id' => $materialId,
+            'quantity' => $quantity,
+            'recorded_by_user_id' => $recordedByUserId,
         ]);
-        $existing = $existingStatement->fetch();
 
-        if (is_array($existing)) {
-            $statement = $connection->prepare(
-                'UPDATE job_materials
-                 SET quantity = quantity + :quantity,
-                     recorded_by_user_id = :recorded_by_user_id,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = :id'
-            );
-            $statement->execute([
-                'quantity' => $quantity,
-                'recorded_by_user_id' => $recordedByUserId,
-                'id' => $existing['id'],
-            ]);
-        } else {
-            $statement = $connection->prepare(
-                'INSERT INTO job_materials (
-                    company_id,
-                    job_id,
-                    material_id,
-                    quantity,
-                    recorded_by_user_id
-                 ) VALUES (
-                    :company_id,
-                    :job_id,
-                    :material_id,
-                    :quantity,
-                    :recorded_by_user_id
-                 )'
-            );
-            $statement->execute([
-                'company_id' => current_company_id(),
-                'job_id' => $jobId,
-                'material_id' => $materialId,
-                'quantity' => $quantity,
-                'recorded_by_user_id' => $recordedByUserId,
-            ]);
-        }
+        $jobMaterialId = (int) $connection->lastInsertId();
+        $movementId = create_material_movement([
+            'company_id' => $companyId,
+            'material_id' => $materialId,
+            'movement_type' => 'out',
+            'quantity' => $quantity,
+            'job_id' => $jobId,
+            'job_material_id' => $jobMaterialId,
+            'created_by_user_id' => $recordedByUserId,
+            'note' => '',
+            'occurred_at' => (new DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
+        ]);
+
+        $linkStatement = $connection->prepare(
+            'UPDATE job_materials
+             SET movement_id = :movement_id
+             WHERE id = :id
+               AND company_id = :company_id'
+        );
+        $linkStatement->execute([
+            'movement_id' => $movementId,
+            'id' => $jobMaterialId,
+            'company_id' => $companyId,
+        ]);
 
         $connection->commit();
     } catch (Throwable $exception) {
@@ -364,44 +296,128 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
 
 function update_job_material_quantity(int $jobId, int $jobMaterialId, string $quantity, ?int $recordedByUserId): bool
 {
-    $sql = 'UPDATE job_materials
-            SET quantity = :quantity,
-                recorded_by_user_id = :recorded_by_user_id,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE job_id = :job_id
-              AND id = :id';
-    $params = [
-        'quantity' => $quantity,
-        'recorded_by_user_id' => $recordedByUserId,
-        'job_id' => $jobId,
-        'id' => $jobMaterialId,
-    ];
-    $sql .= scoped_company_sql('company_id', $params);
-    $statement = materials_connection()->prepare($sql);
-    $statement->execute($params);
+    $companyId = current_company_id();
 
-    return $statement->rowCount() > 0;
+    if ($companyId === null) {
+        return false;
+    }
+
+    $jobMaterial = find_job_material_by_id($jobId, $jobMaterialId);
+
+    if ($jobMaterial === null) {
+        return false;
+    }
+
+    if (material_movement_is_protected($companyId, (int) $jobMaterial['material_id'], (string) $jobMaterial['occurred_at'])) {
+        return false;
+    }
+
+    $connection = materials_connection();
+    $connection->beginTransaction();
+
+    try {
+        $statement = $connection->prepare(
+            'UPDATE job_materials
+             SET quantity = :quantity,
+                 recorded_by_user_id = :recorded_by_user_id,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE company_id = :company_id
+               AND job_id = :job_id
+               AND id = :id'
+        );
+        $statement->execute([
+            'quantity' => $quantity,
+            'recorded_by_user_id' => $recordedByUserId,
+            'company_id' => $companyId,
+            'job_id' => $jobId,
+            'id' => $jobMaterialId,
+        ]);
+
+        $movementStatement = $connection->prepare(
+            'UPDATE material_movements
+             SET quantity = :quantity,
+                 created_by_user_id = :created_by_user_id
+             WHERE id = :movement_id
+               AND company_id = :company_id'
+        );
+        $movementStatement->execute([
+            'quantity' => $quantity,
+            'created_by_user_id' => $recordedByUserId,
+            'movement_id' => (int) $jobMaterial['movement_id'],
+            'company_id' => $companyId,
+        ]);
+
+        $connection->commit();
+
+        return $statement->rowCount() > 0;
+    } catch (Throwable $exception) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+
+        throw $exception;
+    }
 }
 
 function delete_job_material(int $jobId, int $jobMaterialId): bool
 {
-    $sql = 'DELETE FROM job_materials
-            WHERE job_id = :job_id
-              AND id = :id';
-    $params = [
-        'job_id' => $jobId,
-        'id' => $jobMaterialId,
-    ];
-    $sql .= scoped_company_sql('company_id', $params);
-    $statement = materials_connection()->prepare($sql);
-    $statement->execute($params);
+    $companyId = current_company_id();
 
-    return $statement->rowCount() > 0;
+    if ($companyId === null) {
+        return false;
+    }
+
+    $jobMaterial = find_job_material_by_id($jobId, $jobMaterialId);
+
+    if ($jobMaterial === null) {
+        return false;
+    }
+
+    if (material_movement_is_protected($companyId, (int) $jobMaterial['material_id'], (string) $jobMaterial['occurred_at'])) {
+        return false;
+    }
+
+    $connection = materials_connection();
+    $connection->beginTransaction();
+
+    try {
+        $movementStatement = $connection->prepare(
+            'DELETE FROM material_movements
+             WHERE id = :movement_id
+               AND company_id = :company_id'
+        );
+        $movementStatement->execute([
+            'movement_id' => (int) $jobMaterial['movement_id'],
+            'company_id' => $companyId,
+        ]);
+
+        $statement = $connection->prepare(
+            'DELETE FROM job_materials
+             WHERE company_id = :company_id
+               AND job_id = :job_id
+               AND id = :id'
+        );
+        $statement->execute([
+            'company_id' => $companyId,
+            'job_id' => $jobId,
+            'id' => $jobMaterialId,
+        ]);
+
+        $connection->commit();
+
+        return $statement->rowCount() > 0;
+    } catch (Throwable $exception) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+
+        throw $exception;
+    }
 }
 
 function user_can_manage_materials_catalogue(array $user): bool
 {
-    return in_array((string) ($user['role'] ?? ''), ['admin', 'dispatcher'], true);
+    return is_super_admin($user) || in_array((string) ($user['role'] ?? ''), ['admin', 'dispatcher'], true);
 }
 
 function user_can_record_job_material(array $user, array $job): bool

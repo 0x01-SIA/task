@@ -338,19 +338,121 @@ CREATE TABLE materials (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE material_movements (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    material_id BIGINT UNSIGNED NOT NULL,
+    movement_type ENUM('in', 'out') NOT NULL,
+    quantity DECIMAL(14,3) NOT NULL,
+    job_id BIGINT UNSIGNED DEFAULT NULL,
+    job_material_id BIGINT UNSIGNED DEFAULT NULL,
+    created_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    note TEXT DEFAULT NULL,
+    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_material_movements_job_material_id (job_material_id),
+    KEY idx_material_movements_company_material_occurred_at (company_id, material_id, occurred_at),
+    KEY idx_material_movements_company_job_id (company_id, job_id),
+    KEY idx_material_movements_company_occurred_at (company_id, occurred_at),
+    KEY idx_material_movements_created_by_user_id (created_by_user_id),
+    CONSTRAINT fk_material_movements_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_movements_material
+        FOREIGN KEY (material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_movements_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_movements_created_by_user
+        FOREIGN KEY (created_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE material_inventories (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    status ENUM('draft', 'pending_approval', 'approved', 'cancelled') NOT NULL DEFAULT 'draft',
+    started_by_user_id BIGINT UNSIGNED NOT NULL,
+    submitted_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    approved_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    submitted_at TIMESTAMP NULL DEFAULT NULL,
+    approved_at TIMESTAMP NULL DEFAULT NULL,
+    note TEXT DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_material_inventories_company_status (company_id, status),
+    KEY idx_material_inventories_started_by_user_id (started_by_user_id),
+    KEY idx_material_inventories_submitted_by_user_id (submitted_by_user_id),
+    KEY idx_material_inventories_approved_by_user_id (approved_by_user_id),
+    CONSTRAINT fk_material_inventories_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventories_started_by_user
+        FOREIGN KEY (started_by_user_id) REFERENCES users (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventories_submitted_by_user
+        FOREIGN KEY (submitted_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventories_approved_by_user
+        FOREIGN KEY (approved_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE material_inventory_lines (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    inventory_id BIGINT UNSIGNED NOT NULL,
+    company_id BIGINT UNSIGNED NOT NULL,
+    material_id BIGINT UNSIGNED NOT NULL,
+    counted_quantity DECIMAL(14,3) DEFAULT NULL,
+    system_quantity_at_start DECIMAL(14,3) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_material_inventory_lines_inventory_material (inventory_id, material_id),
+    KEY idx_material_inventory_lines_company_inventory (company_id, inventory_id),
+    KEY idx_material_inventory_lines_company_material (company_id, material_id),
+    CONSTRAINT fk_material_inventory_lines_inventory
+        FOREIGN KEY (inventory_id) REFERENCES material_inventories (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventory_lines_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventory_lines_material
+        FOREIGN KEY (material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE job_materials (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     company_id BIGINT UNSIGNED NOT NULL,
     job_id BIGINT UNSIGNED NOT NULL,
     material_id BIGINT UNSIGNED NOT NULL,
-    quantity DECIMAL(12,3) NOT NULL,
+    movement_id BIGINT UNSIGNED DEFAULT NULL,
+    quantity DECIMAL(14,3) NOT NULL,
     recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_job_materials_job_id_material_id (job_id, material_id),
     KEY idx_job_materials_company_id (company_id),
+    KEY idx_job_materials_job_id (job_id),
     KEY idx_job_materials_material_id (material_id),
+    KEY idx_job_materials_movement_id (movement_id),
     KEY idx_job_materials_recorded_by_user_id (recorded_by_user_id),
     CONSTRAINT fk_job_materials_company
         FOREIGN KEY (company_id) REFERENCES companies (id)
@@ -363,6 +465,10 @@ CREATE TABLE job_materials (
     CONSTRAINT fk_job_materials_material
         FOREIGN KEY (material_id) REFERENCES materials (id)
         ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_materials_movement
+        FOREIGN KEY (movement_id) REFERENCES material_movements (id)
+        ON DELETE SET NULL
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_materials_recorded_by_user
         FOREIGN KEY (recorded_by_user_id) REFERENCES users (id)

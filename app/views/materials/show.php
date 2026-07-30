@@ -3,8 +3,15 @@
 declare(strict_types=1);
 
 $movementBaseQuery = ['limit' => $movementLimit];
+$jobPathBase = (($viewer['role'] ?? '') === 'worker') ? '/work/jobs/' : '/jobs/';
 ?>
 <div class="d-grid gap-4">
+    <nav class="nav nav-pills gap-2">
+        <?php foreach ($stockNavigationItems as $item): ?>
+            <a class="nav-link<?= is_current_path($item['path']) ? ' active' : '' ?>" href="<?= h(app_url($item['path'])) ?>"><?= h($item['label']) ?></a>
+        <?php endforeach; ?>
+    </nav>
+
     <section class="card shadow-sm border-0">
         <div class="card-body p-4 p-lg-5">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
@@ -15,7 +22,12 @@ $movementBaseQuery = ['limit' => $movementLimit];
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     <a class="btn btn-outline-secondary" href="<?= h(app_url('/materials')) ?>">Back to Materials</a>
-                    <a class="btn btn-primary" href="<?= h(app_url('/materials/' . $material['id'] . '/edit')) ?>">Edit Material</a>
+                    <?php if (user_can_create_manual_material_movement($viewer)): ?>
+                        <a class="btn btn-outline-primary" href="<?= h(app_url('/materials/movements/create?material_id=' . $material['id'])) ?>">Add Movement</a>
+                    <?php endif; ?>
+                    <?php if (user_can_manage_materials_catalogue($viewer)): ?>
+                        <a class="btn btn-primary" href="<?= h(app_url('/materials/' . $material['id'] . '/edit')) ?>">Edit Material</a>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -31,6 +43,21 @@ $movementBaseQuery = ['limit' => $movementLimit];
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+                <div>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Current Stock</p>
+                    <h2 class="h4 mb-1"><?= h(format_decimal_quantity($currentStock)) ?> <?= h($material['unit']) ?></h2>
+                    <span class="badge <?= h(material_stock_status_class((string) $currentStock)) ?>">
+                        <?= h(material_stock_label((string) $currentStock)) ?>
+                    </span>
+                </div>
+                <?php if ($latestApprovedInventory !== null): ?>
+                    <div class="text-secondary small">
+                        Baseline from approved inventory at <?= h(format_datetime((string) $latestApprovedInventory['approved_at'])) ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+
             <div class="info-grid">
                 <div>
                     <p class="info-label">Name</p>
@@ -75,7 +102,7 @@ $movementBaseQuery = ['limit' => $movementLimit];
                 <div>
                     <p class="text-uppercase text-secondary small fw-semibold mb-2">History</p>
                     <h2 class="h5 mb-1">Material Movements</h2>
-                    <p class="text-secondary mb-0">Latest job usage records for this material.</p>
+                    <p class="text-secondary mb-0">Manual and job-linked movement history for this material.</p>
                 </div>
                 <form method="get" action="<?= h(app_url('/materials/' . $material['id'])) ?>" class="material-movements-toolbar">
                     <label class="form-label mb-0" for="limit">Show</label>
@@ -98,26 +125,30 @@ $movementBaseQuery = ['limit' => $movementLimit];
                             <thead>
                             <tr>
                                 <th scope="col">Date and Time</th>
+                                <th scope="col">Type</th>
                                 <th scope="col">Job Number</th>
-                                <th scope="col">Customer</th>
-                                <th scope="col">Location</th>
                                 <th scope="col">Quantity</th>
-                                <th scope="col">Unit</th>
+                                <th scope="col">Direction</th>
+                                <th scope="col">Note</th>
                                 <th scope="col">Recorded By</th>
                             </tr>
                             </thead>
                             <tbody>
                             <?php foreach ($materialMovements as $movement): ?>
                                 <tr>
-                                    <td><?= h(format_datetime($movement['updated_at'] ?? $movement['created_at'] ?? null)) ?></td>
+                                    <td><?= h(format_datetime($movement['occurred_at'] ?? $movement['created_at'] ?? null)) ?></td>
+                                    <td><?= h(material_movement_type_label((string) $movement['movement_type'])) ?></td>
                                     <td>
-                                        <a href="<?= h(app_url('/jobs/' . $movement['job_id'])) ?>"><?= h($movement['job_number']) ?></a>
+                                        <?php if (($movement['job_id'] ?? null) !== null): ?>
+                                            <a href="<?= h(app_url($jobPathBase . $movement['job_id'])) ?>"><?= h($movement['job_number']) ?></a>
+                                        <?php else: ?>
+                                            Manual
+                                        <?php endif; ?>
                                     </td>
-                                    <td><?= h(($movement['customer_name'] ?? null) !== null && $movement['customer_name'] !== '' ? $movement['customer_name'] : '—') ?></td>
-                                    <td><?= h(($movement['location_name'] ?? null) !== null && $movement['location_name'] !== '' ? $movement['location_name'] : '—') ?></td>
-                                    <td><?= h(format_decimal_quantity($movement['quantity'])) ?></td>
-                                    <td><?= h($movement['material_unit']) ?></td>
-                                    <td><?= h($movement['recorded_by_name'] ?: '—') ?></td>
+                                    <td><?= h(format_decimal_quantity($movement['quantity']) . ' ' . $movement['material_unit']) ?></td>
+                                    <td><?= h($movement['movement_type'] === 'in' ? '+' : '-') ?></td>
+                                    <td><?= h(($movement['note'] ?? '') !== '' ? $movement['note'] : '—') ?></td>
+                                    <td><?= h($movement['created_by_name'] ?: '—') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                             </tbody>
@@ -154,13 +185,15 @@ $movementBaseQuery = ['limit' => $movementLimit];
                     <h2 class="h5 mb-1">Activation</h2>
                     <p class="text-secondary mb-0">Inactive materials remain visible on historical jobs but cannot be selected for new usage.</p>
                 </div>
-                <form method="post" action="<?= h(app_url('/materials/' . $material['id'] . '/status')) ?>" onsubmit="return confirm('Update this material status?');">
-                    <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="is_active" value="<?= (int) $material['is_active'] === 1 ? '0' : '1' ?>">
-                    <button class="btn <?= (int) $material['is_active'] === 1 ? 'btn-outline-danger' : 'btn-outline-success' ?>" type="submit">
-                        <?= (int) $material['is_active'] === 1 ? 'Deactivate Material' : 'Activate Material' ?>
-                    </button>
-                </form>
+                <?php if (user_can_manage_materials_catalogue($viewer)): ?>
+                    <form method="post" action="<?= h(app_url('/materials/' . $material['id'] . '/status')) ?>" onsubmit="return confirm('Update this material status?');">
+                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                        <input type="hidden" name="is_active" value="<?= (int) $material['is_active'] === 1 ? '0' : '1' ?>">
+                        <button class="btn <?= (int) $material['is_active'] === 1 ? 'btn-outline-danger' : 'btn-outline-success' ?>" type="submit">
+                            <?= (int) $material['is_active'] === 1 ? 'Deactivate Material' : 'Activate Material' ?>
+                        </button>
+                    </form>
+                <?php endif; ?>
             </div>
         </div>
     </section>
