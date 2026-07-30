@@ -81,6 +81,36 @@ function list_locations_for_customer(int $customerId): array
     return is_array($locations) ? $locations : [];
 }
 
+function list_active_locations_for_customer(int $customerId): array
+{
+    $params = ['customer_id' => $customerId];
+    $sql = 'SELECT
+                id,
+                company_id,
+                customer_id,
+                name,
+                address_line,
+                city,
+                postal_code,
+                country,
+                contact_name,
+                contact_phone,
+                notes,
+                is_active,
+                created_at,
+                updated_at
+            FROM locations
+            WHERE customer_id = :customer_id
+              AND is_active = 1';
+    $sql .= scoped_company_sql('company_id', $params);
+    $sql .= ' ORDER BY name ASC, id ASC';
+    $statement = locations_connection()->prepare($sql);
+    $statement->execute($params);
+    $locations = $statement->fetchAll();
+
+    return is_array($locations) ? $locations : [];
+}
+
 function list_active_locations(): array
 {
     $params = [];

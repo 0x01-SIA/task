@@ -443,25 +443,92 @@ function task_form_values(array $source, array $defaults = []): array
     ];
 }
 
-function task_form_locations(?int $customerId): array
+function task_form_locations(?int $customerId, ?int $selectedLocationId = null): array
 {
     if ($customerId === null) {
         return [];
     }
 
-    return list_locations_for_customer($customerId);
+    $locations = list_active_locations_for_customer($customerId);
+
+    if ($selectedLocationId === null) {
+        return $locations;
+    }
+
+    foreach ($locations as $location) {
+        if ((int) $location['id'] === $selectedLocationId) {
+            return $locations;
+        }
+    }
+
+    $activeCompanyId = current_company_id();
+
+    if ($activeCompanyId === null) {
+        return $locations;
+    }
+
+    $selectedLocation = find_location_by_id_for_customer_in_company($selectedLocationId, $customerId, $activeCompanyId);
+
+    if ($selectedLocation === null) {
+        return $locations;
+    }
+
+    $locations[] = $selectedLocation;
+
+    usort($locations, static function (array $left, array $right): int {
+        $nameCompare = strcmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''));
+
+        if ($nameCompare !== 0) {
+            return $nameCompare;
+        }
+
+        return (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
+    });
+
+    return $locations;
 }
 
-function form_location_catalog(): array
+function form_location_catalog(?int $selectedLocationId = null): array
 {
+    $locations = list_active_locations();
+
+    if ($selectedLocationId !== null) {
+        $activeCompanyId = current_company_id();
+
+        if ($activeCompanyId !== null) {
+            $selectedLocation = find_location_by_id_in_company($selectedLocationId, $activeCompanyId);
+
+            if ($selectedLocation !== null) {
+                $selectedLocationExists = false;
+
+                foreach ($locations as $location) {
+                    if ((int) $location['id'] === (int) $selectedLocation['id']) {
+                        $selectedLocationExists = true;
+                        break;
+                    }
+                }
+
+                if (!$selectedLocationExists) {
+                    $locations[] = $selectedLocation;
+                }
+            }
+        }
+    }
+
     return array_map(static function (array $location): array {
         return [
             'id' => (int) $location['id'],
             'customer_id' => (int) $location['customer_id'],
             'name' => (string) $location['name'],
             'address_line' => (string) ($location['address_line'] ?? ''),
+            'is_active' => (int) ($location['is_active'] ?? 0) === 1,
         ];
-    }, list_locations());
+    }, $locations);
+}
+
+function encoded_form_location_catalog(?int $selectedLocationId = null): string
+{
+    return base64_encode(json_encode(form_location_catalog($selectedLocationId), JSON_THROW_ON_ERROR));
 }
 
 function valid_date_value(string $value): bool
@@ -2097,8 +2164,8 @@ try {
                         'formAction' => '/tasks',
                         'submitLabel' => 'Create Task',
                         'customers' => active_customers(),
-                        'locations' => task_form_locations($values['customer_id']),
-                        'locationCatalog' => form_location_catalog(),
+                        'locations' => task_form_locations($values['customer_id'], $values['location_id']),
+                        'locationCatalog' => encoded_form_location_catalog($values['location_id']),
                         'values' => $values,
                         'errors' => $errors,
                         'task' => null,
@@ -2129,8 +2196,8 @@ try {
                         'formAction' => '/tasks',
                         'submitLabel' => 'Create Task',
                         'customers' => active_customers(),
-                        'locations' => task_form_locations($values['customer_id']),
-                        'locationCatalog' => form_location_catalog(),
+                        'locations' => task_form_locations($values['customer_id'], $values['location_id']),
+                        'locationCatalog' => encoded_form_location_catalog($values['location_id']),
                         'values' => $values,
                         'errors' => ['task_number' => 'Could not generate a task number. Please try again.'],
                         'task' => null,
@@ -2171,8 +2238,8 @@ try {
                 'formAction' => '/tasks',
                 'submitLabel' => 'Create Task',
                 'customers' => active_customers(),
-                'locations' => task_form_locations(task_form_values($_GET)['customer_id']),
-                'locationCatalog' => form_location_catalog(),
+                'locations' => task_form_locations(task_form_values($_GET)['customer_id'], task_form_values($_GET)['location_id']),
+                'locationCatalog' => encoded_form_location_catalog(task_form_values($_GET)['location_id']),
                 'values' => task_form_values($_GET),
                 'errors' => [],
                 'task' => null,
@@ -2217,8 +2284,8 @@ try {
                     'formAction' => '/tasks/' . $task['id'] . '/edit',
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => task_form_locations((int) $task['customer_id']),
-                    'locationCatalog' => form_location_catalog(),
+                    'locations' => task_form_locations((int) $task['customer_id'], $task['location_id'] !== null ? (int) $task['location_id'] : null),
+                    'locationCatalog' => encoded_form_location_catalog($task['location_id'] !== null ? (int) $task['location_id'] : null),
                     'values' => task_form_values([], [
                         'customer_id' => (int) $task['customer_id'],
                         'location_id' => $task['location_id'] !== null ? (int) $task['location_id'] : null,
@@ -2255,8 +2322,8 @@ try {
                     'formAction' => '/tasks/' . $task['id'] . '/edit',
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => task_form_locations($values['customer_id']),
-                    'locationCatalog' => form_location_catalog(),
+                    'locations' => task_form_locations($values['customer_id'], $values['location_id']),
+                    'locationCatalog' => encoded_form_location_catalog($values['location_id']),
                     'values' => $values,
                     'errors' => $errors,
                     'task' => $task,
@@ -2345,8 +2412,8 @@ try {
                         'taskOptions' => list_tasks(),
                         'submitLabel' => 'Create Job',
                         'customers' => active_customers(),
-                        'locations' => task_form_locations($values['customer_id']),
-                        'locationCatalog' => form_location_catalog(),
+                        'locations' => task_form_locations($values['customer_id'], $values['location_id']),
+                        'locationCatalog' => encoded_form_location_catalog($values['location_id']),
                         'workers' => list_active_workers(),
                         'values' => $values,
                         'errors' => $errors,
@@ -2380,8 +2447,8 @@ try {
                         'taskOptions' => list_tasks(),
                         'submitLabel' => 'Create Job',
                         'customers' => active_customers(),
-                        'locations' => task_form_locations($values['customer_id']),
-                        'locationCatalog' => form_location_catalog(),
+                        'locations' => task_form_locations($values['customer_id'], $values['location_id']),
+                        'locationCatalog' => encoded_form_location_catalog($values['location_id']),
                         'workers' => list_active_workers(),
                         'values' => $values,
                         'errors' => ['job_number' => 'Could not generate a job number. Please try again.'],
@@ -2454,8 +2521,8 @@ try {
                 'taskOptions' => list_tasks(),
                 'submitLabel' => 'Create Job',
                 'customers' => active_customers(),
-                'locations' => task_form_locations(job_form_values($_GET, $defaults)['customer_id']),
-                'locationCatalog' => form_location_catalog(),
+                'locations' => task_form_locations(job_form_values($_GET, $defaults)['customer_id'], job_form_values($_GET, $defaults)['location_id']),
+                'locationCatalog' => encoded_form_location_catalog(job_form_values($_GET, $defaults)['location_id']),
                 'workers' => list_active_workers(),
                 'values' => job_form_values($_GET, $defaults),
                 'errors' => [],
@@ -3031,8 +3098,8 @@ try {
                     'taskOptions' => list_tasks(),
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => task_form_locations((int) $job['customer_id']),
-                    'locationCatalog' => form_location_catalog(),
+                    'locations' => task_form_locations((int) $job['customer_id'], $job['location_id'] !== null ? (int) $job['location_id'] : null),
+                    'locationCatalog' => encoded_form_location_catalog($job['location_id'] !== null ? (int) $job['location_id'] : null),
                     'workers' => list_active_workers(),
                     'values' => job_form_values([], [
                         'task_id' => $job['task_id'] !== null ? (int) $job['task_id'] : null,
@@ -3076,8 +3143,8 @@ try {
                     'taskOptions' => list_tasks(),
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => task_form_locations($values['customer_id']),
-                    'locationCatalog' => form_location_catalog(),
+                    'locations' => task_form_locations($values['customer_id'], $values['location_id']),
+                    'locationCatalog' => encoded_form_location_catalog($values['location_id']),
                     'workers' => list_active_workers(),
                     'values' => $values,
                     'errors' => $errors,

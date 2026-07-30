@@ -65,7 +65,7 @@ $newCustomerUrl = app_url('/customers/create?' . http_build_query([
 
                     <div class="col-md-6">
                         <label class="form-label" for="location_id">Location</label>
-                        <select class="form-select<?= isset($errors['location_id']) ? ' is-invalid' : '' ?>" id="location_id" name="location_id" data-customer-location-filter="location" data-location-catalog="<?= h((string) json_encode($locationCatalog ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>">
+                        <select class="form-select<?= isset($errors['location_id']) ? ' is-invalid' : '' ?>" id="location_id" name="location_id" data-customer-location-filter="location" data-location-catalog="<?= h((string) ($locationCatalog ?? '')) ?>" data-empty-label="No locations available for this customer">
                             <option value="">No specific location</option>
                             <?php foreach ($locations as $location): ?>
                                 <option value="<?= h($location['id']) ?>" data-customer-id="<?= h($location['customer_id']) ?>" <?= (int) ($values['location_id'] ?? 0) === (int) $location['id'] ? 'selected' : '' ?>>

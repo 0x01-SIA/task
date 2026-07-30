@@ -97,7 +97,8 @@ $newCustomerUrl = app_url('/customers/create?' . http_build_query([
                             id="location_id"
                             name="location_id"
                             data-customer-location-filter="location"
-                            data-location-catalog="<?= h((string) json_encode($locationCatalog ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>"
+                            data-location-catalog="<?= h((string) ($locationCatalog ?? '')) ?>"
+                            data-empty-label="No locations available for this customer"
                             required
                         >
                             <option value="">Select a location</option>

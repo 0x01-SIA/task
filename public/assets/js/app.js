@@ -7,10 +7,13 @@ if (customerSelect && locationSelect) {
     const placeholderOption = locationSelect.options[0] ?? null;
     const placeholderValue = placeholderOption?.value ?? '';
     const placeholderLabel = placeholderOption?.textContent ?? '';
+    const emptyLabel = locationSelect.getAttribute('data-empty-label') ?? 'No locations available for this customer';
     let locationCatalog = [];
 
     try {
-        locationCatalog = JSON.parse(locationSelect.getAttribute('data-location-catalog') ?? '[]');
+        const encodedCatalog = locationSelect.getAttribute('data-location-catalog') ?? '';
+        const decodedCatalog = encodedCatalog === '' ? '[]' : atob(encodedCatalog);
+        locationCatalog = JSON.parse(decodedCatalog);
     } catch (error) {
         locationCatalog = [];
     }
@@ -36,7 +39,24 @@ if (customerSelect && locationSelect) {
         });
 
         const stillValid = matchingLocations.some((location) => String(location.id) === selectedValue);
-        locationSelect.value = stillValid ? selectedValue : placeholderValue;
+
+        if (matchingLocations.length === 0 && customerId !== '') {
+            locationSelect.add(new Option(emptyLabel, placeholderValue));
+            locationSelect.value = placeholderValue;
+            return;
+        }
+
+        if (stillValid) {
+            locationSelect.value = selectedValue;
+            return;
+        }
+
+        if (matchingLocations.length === 1) {
+            locationSelect.value = String(matchingLocations[0].id);
+            return;
+        }
+
+        locationSelect.value = placeholderValue;
     };
 
     customerSelect.addEventListener('change', updateLocationOptions);
