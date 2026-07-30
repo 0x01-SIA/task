@@ -95,40 +95,54 @@ declare(strict_types=1);
                         </thead>
                         <tbody>
                         <?php foreach ($memberships as $membership): ?>
+                            <?php
+                            $membershipUserId = (int) ($membership['id'] ?? 0);
+                            $membershipFormId = 'company-membership-' . $membershipUserId;
+                            ?>
                             <tr>
-                                <td class="fw-semibold"><?= h($membership['name']) ?></td>
-                                <td><?= h($membership['email']) ?></td>
-                                <td><?= h(role_label((string) $membership['membership_role'])) ?></td>
+                                <td class="fw-semibold"><?= h((string) ($membership['name'] ?? 'Unknown user')) ?></td>
+                                <td><?= h((string) ($membership['email'] ?? 'No email')) ?></td>
                                 <td>
-                                    <span class="badge <?= (int) $membership['is_active'] === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
-                                        <?= (int) $membership['is_active'] === 1 ? 'Active account' : 'Inactive account' ?>
+                                    <?php if (($canManageMemberships ?? false)): ?>
+                                        <form id="<?= h($membershipFormId) ?>" method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships')) ?>">
+                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                            <input type="hidden" name="user_id" value="<?= h((string) $membershipUserId) ?>">
+                                        </form>
+                                        <select class="form-select form-select-sm membership-row-select" name="role" form="<?= h($membershipFormId) ?>" aria-label="Company role for <?= h((string) ($membership['name'] ?? 'user')) ?>">
+                                            <?php foreach (user_role_options() as $value => $label): ?>
+                                                <option value="<?= h($value) ?>" <?= (string) ($membership['membership_role'] ?? '') === $value ? 'selected' : '' ?>><?= h($label) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    <?php else: ?>
+                                        <?= h(role_label((string) ($membership['membership_role'] ?? 'worker'))) ?>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="badge <?= (int) ($membership['is_active'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                        <?= (int) ($membership['is_active'] ?? 0) === 1 ? 'Active account' : 'Inactive account' ?>
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="badge <?= (int) $membership['membership_is_active'] === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
-                                        <?= (int) $membership['membership_is_active'] === 1 ? 'Active membership' : 'Inactive membership' ?>
-                                    </span>
+                                    <?php if (($canManageMemberships ?? false)): ?>
+                                        <select class="form-select form-select-sm membership-row-select" name="is_active" form="<?= h($membershipFormId) ?>" aria-label="Membership status for <?= h((string) ($membership['name'] ?? 'user')) ?>">
+                                            <option value="1" <?= (int) ($membership['membership_is_active'] ?? 0) === 1 ? 'selected' : '' ?>>Active</option>
+                                            <option value="0" <?= (int) ($membership['membership_is_active'] ?? 0) === 1 ? '' : 'selected' ?>>Inactive</option>
+                                        </select>
+                                    <?php else: ?>
+                                        <span class="badge <?= (int) ($membership['membership_is_active'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                            <?= (int) ($membership['membership_is_active'] ?? 0) === 1 ? 'Active membership' : 'Inactive membership' ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </td>
                                 <?php if (($canManageMemberships ?? false)): ?>
                                     <td class="text-end">
-                                        <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships')) ?>" class="d-inline-flex flex-wrap gap-2 justify-content-end">
-                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                                            <input type="hidden" name="user_id" value="<?= h((string) $membership['id']) ?>">
-                                            <select class="form-select form-select-sm" name="role">
-                                                <?php foreach (user_role_options() as $value => $label): ?>
-                                                    <option value="<?= h($value) ?>" <?= (string) $membership['membership_role'] === $value ? 'selected' : '' ?>><?= h($label) ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <select class="form-select form-select-sm" name="is_active">
-                                                <option value="1" <?= (int) $membership['membership_is_active'] === 1 ? 'selected' : '' ?>>Active</option>
-                                                <option value="0" <?= (int) $membership['membership_is_active'] === 1 ? '' : 'selected' ?>>Inactive</option>
-                                            </select>
-                                            <button class="btn btn-outline-primary btn-sm" type="submit">Save</button>
-                                        </form>
-                                        <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships/' . $membership['id'] . '/delete')) ?>" class="d-inline-flex ms-2">
-                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                                            <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
-                                        </form>
+                                        <div class="membership-row-actions">
+                                            <button class="btn btn-outline-primary btn-sm" type="submit" form="<?= h($membershipFormId) ?>">Save</button>
+                                            <form method="post" action="<?= h(app_url('/companies/' . $company['id'] . '/memberships/' . $membershipUserId . '/delete')) ?>" class="d-inline-flex">
+                                                <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                                <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
+                                            </form>
+                                        </div>
                                     </td>
                                 <?php endif; ?>
                             </tr>

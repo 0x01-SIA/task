@@ -1357,7 +1357,22 @@ body.app-shell {
     }
 }
 
+.membership-row-select {
+    min-width: 11rem;
+}
+
+.membership-row-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
 @media (max-width: 767.98px) {
+    .membership-row-select {
+        min-width: 9rem;
+    }
+
     .calendar-week,
     .calendar-shell {
         display: none;
@@ -1385,6 +1400,11 @@ body.app-shell {
 }
 
 @media (max-width: 575.98px) {
+    .membership-row-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
     .task-info-grid {
         grid-template-columns: 1fr;
     }

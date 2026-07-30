@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+
+$isCompanyScoped = current_company_id() !== null;
+$companyContextLabel = current_company_context_label();
 ?>
 <div class="d-grid gap-4">
     <section class="card shadow-sm border-0">
@@ -58,7 +61,11 @@ declare(strict_types=1);
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
             <?php if ($users === []): ?>
-                <p class="text-secondary mb-0">No users matched the current filters.</p>
+                <p class="text-secondary mb-0">
+                    <?= $isCompanyScoped
+                        ? h($companyContextLabel . ' does not have any assigned users yet.')
+                        : 'No users matched the current filters.' ?>
+                </p>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
@@ -67,7 +74,10 @@ declare(strict_types=1);
                             <th scope="col">Name</th>
                             <th scope="col">Email</th>
                             <th scope="col">Role</th>
-                            <th scope="col">Status</th>
+                            <th scope="col">Global Status</th>
+                            <?php if ($isCompanyScoped): ?>
+                                <th scope="col">Membership Status</th>
+                            <?php endif; ?>
                             <th scope="col">Active Jobs</th>
                             <th scope="col">Updated</th>
                             <th scope="col" class="text-end">Details</th>
@@ -75,28 +85,36 @@ declare(strict_types=1);
                         </thead>
                         <tbody>
                         <?php foreach ($users as $managedUser): ?>
+                            <?php
+                            $systemRole = (string) ($managedUser['system_role'] ?? '');
+                            $companyRole = (string) ($managedUser['company_role'] ?? '');
+                            $displayRole = $systemRole === 'super_admin'
+                                ? $systemRole
+                                : ($companyRole !== '' ? $companyRole : $systemRole);
+                            $membershipIsActive = array_key_exists('membership_is_active', $managedUser)
+                                ? (int) ($managedUser['membership_is_active'] ?? 0) === 1
+                                : null;
+                            ?>
                             <tr>
-                                <td class="fw-semibold"><?= h($managedUser['name']) ?></td>
-                                <td><?= h($managedUser['email']) ?></td>
+                                <td class="fw-semibold"><?= h((string) ($managedUser['name'] ?? 'Unknown user')) ?></td>
+                                <td><?= h((string) ($managedUser['email'] ?? 'No email')) ?></td>
+                                <td><?= h(role_label($displayRole)) ?></td>
                                 <td>
-                                    <?php
-                                    $systemRole = (string) ($managedUser['system_role'] ?? '');
-                                    $companyRole = (string) ($managedUser['company_role'] ?? '');
-                                    $displayRole = $systemRole === 'super_admin'
-                                        ? $systemRole
-                                        : ($companyRole !== '' ? $companyRole : $systemRole);
-                                    ?>
-                                    <?= h(role_label($displayRole)) ?>
-                                </td>
-                                <td>
-                                    <span class="badge <?= (int) $managedUser['is_active'] === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
-                                        <?= (int) $managedUser['is_active'] === 1 ? 'Active' : 'Inactive' ?>
+                                    <span class="badge <?= (int) ($managedUser['is_active'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                        <?= (int) ($managedUser['is_active'] ?? 0) === 1 ? 'Active account' : 'Inactive account' ?>
                                     </span>
                                 </td>
+                                <?php if ($isCompanyScoped): ?>
+                                    <td>
+                                        <span class="badge <?= $membershipIsActive ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                            <?= $membershipIsActive ? 'Active membership' : 'Inactive membership' ?>
+                                        </span>
+                                    </td>
+                                <?php endif; ?>
                                 <td><?= h((string) (int) ($managedUser['active_job_count'] ?? 0)) ?></td>
                                 <td><?= h(format_datetime($managedUser['updated_at'] ?? null)) ?></td>
                                 <td class="text-end">
-                                    <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/users/' . $managedUser['id'])) ?>">View</a>
+                                    <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/users/' . (int) ($managedUser['id'] ?? 0))) ?>">View</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

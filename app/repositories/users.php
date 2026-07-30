@@ -27,7 +27,11 @@ function list_users(array $filters = []): array
     }
 
     if ($scopedCompanyId !== null) {
-        $params['company_scope_id'] = $scopedCompanyId;
+        $params['company_role_scope_id'] = $scopedCompanyId;
+        $params['membership_status_scope_id'] = $scopedCompanyId;
+        $params['company_memberships_scope_id'] = $scopedCompanyId;
+        $params['active_job_scope_id'] = $scopedCompanyId;
+        $params['user_scope_id'] = $scopedCompanyId;
     }
 
     $sql = "SELECT
@@ -45,21 +49,36 @@ function list_users(array $filters = []): array
 
     if ($scopedCompanyId !== null) {
         $sql .= '
-                      AND cu_current.company_id = :company_scope_id';
+                      AND cu_current.company_id = :company_role_scope_id';
     }
 
     $sql .= '
                     LIMIT 1
                 ) AS company_role,
+                ';
+
+    if ($scopedCompanyId !== null) {
+        $sql .= "(
+                    SELECT cu_current.is_active
+                    FROM company_users cu_current
+                    WHERE cu_current.user_id = u.id
+                      AND cu_current.company_id = :membership_status_scope_id
+                    LIMIT 1
+                )";
+    } else {
+        $sql .= 'NULL';
+    }
+
+    $sql .= " AS membership_is_active,
                 (
                     SELECT GROUP_CONCAT(DISTINCT CONCAT(c2.name, \' (\', cu2.role, \')\') ORDER BY c2.name ASC SEPARATOR \', \')
                     FROM company_users cu2
                     INNER JOIN companies c2 ON c2.id = cu2.company_id
-                    WHERE cu2.user_id = u.id';
+                    WHERE cu2.user_id = u.id";
 
     if ($scopedCompanyId !== null) {
         $sql .= '
-                      AND cu2.company_id = :company_scope_id';
+                      AND cu2.company_id = :company_memberships_scope_id';
     }
 
     $sql .= "
@@ -72,7 +91,7 @@ function list_users(array $filters = []): array
 
     if ($scopedCompanyId !== null) {
         $sql .= '
-                      AND j.company_id = :company_scope_id';
+                      AND j.company_id = :active_job_scope_id';
     }
 
     $sql .= "
@@ -86,7 +105,7 @@ function list_users(array $filters = []): array
                     SELECT 1
                     FROM company_users scoped_cu
                     WHERE scoped_cu.user_id = u.id
-                      AND scoped_cu.company_id = :company_scope_id
+                      AND scoped_cu.company_id = :user_scope_id
                 )';
     }
 
@@ -101,7 +120,8 @@ function list_users(array $filters = []): array
 
         if ($scopedCompanyId !== null) {
             $sql .= '
-                  AND role_cu.company_id = :company_scope_id';
+                  AND role_cu.company_id = :role_scope_id';
+            $params['role_scope_id'] = $scopedCompanyId;
         }
 
         $sql .= '
@@ -127,7 +147,19 @@ function list_users(array $filters = []): array
               ORDER BY u.is_active DESC, u.name ASC, u.id ASC';
 
     $statement = users_connection()->prepare($sql);
-    $statement->execute($params);
+
+    try {
+        $statement->execute($params);
+    } catch (PDOException $exception) {
+        error_log(sprintf(
+            'Failed to list users for company context. viewer_id=%s scoped_company_id=%s error=%s',
+            isset($viewer['id']) ? (string) $viewer['id'] : 'guest',
+            $scopedCompanyId !== null ? (string) $scopedCompanyId : 'all',
+            $exception->getMessage()
+        ));
+
+        throw $exception;
+    }
     $users = $statement->fetchAll();
 
     return is_array($users) ? $users : [];
