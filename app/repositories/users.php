@@ -71,7 +71,7 @@ function list_users(array $filters = []): array
 
     $sql .= " AS membership_is_active,
                 (
-                    SELECT GROUP_CONCAT(DISTINCT CONCAT(c2.name, \' (\', cu2.role, \')\') ORDER BY c2.name ASC SEPARATOR \', \')
+                    SELECT GROUP_CONCAT(DISTINCT CONCAT(c2.name, ' (', cu2.role, ')') ORDER BY c2.name ASC SEPARATOR ', ')
                     FROM company_users cu2
                     INNER JOIN companies c2 ON c2.id = cu2.company_id
                     WHERE cu2.user_id = u.id";
