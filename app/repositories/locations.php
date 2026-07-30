@@ -141,6 +141,76 @@ function find_location_by_id(int $id): ?array
     return is_array($location) ? $location : null;
 }
 
+function find_location_by_id_in_company(int $id, int $companyId): ?array
+{
+    $statement = locations_connection()->prepare(
+        'SELECT
+            l.id,
+            l.company_id,
+            l.customer_id,
+            l.name,
+            l.address_line,
+            l.city,
+            l.postal_code,
+            l.country,
+            l.contact_name,
+            l.contact_phone,
+            l.notes,
+            l.is_active,
+            l.created_at,
+            l.updated_at,
+            c.name AS customer_name
+         FROM locations l
+         INNER JOIN customers c ON c.id = l.customer_id
+         WHERE l.id = :id
+           AND l.company_id = :company_id
+         LIMIT 1'
+    );
+    $statement->execute([
+        'id' => $id,
+        'company_id' => $companyId,
+    ]);
+    $location = $statement->fetch();
+
+    return is_array($location) ? $location : null;
+}
+
+function find_location_by_id_for_customer_in_company(int $id, int $customerId, int $companyId): ?array
+{
+    $statement = locations_connection()->prepare(
+        'SELECT
+            l.id,
+            l.company_id,
+            l.customer_id,
+            l.name,
+            l.address_line,
+            l.city,
+            l.postal_code,
+            l.country,
+            l.contact_name,
+            l.contact_phone,
+            l.notes,
+            l.is_active,
+            l.created_at,
+            l.updated_at,
+            c.name AS customer_name
+         FROM locations l
+         INNER JOIN customers c ON c.id = l.customer_id
+         WHERE l.id = :id
+           AND l.customer_id = :customer_id
+           AND l.company_id = :company_id
+         LIMIT 1'
+    );
+    $statement->execute([
+        'id' => $id,
+        'customer_id' => $customerId,
+        'company_id' => $companyId,
+    ]);
+    $location = $statement->fetch();
+
+    return is_array($location) ? $location : null;
+}
+
 function create_location(array $data): int
 {
     foreach (['company_id', 'customer_id', 'name', 'address_line', 'is_active'] as $requiredField) {

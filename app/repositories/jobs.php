@@ -313,6 +313,17 @@ function create_job(array $data): int
                 continue;
             }
 
+            error_log(sprintf(
+                '[jobs.create] Failed to insert job (company_id=%s, task_id=%s, customer_id=%s, location_id=%s, user_id=%s, attempt=%d): %s',
+                isset($data['company_id']) ? (string) $data['company_id'] : 'null',
+                isset($data['task_id']) ? (string) $data['task_id'] : 'null',
+                isset($data['customer_id']) ? (string) $data['customer_id'] : 'null',
+                isset($data['location_id']) ? (string) $data['location_id'] : 'null',
+                isset($data['created_by_user_id']) ? (string) $data['created_by_user_id'] : 'null',
+                $attempt + 1,
+                $exception->getMessage()
+            ));
+
             throw $exception;
         }
     }
@@ -632,21 +643,27 @@ function create_job_note(int $jobId, ?int $userId, string $note): void
 
 function next_job_number(): string
 {
-    $statement = jobs_connection()->query(
-        "SELECT job_number
-         FROM jobs
-         WHERE job_number REGEXP '^JOB-[0-9]{6}$'
-         ORDER BY CAST(SUBSTRING(job_number, 5) AS UNSIGNED) DESC
-         LIMIT 1"
-    );
-    $lastNumber = $statement->fetchColumn();
-    $nextValue = 1;
+    try {
+        $statement = jobs_connection()->query(
+            "SELECT job_number
+             FROM jobs
+             WHERE job_number REGEXP '^JOB-[0-9]{6}$'
+             ORDER BY CAST(SUBSTRING(job_number, 5) AS UNSIGNED) DESC
+             LIMIT 1"
+        );
+        $lastNumber = $statement->fetchColumn();
+        $nextValue = 1;
 
-    if (is_string($lastNumber) && preg_match('/^JOB-([0-9]{6})$/', $lastNumber, $matches) === 1) {
-        $nextValue = ((int) $matches[1]) + 1;
+        if (is_string($lastNumber) && preg_match('/^JOB-([0-9]{6})$/', $lastNumber, $matches) === 1) {
+            $nextValue = ((int) $matches[1]) + 1;
+        }
+
+        return sprintf('JOB-%06d', $nextValue);
+    } catch (PDOException $exception) {
+        error_log(sprintf('[jobs.numbering] Failed to generate next job number: %s', $exception->getMessage()));
+
+        throw $exception;
     }
-
-    return sprintf('JOB-%06d', $nextValue);
 }
 
 function job_number_conflict(PDOException $exception): bool

@@ -443,6 +443,27 @@ function task_form_values(array $source, array $defaults = []): array
     ];
 }
 
+function task_form_locations(?int $customerId): array
+{
+    if ($customerId === null) {
+        return [];
+    }
+
+    return list_locations_for_customer($customerId);
+}
+
+function form_location_catalog(): array
+{
+    return array_map(static function (array $location): array {
+        return [
+            'id' => (int) $location['id'],
+            'customer_id' => (int) $location['customer_id'],
+            'name' => (string) $location['name'],
+            'address_line' => (string) ($location['address_line'] ?? ''),
+        ];
+    }, list_locations());
+}
+
 function valid_date_value(string $value): bool
 {
     $date = DateTime::createFromFormat('Y-m-d', $value);
@@ -712,6 +733,7 @@ function send_stored_job_asset(array $asset, string $disposition = 'attachment')
 function validate_job_form(array $values): array
 {
     $errors = [];
+    $activeCompanyId = current_company_id();
     $taskId = $values['task_id'] ?? null;
     $customerId = $values['customer_id'] ?? null;
     $locationId = $values['location_id'] ?? null;
@@ -729,9 +751,15 @@ function validate_job_form(array $values): array
         }
     }
 
+    if ($activeCompanyId === null) {
+        $errors['form'] = 'Select an active company before creating or updating a job.';
+
+        return $errors;
+    }
+
     if ($customerId === null) {
         $errors['customer_id'] = 'Select a valid customer.';
-    } elseif (find_customer_by_id((int) $customerId) === null) {
+    } elseif (find_customer_by_id_in_company((int) $customerId, $activeCompanyId) === null) {
         $errors['customer_id'] = 'The selected customer was not found.';
     } elseif ($task !== null && (int) $task['customer_id'] !== (int) $customerId) {
         $errors['customer_id'] = 'The selected customer must match the linked task.';
@@ -739,12 +767,10 @@ function validate_job_form(array $values): array
 
     if ($locationId === null) {
         $errors['location_id'] = 'Select a valid location.';
-    } else {
-        $location = find_location_by_id((int) $locationId);
+    } elseif ($customerId !== null) {
+        $location = find_location_by_id_for_customer_in_company((int) $locationId, (int) $customerId, $activeCompanyId);
 
         if ($location === null) {
-            $errors['location_id'] = 'The selected location was not found.';
-        } elseif ($customerId !== null && (int) $location['customer_id'] !== (int) $customerId) {
             $errors['location_id'] = 'The selected location does not belong to the selected customer.';
         }
     }
@@ -789,23 +815,26 @@ function validate_job_form(array $values): array
 function validate_task_form(array $values): array
 {
     $errors = [];
+    $activeCompanyId = current_company_id();
     $customerId = $values['customer_id'] ?? null;
     $locationId = $values['location_id'] ?? null;
     $requestedDate = (string) ($values['requested_date'] ?? '');
     $dueDate = (string) ($values['due_date'] ?? '');
 
+    if ($activeCompanyId === null) {
+        $errors['form'] = 'Select an active company before creating or updating a task.';
+
+        return $errors;
+    }
+
     if ($customerId === null) {
         $errors['customer_id'] = 'Select a valid customer.';
-    } elseif (find_customer_by_id((int) $customerId) === null) {
+    } elseif (find_customer_by_id_in_company((int) $customerId, $activeCompanyId) === null) {
         $errors['customer_id'] = 'The selected customer was not found.';
     }
 
     if ($locationId !== null) {
-        $location = find_location_by_id((int) $locationId);
-
-        if ($location === null) {
-            $errors['location_id'] = 'The selected location was not found.';
-        } elseif ($customerId !== null && (int) $location['customer_id'] !== (int) $customerId) {
+        if ($customerId !== null && find_location_by_id_for_customer_in_company((int) $locationId, (int) $customerId, $activeCompanyId) === null) {
             $errors['location_id'] = 'The selected location does not belong to the selected customer.';
         }
     }
@@ -837,9 +866,10 @@ function validate_task_form(array $values): array
     return $errors;
 }
 
-function save_job_payload(array $values, int $createdByUserId, ?string $currentStatus = null): array
+function save_job_payload(array $values, int $companyId, int $createdByUserId, ?string $currentStatus = null): array
 {
     return [
+        'company_id' => $companyId,
         'task_id' => $values['task_id'] !== null ? (int) $values['task_id'] : null,
         'customer_id' => (int) $values['customer_id'],
         'location_id' => (int) $values['location_id'],
@@ -857,9 +887,10 @@ function save_job_payload(array $values, int $createdByUserId, ?string $currentS
     ];
 }
 
-function save_task_payload(array $values, int $createdByUserId): array
+function save_task_payload(array $values, int $companyId, int $createdByUserId): array
 {
     return [
+        'company_id' => $companyId,
         'customer_id' => (int) $values['customer_id'],
         'location_id' => $values['location_id'] !== null ? (int) $values['location_id'] : null,
         'title' => $values['title'],
@@ -2066,7 +2097,8 @@ try {
                         'formAction' => '/tasks',
                         'submitLabel' => 'Create Task',
                         'customers' => active_customers(),
-                        'locations' => list_active_locations(),
+                        'locations' => task_form_locations($values['customer_id']),
+                        'locationCatalog' => form_location_catalog(),
                         'values' => $values,
                         'errors' => $errors,
                         'task' => null,
@@ -2076,17 +2108,29 @@ try {
                 }
 
                 $createdByUser = current_user();
+                $activeCompanyId = current_company_id();
+
+                if ($activeCompanyId === null) {
+                    abort(409, 'Active company required', 'Select an active company before creating a task.');
+                }
 
                 try {
-                    $taskId = create_task(save_task_payload($values, (int) $createdByUser['id']));
-                } catch (RuntimeException $exception) {
+                    $taskId = create_task(save_task_payload($values, $activeCompanyId, (int) $createdByUser['id']));
+                } catch (Throwable $exception) {
+                    error_log(sprintf(
+                        '[tasks.create] Task creation failed (company_id=%d, user_id=%d): %s',
+                        $activeCompanyId,
+                        (int) $createdByUser['id'],
+                        $exception->getMessage()
+                    ));
                     render('tasks/form', [
                         'pageTitle' => 'Create Task',
                         'formTitle' => 'Create Task',
                         'formAction' => '/tasks',
                         'submitLabel' => 'Create Task',
                         'customers' => active_customers(),
-                        'locations' => list_active_locations(),
+                        'locations' => task_form_locations($values['customer_id']),
+                        'locationCatalog' => form_location_catalog(),
                         'values' => $values,
                         'errors' => ['task_number' => 'Could not generate a task number. Please try again.'],
                         'task' => null,
@@ -2127,7 +2171,8 @@ try {
                 'formAction' => '/tasks',
                 'submitLabel' => 'Create Task',
                 'customers' => active_customers(),
-                'locations' => list_active_locations(),
+                'locations' => task_form_locations(task_form_values($_GET)['customer_id']),
+                'locationCatalog' => form_location_catalog(),
                 'values' => task_form_values($_GET),
                 'errors' => [],
                 'task' => null,
@@ -2172,7 +2217,8 @@ try {
                     'formAction' => '/tasks/' . $task['id'] . '/edit',
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => list_active_locations(),
+                    'locations' => task_form_locations((int) $task['customer_id']),
+                    'locationCatalog' => form_location_catalog(),
                     'values' => task_form_values([], [
                         'customer_id' => (int) $task['customer_id'],
                         'location_id' => $task['location_id'] !== null ? (int) $task['location_id'] : null,
@@ -2209,7 +2255,8 @@ try {
                     'formAction' => '/tasks/' . $task['id'] . '/edit',
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => list_active_locations(),
+                    'locations' => task_form_locations($values['customer_id']),
+                    'locationCatalog' => form_location_catalog(),
                     'values' => $values,
                     'errors' => $errors,
                     'task' => $task,
@@ -2217,7 +2264,13 @@ try {
                 break;
             }
 
-            update_task((int) $task['id'], save_task_payload($values, (int) ($task['created_by_user_id'] ?? current_user()['id'])));
+            $activeCompanyId = current_company_id();
+
+            if ($activeCompanyId === null) {
+                abort(409, 'Active company required', 'Select an active company before updating a task.');
+            }
+
+            update_task((int) $task['id'], save_task_payload($values, $activeCompanyId, (int) ($task['created_by_user_id'] ?? current_user()['id'])));
             flash('success', 'Task updated successfully.');
             redirect('/tasks/' . $task['id']);
             break;
@@ -2292,7 +2345,8 @@ try {
                         'taskOptions' => list_tasks(),
                         'submitLabel' => 'Create Job',
                         'customers' => active_customers(),
-                        'locations' => list_active_locations(),
+                        'locations' => task_form_locations($values['customer_id']),
+                        'locationCatalog' => form_location_catalog(),
                         'workers' => list_active_workers(),
                         'values' => $values,
                         'errors' => $errors,
@@ -2304,10 +2358,21 @@ try {
                 }
 
                 $createdByUser = current_user();
+                $activeCompanyId = current_company_id();
+
+                if ($activeCompanyId === null) {
+                    abort(409, 'Active company required', 'Select an active company before creating a job.');
+                }
 
                 try {
-                    $jobId = create_job(save_job_payload($values, (int) $createdByUser['id']));
-                } catch (RuntimeException $exception) {
+                    $jobId = create_job(save_job_payload($values, $activeCompanyId, (int) $createdByUser['id']));
+                } catch (Throwable $exception) {
+                    error_log(sprintf(
+                        '[jobs.create] Job creation failed (company_id=%d, user_id=%d): %s',
+                        $activeCompanyId,
+                        (int) $createdByUser['id'],
+                        $exception->getMessage()
+                    ));
                     render('jobs/form', [
                         'pageTitle' => 'Create Job',
                         'formTitle' => 'Create Job',
@@ -2315,7 +2380,8 @@ try {
                         'taskOptions' => list_tasks(),
                         'submitLabel' => 'Create Job',
                         'customers' => active_customers(),
-                        'locations' => list_active_locations(),
+                        'locations' => task_form_locations($values['customer_id']),
+                        'locationCatalog' => form_location_catalog(),
                         'workers' => list_active_workers(),
                         'values' => $values,
                         'errors' => ['job_number' => 'Could not generate a job number. Please try again.'],
@@ -2388,7 +2454,8 @@ try {
                 'taskOptions' => list_tasks(),
                 'submitLabel' => 'Create Job',
                 'customers' => active_customers(),
-                'locations' => list_active_locations(),
+                'locations' => task_form_locations(job_form_values($_GET, $defaults)['customer_id']),
+                'locationCatalog' => form_location_catalog(),
                 'workers' => list_active_workers(),
                 'values' => job_form_values($_GET, $defaults),
                 'errors' => [],
@@ -2964,7 +3031,8 @@ try {
                     'taskOptions' => list_tasks(),
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => list_active_locations(),
+                    'locations' => task_form_locations((int) $job['customer_id']),
+                    'locationCatalog' => form_location_catalog(),
                     'workers' => list_active_workers(),
                     'values' => job_form_values([], [
                         'task_id' => $job['task_id'] !== null ? (int) $job['task_id'] : null,
@@ -3008,7 +3076,8 @@ try {
                     'taskOptions' => list_tasks(),
                     'submitLabel' => 'Save Changes',
                     'customers' => active_customers(),
-                    'locations' => list_active_locations(),
+                    'locations' => task_form_locations($values['customer_id']),
+                    'locationCatalog' => form_location_catalog(),
                     'workers' => list_active_workers(),
                     'values' => $values,
                     'errors' => $errors,
@@ -3018,7 +3087,13 @@ try {
                 break;
             }
 
-            update_job((int) $job['id'], save_job_payload($values, (int) ($job['created_by_user_id'] ?? current_user()['id']), (string) $job['status']));
+            $activeCompanyId = current_company_id();
+
+            if ($activeCompanyId === null) {
+                abort(409, 'Active company required', 'Select an active company before updating a job.');
+            }
+
+            update_job((int) $job['id'], save_job_payload($values, $activeCompanyId, (int) ($job['created_by_user_id'] ?? current_user()['id']), (string) $job['status']));
             flash('success', 'Job updated successfully.');
             redirect('/jobs/' . $job['id']);
             break;

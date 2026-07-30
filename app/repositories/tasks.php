@@ -273,6 +273,16 @@ function create_task(array $data): int
                 continue;
             }
 
+            error_log(sprintf(
+                '[tasks.create] Failed to insert task (company_id=%s, customer_id=%s, location_id=%s, user_id=%s, attempt=%d): %s',
+                isset($data['company_id']) ? (string) $data['company_id'] : 'null',
+                isset($data['customer_id']) ? (string) $data['customer_id'] : 'null',
+                isset($data['location_id']) ? (string) $data['location_id'] : 'null',
+                isset($data['created_by_user_id']) ? (string) $data['created_by_user_id'] : 'null',
+                $attempt + 1,
+                $exception->getMessage()
+            ));
+
             throw $exception;
         }
     }
@@ -375,21 +385,27 @@ function list_jobs_for_task(int $taskId): array
 
 function next_task_number(): string
 {
-    $statement = tasks_connection()->query(
-        "SELECT task_number
-         FROM tasks
-         WHERE task_number REGEXP '^TASK-[0-9]{6}$'
-         ORDER BY CAST(SUBSTRING(task_number, 6) AS UNSIGNED) DESC
-         LIMIT 1"
-    );
-    $lastNumber = $statement->fetchColumn();
-    $nextValue = 1;
+    try {
+        $statement = tasks_connection()->query(
+            "SELECT task_number
+             FROM tasks
+             WHERE task_number REGEXP '^TASK-[0-9]{6}$'
+             ORDER BY CAST(SUBSTRING(task_number, 6) AS UNSIGNED) DESC
+             LIMIT 1"
+        );
+        $lastNumber = $statement->fetchColumn();
+        $nextValue = 1;
 
-    if (is_string($lastNumber) && preg_match('/^TASK-([0-9]{6})$/', $lastNumber, $matches) === 1) {
-        $nextValue = ((int) $matches[1]) + 1;
+        if (is_string($lastNumber) && preg_match('/^TASK-([0-9]{6})$/', $lastNumber, $matches) === 1) {
+            $nextValue = ((int) $matches[1]) + 1;
+        }
+
+        return sprintf('TASK-%06d', $nextValue);
+    } catch (PDOException $exception) {
+        error_log(sprintf('[tasks.numbering] Failed to generate next task number: %s', $exception->getMessage()));
+
+        throw $exception;
     }
-
-    return sprintf('TASK-%06d', $nextValue);
 }
 
 function task_number_conflict(PDOException $exception): bool

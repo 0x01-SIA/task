@@ -35,6 +35,10 @@ $newCustomerUrl = app_url('/customers/create?' . http_build_query([
                     <div class="alert alert-danger mb-0" role="alert"><?= h($errors['job_number']) ?></div>
                 <?php endif; ?>
 
+                <?php if (isset($errors['form'])): ?>
+                    <div class="alert alert-danger mb-0" role="alert"><?= h($errors['form']) ?></div>
+                <?php endif; ?>
+
                 <?php if (($taskContext ?? null) !== null): ?>
                     <div class="alert alert-info mb-0" role="status">
                         Creating a job for task <strong><?= h($taskContext['task_number']) ?></strong> - <?= h($taskContext['title']) ?>.
@@ -93,6 +97,7 @@ $newCustomerUrl = app_url('/customers/create?' . http_build_query([
                             id="location_id"
                             name="location_id"
                             data-customer-location-filter="location"
+                            data-location-catalog="<?= h((string) json_encode($locationCatalog ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>"
                             required
                         >
                             <option value="">Select a location</option>

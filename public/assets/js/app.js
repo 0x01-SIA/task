@@ -4,25 +4,39 @@ const customerSelect = document.querySelector('[data-customer-location-filter="c
 const locationSelect = document.querySelector('[data-customer-location-filter="location"]');
 
 if (customerSelect && locationSelect) {
+    const placeholderOption = locationSelect.options[0] ?? null;
+    const placeholderValue = placeholderOption?.value ?? '';
+    const placeholderLabel = placeholderOption?.textContent ?? '';
+    let locationCatalog = [];
+
+    try {
+        locationCatalog = JSON.parse(locationSelect.getAttribute('data-location-catalog') ?? '[]');
+    } catch (error) {
+        locationCatalog = [];
+    }
+
+    const buildOptionLabel = (location) => {
+        const addressLine = typeof location.address_line === 'string' ? location.address_line.trim() : '';
+
+        return addressLine === '' ? location.name : `${location.name} - ${addressLine}`;
+    };
+
     const updateLocationOptions = () => {
         const customerId = customerSelect.value;
-        const selectedOption = locationSelect.options[locationSelect.selectedIndex] ?? null;
+        const selectedValue = locationSelect.value;
+        const matchingLocations = customerId === ''
+            ? []
+            : locationCatalog.filter((location) => String(location.customer_id) === customerId);
 
-        Array.from(locationSelect.options).forEach((option, index) => {
-            if (index === 0) {
-                option.hidden = false;
-                return;
-            }
+        locationSelect.innerHTML = '';
+        locationSelect.add(new Option(placeholderLabel, placeholderValue));
 
-            const optionCustomerId = option.getAttribute('data-customer-id');
-            const matches = customerId === '' || optionCustomerId === customerId;
-
-            option.hidden = !matches;
+        matchingLocations.forEach((location) => {
+            locationSelect.add(new Option(buildOptionLabel(location), String(location.id)));
         });
 
-        if (selectedOption !== null && selectedOption.hidden) {
-            locationSelect.value = '';
-        }
+        const stillValid = matchingLocations.some((location) => String(location.id) === selectedValue);
+        locationSelect.value = stillValid ? selectedValue : placeholderValue;
     };
 
     customerSelect.addEventListener('change', updateLocationOptions);
