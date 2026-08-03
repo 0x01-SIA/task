@@ -591,22 +591,22 @@ function list_material_inventory_lines(int $companyId, int $inventoryId): array
 {
     $statement = material_stock_connection()->prepare(
         "SELECT
-            lines.id,
-            lines.inventory_id,
-            lines.company_id,
-            lines.material_id,
-            lines.counted_quantity,
-            lines.system_quantity_at_start,
-            lines.created_at,
-            lines.updated_at,
+            inventory_line.id,
+            inventory_line.inventory_id,
+            inventory_line.company_id,
+            inventory_line.material_id,
+            inventory_line.counted_quantity,
+            inventory_line.system_quantity_at_start,
+            inventory_line.created_at,
+            inventory_line.updated_at,
             m.name AS material_name,
             m.sku AS material_sku,
             m.unit AS material_unit,
             m.is_active AS material_is_active
-         FROM material_inventory_lines lines
-         INNER JOIN materials m ON m.id = lines.material_id
-         WHERE lines.company_id = :company_id
-           AND lines.inventory_id = :inventory_id
+         FROM material_inventory_lines inventory_line
+         INNER JOIN materials m ON m.id = inventory_line.material_id
+         WHERE inventory_line.company_id = :company_id
+           AND inventory_line.inventory_id = :inventory_id
          ORDER BY m.name ASC, m.id ASC"
     );
     $statement->execute([

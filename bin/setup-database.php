@@ -73,6 +73,9 @@ function reset_database(PDO $connection): void
     try {
         $connection->exec(
             'DROP TABLE IF EXISTS
+                material_inventory_lines,
+                material_inventories,
+                material_movements,
                 job_materials,
                 materials,
                 job_customer_confirmations,

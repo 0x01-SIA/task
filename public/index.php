@@ -2259,9 +2259,14 @@ try {
                 abort(409, 'Active company required', 'Select an active company before starting an inventory.');
             }
 
-            $inventoryId = create_material_inventory($activeCompanyId, (int) $viewer['id']);
-            flash('success', 'Inventory started successfully.');
-            redirect('/materials/inventories/' . $inventoryId);
+            try {
+                $inventoryId = create_material_inventory($activeCompanyId, (int) $viewer['id']);
+                flash('success', 'Inventory started successfully.');
+                redirect('/materials/inventories/' . $inventoryId);
+            } catch (Throwable $exception) {
+                flash('error', safe_error_message($exception->getMessage()));
+                redirect('/materials/inventories');
+            }
             break;
 
         case preg_match('#^/materials/inventories/([1-9][0-9]*)$#', $path, $matches) === 1:
