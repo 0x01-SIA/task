@@ -516,10 +516,19 @@ function list_material_inventories(int $companyId, array $filters = []): array
                 starter.name AS started_by_name,
                 submitter.name AS submitted_by_name,
                 approver.name AS approved_by_name,
-                COUNT(lines.id) AS counted_material_count,
-                SUM(CASE WHEN lines.counted_quantity IS NOT NULL THEN 1 ELSE 0 END) AS completed_material_count
+                COALESCE(line_counts.counted_material_count, 0) AS counted_material_count,
+                COALESCE(line_counts.completed_material_count, 0) AS completed_material_count
             FROM material_inventories inv
-            LEFT JOIN material_inventory_lines lines ON lines.inventory_id = inv.id
+            LEFT JOIN (
+                SELECT
+                    inventory_id,
+                    company_id,
+                    COUNT(id) AS counted_material_count,
+                    SUM(CASE WHEN counted_quantity IS NOT NULL THEN 1 ELSE 0 END) AS completed_material_count
+                FROM material_inventory_lines
+                GROUP BY inventory_id, company_id
+            ) line_counts ON line_counts.inventory_id = inv.id
+                AND line_counts.company_id = inv.company_id
             LEFT JOIN users starter ON starter.id = inv.started_by_user_id
             LEFT JOIN users submitter ON submitter.id = inv.submitted_by_user_id
             LEFT JOIN users approver ON approver.id = inv.approved_by_user_id
@@ -532,7 +541,7 @@ function list_material_inventories(int $companyId, array $filters = []): array
         $params['status'] = $status;
     }
 
-    $sql .= ' GROUP BY inv.id ORDER BY inv.started_at DESC, inv.id DESC';
+    $sql .= ' ORDER BY inv.started_at DESC, inv.id DESC';
 
     $statement = material_stock_connection()->prepare($sql);
     $statement->execute($params);
@@ -549,16 +558,24 @@ function find_material_inventory_by_id(int $companyId, int $inventoryId): ?array
             starter.name AS started_by_name,
             submitter.name AS submitted_by_name,
             approver.name AS approved_by_name,
-            COUNT(lines.id) AS counted_material_count,
-            SUM(CASE WHEN lines.counted_quantity IS NOT NULL THEN 1 ELSE 0 END) AS completed_material_count
+            COALESCE(line_counts.counted_material_count, 0) AS counted_material_count,
+            COALESCE(line_counts.completed_material_count, 0) AS completed_material_count
          FROM material_inventories inv
-         LEFT JOIN material_inventory_lines lines ON lines.inventory_id = inv.id
+         LEFT JOIN (
+             SELECT
+                 inventory_id,
+                 company_id,
+                 COUNT(id) AS counted_material_count,
+                 SUM(CASE WHEN counted_quantity IS NOT NULL THEN 1 ELSE 0 END) AS completed_material_count
+             FROM material_inventory_lines
+             GROUP BY inventory_id, company_id
+         ) line_counts ON line_counts.inventory_id = inv.id
+             AND line_counts.company_id = inv.company_id
          LEFT JOIN users starter ON starter.id = inv.started_by_user_id
          LEFT JOIN users submitter ON submitter.id = inv.submitted_by_user_id
          LEFT JOIN users approver ON approver.id = inv.approved_by_user_id
          WHERE inv.company_id = :company_id
            AND inv.id = :inventory_id
-         GROUP BY inv.id
          LIMIT 1"
     );
     $statement->execute([
