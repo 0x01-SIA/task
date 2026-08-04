@@ -201,9 +201,9 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                     <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/photos')) ?>" enctype="multipart/form-data" class="job-upload-form">
                         <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
                         <div>
-                            <label class="form-label" for="photo">Upload photo</label>
-                            <input class="form-control<?= $photoError !== null && $photoCaptionError === null ? ' is-invalid' : '' ?>" type="file" id="photo" name="photo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
-                            <div class="form-text">Maximum size: <?= h(format_file_size(job_photo_rules()['max_bytes'])) ?>.</div>
+                            <label class="form-label" for="photo">Select photos</label>
+                            <input class="form-control<?= $photoError !== null && $photoCaptionError === null ? ' is-invalid' : '' ?>" type="file" id="photo" name="photo[]" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple>
+                            <div class="form-text">You can upload up to <?= h((string) job_photo_rules()['max_files']) ?> photos at once. Maximum size: <?= h(format_file_size(job_photo_rules()['max_bytes'])) ?> per photo.</div>
                         </div>
                         <div>
                             <label class="form-label" for="caption">Caption (optional)</label>
@@ -216,7 +216,7 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                             <?php endif; ?>
                         </div>
                         <div>
-                            <button class="btn btn-primary" type="submit">Upload Photo</button>
+                            <button class="btn btn-primary" type="submit">Upload Photos</button>
                         </div>
                     </form>
                 <?php endif; ?>

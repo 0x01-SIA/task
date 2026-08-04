@@ -113,12 +113,14 @@ function job_attachment_rules(): array
 
 function job_photo_rules(): array
 {
-    $defaultMaxBytes = min(job_server_upload_limit_bytes(), 10 * 1024 * 1024);
+    $defaultMaxBytes = min(job_server_upload_limit_bytes(), 25 * 1024 * 1024);
     $configuredMaxBytes = (int) config('uploads.photos.max_bytes', $defaultMaxBytes);
     $maxBytes = min($configuredMaxBytes > 0 ? $configuredMaxBytes : $defaultMaxBytes, job_server_upload_limit_bytes());
+    $configuredMaxFiles = (int) config('uploads.photos.max_files', 10);
 
     return [
         'max_bytes' => $maxBytes,
+        'max_files' => $configuredMaxFiles > 0 ? $configuredMaxFiles : 10,
         'extensions' => [
             'jpg' => ['image/jpeg'],
             'jpeg' => ['image/jpeg'],
@@ -281,6 +283,200 @@ function validate_job_photo_upload(array $file): ?string
     return null;
 }
 
+function normalize_uploaded_file_list(array $files): array
+{
+    $keys = ['name', 'type', 'tmp_name', 'error', 'size'];
+
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $files)) {
+            return [
+                'valid' => false,
+                'files' => [],
+            ];
+        }
+    }
+
+    if (!is_array($files['name'])) {
+        return [
+            'valid' => true,
+            'files' => [$files],
+        ];
+    }
+
+    foreach ($keys as $key) {
+        if (!is_array($files[$key]) || count($files[$key]) !== count($files['name'])) {
+            return [
+                'valid' => false,
+                'files' => [],
+            ];
+        }
+    }
+
+    $normalized = [];
+    $fileCount = count($files['name']);
+
+    for ($index = 0; $index < $fileCount; $index++) {
+        foreach ($keys as $key) {
+            if (is_array($files[$key][$index] ?? null)) {
+                return [
+                    'valid' => false,
+                    'files' => [],
+                ];
+            }
+        }
+
+        $normalized[] = [
+            'name' => $files['name'][$index] ?? '',
+            'type' => $files['type'][$index] ?? '',
+            'tmp_name' => $files['tmp_name'][$index] ?? '',
+            'error' => $files['error'][$index] ?? UPLOAD_ERR_NO_FILE,
+            'size' => $files['size'][$index] ?? 0,
+        ];
+    }
+
+    return [
+        'valid' => true,
+        'files' => $normalized,
+    ];
+}
+
+function summarize_job_photo_upload_result(array $result): string
+{
+    $successCount = (int) ($result['uploaded'] ?? 0);
+    $failures = is_array($result['failures'] ?? null) ? $result['failures'] : [];
+
+    if ($successCount === 0 && count($failures) === 1 && is_string($failures[0]['message'] ?? null)) {
+        return $failures[0]['message'];
+    }
+
+    $parts = [];
+
+    if ($successCount > 0) {
+        $parts[] = $successCount . ' ' . ($successCount === 1 ? 'photo uploaded successfully.' : 'photos uploaded successfully.');
+    }
+
+    if ($failures !== []) {
+        $counts = [];
+
+        foreach ($failures as $failure) {
+            $category = (string) ($failure['category'] ?? 'failed');
+            $counts[$category] = ($counts[$category] ?? 0) + 1;
+        }
+
+        $labels = [
+            'too_large' => ['file was too large.', 'files were too large.'],
+            'unsupported_type' => ['file type was not supported.', 'file types were not supported.'],
+            'invalid_image' => ['file was not a valid image.', 'files were not valid images.'],
+            'incomplete' => ['upload was incomplete.', 'uploads were incomplete.'],
+            'too_many' => ['file exceeded the upload count limit.', 'files exceeded the upload count limit.'],
+            'failed' => ['file could not be uploaded.', 'files could not be uploaded.'],
+        ];
+
+        foreach ($counts as $category => $count) {
+            $labelSet = $labels[$category] ?? $labels['failed'];
+            $parts[] = $count . ' ' . ($count === 1 ? $labelSet[0] : $labelSet[1]);
+        }
+    }
+
+    if ($parts === []) {
+        return 'No photos were uploaded.';
+    }
+
+    return implode(' ', $parts);
+}
+
+function store_uploaded_job_photo_batch(int $jobId, array $files, int $userId, ?string $caption = null): array
+{
+    $normalized = normalize_uploaded_file_list($files);
+
+    if (!$normalized['valid']) {
+        return [
+            'uploaded' => 0,
+            'failures' => [
+                [
+                    'category' => 'failed',
+                    'message' => 'The uploaded files could not be processed. Please try again.',
+                ],
+            ],
+        ];
+    }
+
+    $selectedFiles = array_values(array_filter(
+        $normalized['files'],
+        static fn (array $file): bool => !(
+            ((int) ($file['error'] ?? UPLOAD_ERR_NO_FILE)) === UPLOAD_ERR_NO_FILE
+            && trim((string) ($file['name'] ?? '')) === ''
+            && trim((string) ($file['tmp_name'] ?? '')) === ''
+            && (int) ($file['size'] ?? 0) === 0
+        )
+    ));
+
+    if ($selectedFiles === []) {
+        return [
+            'uploaded' => 0,
+            'failures' => [
+                ['category' => 'failed', 'message' => 'Choose at least one photo before uploading.'],
+            ],
+        ];
+    }
+
+    $rules = job_photo_rules();
+    $processableFiles = array_slice($selectedFiles, 0, $rules['max_files']);
+    $extraFiles = max(0, count($selectedFiles) - count($processableFiles));
+    $result = [
+        'uploaded' => 0,
+        'failures' => [],
+    ];
+
+    for ($index = 0; $index < $extraFiles; $index++) {
+        $result['failures'][] = [
+            'category' => 'too_many',
+            'message' => 'You can upload up to ' . $rules['max_files'] . ' photos at once.',
+        ];
+    }
+
+    foreach ($processableFiles as $file) {
+        $validationError = validate_job_photo_upload($file);
+
+        if ($validationError !== null) {
+            $result['failures'][] = [
+                'category' => job_photo_upload_failure_category($validationError),
+                'message' => $validationError,
+            ];
+            continue;
+        }
+
+        try {
+            store_uploaded_job_photo($jobId, $file, $userId, $caption);
+            $result['uploaded']++;
+        } catch (Throwable) {
+            $result['failures'][] = [
+                'category' => 'failed',
+                'message' => 'The photo could not be uploaded.',
+            ];
+        }
+    }
+
+    return $result;
+}
+
+function job_photo_upload_failure_category(string $message): string
+{
+    return match ($message) {
+        'The uploaded file exceeds the allowed size limit.',
+        'The photo exceeds the configured size limit.' => 'too_large',
+        'Unsupported photo type. Allowed types: JPEG, PNG, WebP.' => 'unsupported_type',
+        'The file upload was incomplete. Please try again.' => 'incomplete',
+        'The uploaded image could not be verified.',
+        'The uploaded image must have a filename.',
+        'The uploaded image is empty.',
+        'The uploaded file is not a valid image.',
+        'The uploaded image type does not match its extension.',
+        'The uploaded image contents are invalid.' => 'invalid_image',
+        default => 'failed',
+    };
+}
+
 function store_uploaded_job_attachment(int $jobId, array $file, int $userId): void
 {
     $directory = ensure_job_asset_directory($jobId, 'attachment');
@@ -293,16 +489,24 @@ function store_uploaded_job_attachment(int $jobId, array $file, int $userId): vo
         throw new RuntimeException('The attachment could not be stored.');
     }
 
-    create_job_asset_record('attachment', [
-        'company_id' => current_company_id(),
-        'job_id' => $jobId,
-        'original_filename' => basename($originalName),
-        'stored_filename' => $storedName,
-        'storage_path' => $storedPath,
-        'mime_type' => detect_uploaded_file_mime($storedPath),
-        'file_size' => filesize($storedPath) ?: (int) $file['size'],
-        'uploaded_by_user_id' => $userId,
-    ]);
+    try {
+        create_job_asset_record('attachment', [
+            'company_id' => current_company_id(),
+            'job_id' => $jobId,
+            'original_filename' => basename($originalName),
+            'stored_filename' => $storedName,
+            'storage_path' => $storedPath,
+            'mime_type' => detect_uploaded_file_mime($storedPath),
+            'file_size' => filesize($storedPath) ?: (int) $file['size'],
+            'uploaded_by_user_id' => $userId,
+        ]);
+    } catch (Throwable $exception) {
+        if (is_file($storedPath)) {
+            @unlink($storedPath);
+        }
+
+        throw $exception;
+    }
 }
 
 function store_uploaded_job_photo(int $jobId, array $file, int $userId, ?string $caption = null): void
@@ -317,17 +521,25 @@ function store_uploaded_job_photo(int $jobId, array $file, int $userId, ?string 
         throw new RuntimeException('The photo could not be stored.');
     }
 
-    create_job_asset_record('photo', [
-        'company_id' => current_company_id(),
-        'job_id' => $jobId,
-        'original_filename' => basename($originalName),
-        'stored_filename' => $storedName,
-        'storage_path' => $storedPath,
-        'mime_type' => detect_uploaded_file_mime($storedPath),
-        'file_size' => filesize($storedPath) ?: (int) $file['size'],
-        'uploaded_by_user_id' => $userId,
-        'caption' => $caption,
-    ]);
+    try {
+        create_job_asset_record('photo', [
+            'company_id' => current_company_id(),
+            'job_id' => $jobId,
+            'original_filename' => basename($originalName),
+            'stored_filename' => $storedName,
+            'storage_path' => $storedPath,
+            'mime_type' => detect_uploaded_file_mime($storedPath),
+            'file_size' => filesize($storedPath) ?: (int) $file['size'],
+            'uploaded_by_user_id' => $userId,
+            'caption' => $caption,
+        ]);
+    } catch (Throwable $exception) {
+        if (is_file($storedPath)) {
+            @unlink($storedPath);
+        }
+
+        throw $exception;
+    }
 }
 
 function create_job_asset_record(string $type, array $data): void

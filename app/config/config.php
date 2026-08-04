@@ -23,7 +23,8 @@ return [
             'max_bytes' => (int) env_value('JOB_ATTACHMENT_MAX_BYTES', 10 * 1024 * 1024),
         ],
         'photos' => [
-            'max_bytes' => (int) env_value('JOB_PHOTO_MAX_BYTES', 10 * 1024 * 1024),
+            'max_bytes' => (int) env_value('JOB_PHOTO_MAX_BYTES', 25 * 1024 * 1024),
+            'max_files' => (int) env_value('JOB_PHOTO_MAX_FILES', 10),
         ],
     ],
 ];

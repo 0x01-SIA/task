@@ -784,6 +784,41 @@ function validate_job_photo_caption(string $caption): ?string
     return null;
 }
 
+function handle_job_photo_upload_submission(array $viewer, array $job, bool $workerView): void
+{
+    $photoCaption = job_photo_caption_value($_POST);
+    $photoCaptionError = validate_job_photo_caption($photoCaption);
+
+    if ($photoCaptionError !== null) {
+        render_job_show_page($job, $viewer, [
+            'photoError' => null,
+            'photoCaption' => $photoCaption,
+            'photoCaptionError' => $photoCaptionError,
+        ], $workerView, 422);
+        return;
+    }
+
+    $result = store_uploaded_job_photo_batch(
+        (int) $job['id'],
+        is_array($_FILES['photo'] ?? null) ? $_FILES['photo'] : [],
+        (int) $viewer['id'],
+        $photoCaption !== '' ? $photoCaption : null
+    );
+    $summary = summarize_job_photo_upload_result($result);
+
+    if ((int) $result['uploaded'] === 0) {
+        render_job_show_page($job, $viewer, [
+            'photoError' => $summary,
+            'photoCaption' => $photoCaption,
+            'photoCaptionError' => null,
+        ], $workerView, 422);
+        return;
+    }
+
+    flash('success', $summary);
+    redirect(job_detail_route_for_user($viewer, (int) $job['id']));
+}
+
 function customer_confirmation_form_values(array $source): array
 {
     return [
@@ -3619,22 +3654,7 @@ try {
                 abort(403, 'Access denied', 'You do not have permission to upload photos for this job.');
             }
 
-            $photoCaption = job_photo_caption_value($_POST);
-            $photoCaptionError = validate_job_photo_caption($photoCaption);
-            $photoError = $photoCaptionError ?? validate_job_photo_upload($_FILES['photo'] ?? []);
-
-            if ($photoError !== null) {
-                render_job_show_page($job, $viewer, [
-                    'photoError' => $photoError,
-                    'photoCaption' => $photoCaption,
-                    'photoCaptionError' => $photoCaptionError,
-                ], false, 422);
-                break;
-            }
-
-            store_uploaded_job_photo((int) $job['id'], $_FILES['photo'], (int) $viewer['id'], $photoCaption !== '' ? $photoCaption : null);
-            flash('success', 'Photo uploaded successfully.');
-            redirect('/jobs/' . $job['id']);
+            handle_job_photo_upload_submission($viewer, $job, false);
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)/photos/([1-9][0-9]*)/view$#', $path, $matches) === 1:
@@ -4442,22 +4462,7 @@ try {
                 abort(403, 'Access denied', 'You do not have permission to upload photos for this job.');
             }
 
-            $photoCaption = job_photo_caption_value($_POST);
-            $photoCaptionError = validate_job_photo_caption($photoCaption);
-            $photoError = $photoCaptionError ?? validate_job_photo_upload($_FILES['photo'] ?? []);
-
-            if ($photoError !== null) {
-                render_job_show_page($job, $viewer, [
-                    'photoError' => $photoError,
-                    'photoCaption' => $photoCaption,
-                    'photoCaptionError' => $photoCaptionError,
-                ], true, 422);
-                break;
-            }
-
-            store_uploaded_job_photo((int) $job['id'], $_FILES['photo'], (int) $viewer['id'], $photoCaption !== '' ? $photoCaption : null);
-            flash('success', 'Photo uploaded successfully.');
-            redirect('/work/jobs/' . $job['id']);
+            handle_job_photo_upload_submission($viewer, $job, true);
             break;
 
         case preg_match('#^/work/jobs/([1-9][0-9]*)/photos/([1-9][0-9]*)/delete$#', $path, $matches) === 1:

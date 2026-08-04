@@ -51,6 +51,7 @@ Supported variables:
 - `UPLOAD_BASE_DIR`
 - `JOB_ATTACHMENT_MAX_BYTES`
 - `JOB_PHOTO_MAX_BYTES`
+- `JOB_PHOTO_MAX_FILES`
 
 Sensitive values belong in `.env`, which is ignored by Git.
 
@@ -88,7 +89,8 @@ DB_USERNAME=task_app
 DB_PASSWORD=task_app_dev
 UPLOAD_BASE_DIR=/absolute/path/to/task/storage/uploads
 JOB_ATTACHMENT_MAX_BYTES=10485760
-JOB_PHOTO_MAX_BYTES=10485760
+JOB_PHOTO_MAX_BYTES=26214400
+JOB_PHOTO_MAX_FILES=10
 ```
 
 Run the schema manually:
@@ -207,6 +209,7 @@ Authenticated routes:
 - `GET /jobs/{id}/attachments/{attachmentId}/download` downloads a job attachment through an authenticated route
 - `POST /jobs/{id}/attachments/{attachmentId}/delete` deletes a job attachment for administrators and dispatchers
 - `POST /jobs/{id}/photos` uploads a job photo for administrators and dispatchers
+- The photo upload endpoint accepts one or more files and stores each successful photo as a separate private upload record
 - `GET /jobs/{id}/photos/{photoId}/view` opens a job photo through an authenticated route
 - `POST /jobs/{id}/photos/{photoId}/delete` deletes a job photo while the job is still open
 - `GET /jobs/{id}/edit` shows the edit-job form for administrators and dispatchers
@@ -226,6 +229,7 @@ Authenticated routes:
 - `POST /work/jobs/{id}/materials/{jobMaterialId}/edit` corrects a recorded material quantity while the job remains open
 - `POST /work/jobs/{id}/materials/{jobMaterialId}/delete` removes a recorded material usage entry while the job remains open
 - `POST /work/jobs/{id}/photos` uploads a photo to a worker-accessible job
+- The worker photo upload endpoint also accepts one or more files and stores each successful photo separately
 - `POST /work/jobs/{id}/photos/{photoId}/delete` deletes a job photo while the job is still open and the worker still has access
 - `POST /work/jobs/{id}/start` transitions a worker-accessible job to `in_progress`
 - `POST /work/jobs/{id}/complete` transitions an in-progress worker-accessible job to `completed`
@@ -271,6 +275,40 @@ Worker permission rules:
 - Workers can only record customer confirmation for their own completed jobs.
 - Workers can view job attachments assigned to their own jobs, but cannot upload or delete general attachments.
 - Workers can upload photos to their own jobs and can delete those photos only while the job remains open.
+- Photo uploads remain available even after a job has been completed or closed, but photo deletion still requires the job to be open.
+
+## Production upload limits
+
+The application photo limit is controlled separately from general attachments:
+
+```text
+JOB_PHOTO_MAX_BYTES=26214400
+JOB_PHOTO_MAX_FILES=10
+```
+
+To allow multiple high-resolution photos through the full request chain, production PHP and Nginx limits must also be raised. Update the relevant PHP-FPM or PHP runtime `.ini` file with:
+
+```ini
+upload_max_filesize = 25M
+post_max_size = 150M
+max_file_uploads = 20
+```
+
+Then update the Nginx site or server block:
+
+```nginx
+client_max_body_size 150M;
+```
+
+These settings are not changed automatically by the application. After editing production configuration, reload the services with commands appropriate for the host, for example:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+sudo systemctl reload php8.2-fpm
+```
+
+If your distribution or PHP version uses different service names, adjust the reload command accordingly. Keep `post_max_size` and `client_max_body_size` large enough for several 25 MB photos plus request overhead.
 - Workers cannot access `/tasks`, `/tasks/create`, `/tasks/{id}`, `/tasks/{id}/edit`, `/tasks/{id}/status`, or `/tasks/{id}/jobs/create`.
 - Workers cannot access `/jobs`, `/jobs/create`, `/jobs/{id}`, `/jobs/{id}/edit`, or the job cancel/reactivate routes.
 - Unassigned jobs and jobs assigned to another worker return no worker-facing detail to the requesting worker.
