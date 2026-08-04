@@ -443,6 +443,7 @@ CREATE TABLE job_materials (
     job_id BIGINT UNSIGNED NOT NULL,
     material_id BIGINT UNSIGNED NOT NULL,
     movement_id BIGINT UNSIGNED DEFAULT NULL,
+    entry_type ENUM('used', 'returned') NOT NULL DEFAULT 'used',
     quantity DECIMAL(14,3) NOT NULL,
     recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
     occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

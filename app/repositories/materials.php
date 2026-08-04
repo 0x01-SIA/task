@@ -163,6 +163,7 @@ function list_job_materials(int $jobId): array
             jm.job_id,
             jm.material_id,
             jm.movement_id,
+            jm.entry_type,
             jm.quantity,
             jm.recorded_by_user_id,
             jm.occurred_at,
@@ -194,6 +195,7 @@ function find_job_material_by_id(int $jobId, int $jobMaterialId): ?array
             jm.job_id,
             jm.material_id,
             jm.movement_id,
+            jm.entry_type,
             jm.quantity,
             jm.recorded_by_user_id,
             jm.occurred_at,
@@ -222,7 +224,7 @@ function find_job_material_by_id(int $jobId, int $jobMaterialId): ?array
     return is_array($jobMaterial) ? $jobMaterial : null;
 }
 
-function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?int $recordedByUserId): void
+function add_job_material_entry(int $jobId, int $materialId, string $entryType, string $quantity, ?int $recordedByUserId): void
 {
     $connection = materials_connection();
     $connection->beginTransaction();
@@ -240,6 +242,7 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
                 job_id,
                 material_id,
                 quantity,
+                entry_type,
                 recorded_by_user_id,
                 occurred_at
              ) VALUES (
@@ -247,6 +250,7 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
                 :job_id,
                 :material_id,
                 :quantity,
+                :entry_type,
                 :recorded_by_user_id,
                 CURRENT_TIMESTAMP
              )'
@@ -256,6 +260,7 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
             'job_id' => $jobId,
             'material_id' => $materialId,
             'quantity' => $quantity,
+            'entry_type' => $entryType,
             'recorded_by_user_id' => $recordedByUserId,
         ]);
 
@@ -263,7 +268,7 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
         $movementId = create_material_movement([
             'company_id' => $companyId,
             'material_id' => $materialId,
-            'movement_type' => 'out',
+            'movement_type' => job_material_entry_movement_type($entryType),
             'quantity' => $quantity,
             'job_id' => $jobId,
             'job_material_id' => $jobMaterialId,
@@ -294,7 +299,7 @@ function add_job_material_usage(int $jobId, int $materialId, string $quantity, ?
     }
 }
 
-function update_job_material_quantity(int $jobId, int $jobMaterialId, string $quantity, ?int $recordedByUserId): bool
+function update_job_material_entry(int $jobId, int $jobMaterialId, string $entryType, string $quantity, ?int $recordedByUserId): bool
 {
     $companyId = current_company_id();
 
@@ -305,6 +310,23 @@ function update_job_material_quantity(int $jobId, int $jobMaterialId, string $qu
     $jobMaterial = find_job_material_by_id($jobId, $jobMaterialId);
 
     if ($jobMaterial === null) {
+        return false;
+    }
+
+    $movement = find_linked_job_material_movement($companyId, $jobMaterial);
+
+    if ($movement === null) {
+        error_log(sprintf(
+            '[job_materials.update] Linked movement could not be resolved (job_id=%d, job_material_id=%d, material_id=%d, movement_id=%s, company_id=%s, user_id=%s, status=%s)',
+            $jobId,
+            $jobMaterialId,
+            (int) $jobMaterial['material_id'],
+            $jobMaterial['movement_id'] !== null ? (string) $jobMaterial['movement_id'] : 'null',
+            $companyId,
+            $recordedByUserId !== null ? (string) $recordedByUserId : 'null',
+            (string) ($jobMaterial['job_status'] ?? '')
+        ));
+
         return false;
     }
 
@@ -319,6 +341,7 @@ function update_job_material_quantity(int $jobId, int $jobMaterialId, string $qu
         $statement = $connection->prepare(
             'UPDATE job_materials
              SET quantity = :quantity,
+                 entry_type = :entry_type,
                  recorded_by_user_id = :recorded_by_user_id,
                  updated_at = CURRENT_TIMESTAMP
              WHERE company_id = :company_id
@@ -327,6 +350,7 @@ function update_job_material_quantity(int $jobId, int $jobMaterialId, string $qu
         );
         $statement->execute([
             'quantity' => $quantity,
+            'entry_type' => $entryType,
             'recorded_by_user_id' => $recordedByUserId,
             'company_id' => $companyId,
             'job_id' => $jobId,
@@ -335,15 +359,17 @@ function update_job_material_quantity(int $jobId, int $jobMaterialId, string $qu
 
         $movementStatement = $connection->prepare(
             'UPDATE material_movements
-             SET quantity = :quantity,
+             SET movement_type = :movement_type,
+                 quantity = :quantity,
                  created_by_user_id = :created_by_user_id
              WHERE id = :movement_id
                AND company_id = :company_id'
         );
         $movementStatement->execute([
+            'movement_type' => job_material_entry_movement_type($entryType),
             'quantity' => $quantity,
             'created_by_user_id' => $recordedByUserId,
-            'movement_id' => (int) $jobMaterial['movement_id'],
+            'movement_id' => (int) $movement['id'],
             'company_id' => $companyId,
         ]);
 
@@ -373,6 +399,20 @@ function delete_job_material(int $jobId, int $jobMaterialId): bool
         return false;
     }
 
+    $movement = find_linked_job_material_movement($companyId, $jobMaterial);
+
+    if ($movement === null) {
+        error_log(sprintf(
+            '[job_materials.delete] Linked movement could not be resolved (job_id=%d, job_material_id=%d, material_id=%d, movement_id=%s, company_id=%s)',
+            $jobId,
+            $jobMaterialId,
+            (int) $jobMaterial['material_id'],
+            $jobMaterial['movement_id'] !== null ? (string) $jobMaterial['movement_id'] : 'null',
+            $companyId
+        ));
+        return false;
+    }
+
     if (material_movement_is_protected($companyId, (int) $jobMaterial['material_id'], (string) $jobMaterial['occurred_at'])) {
         return false;
     }
@@ -381,43 +421,41 @@ function delete_job_material(int $jobId, int $jobMaterialId): bool
     $connection->beginTransaction();
 
     try {
-        $movementId = $jobMaterial['movement_id'] !== null ? (int) $jobMaterial['movement_id'] : null;
+        $movementId = (int) $movement['id'];
 
-        if ($movementId !== null) {
-            $unlinkJobMaterialStatement = $connection->prepare(
-                'UPDATE job_materials
-                 SET movement_id = NULL
-                 WHERE company_id = :company_id
-                   AND job_id = :job_id
-                   AND id = :id'
-            );
-            $unlinkJobMaterialStatement->execute([
-                'company_id' => $companyId,
-                'job_id' => $jobId,
-                'id' => $jobMaterialId,
-            ]);
+        $unlinkJobMaterialStatement = $connection->prepare(
+            'UPDATE job_materials
+             SET movement_id = NULL
+             WHERE company_id = :company_id
+               AND job_id = :job_id
+               AND id = :id'
+        );
+        $unlinkJobMaterialStatement->execute([
+            'company_id' => $companyId,
+            'job_id' => $jobId,
+            'id' => $jobMaterialId,
+        ]);
 
-            $unlinkMovementStatement = $connection->prepare(
-                'UPDATE material_movements
-                 SET job_material_id = NULL
-                 WHERE id = :movement_id
-                   AND company_id = :company_id'
-            );
-            $unlinkMovementStatement->execute([
-                'movement_id' => $movementId,
-                'company_id' => $companyId,
-            ]);
+        $unlinkMovementStatement = $connection->prepare(
+            'UPDATE material_movements
+             SET job_material_id = NULL
+             WHERE id = :movement_id
+               AND company_id = :company_id'
+        );
+        $unlinkMovementStatement->execute([
+            'movement_id' => $movementId,
+            'company_id' => $companyId,
+        ]);
 
-            $movementStatement = $connection->prepare(
-                'DELETE FROM material_movements
-                 WHERE id = :movement_id
-                   AND company_id = :company_id'
-            );
-            $movementStatement->execute([
-                'movement_id' => $movementId,
-                'company_id' => $companyId,
-            ]);
-        }
+        $movementStatement = $connection->prepare(
+            'DELETE FROM material_movements
+             WHERE id = :movement_id
+               AND company_id = :company_id'
+        );
+        $movementStatement->execute([
+            'movement_id' => $movementId,
+            'company_id' => $companyId,
+        ]);
 
         $statement = $connection->prepare(
             'DELETE FROM job_materials
@@ -441,6 +479,55 @@ function delete_job_material(int $jobId, int $jobMaterialId): bool
 
         throw $exception;
     }
+}
+
+function find_linked_job_material_movement(int $companyId, array $jobMaterial): ?array
+{
+    $connection = materials_connection();
+
+    if (($jobMaterial['movement_id'] ?? null) !== null) {
+        $statement = $connection->prepare(
+            'SELECT id, company_id, material_id, movement_type, quantity, job_id, job_material_id
+             FROM material_movements
+             WHERE id = :id
+               AND company_id = :company_id
+             LIMIT 1'
+        );
+        $statement->execute([
+            'id' => (int) $jobMaterial['movement_id'],
+            'company_id' => $companyId,
+        ]);
+        $movement = $statement->fetch();
+
+        if (is_array($movement)
+            && (int) ($movement['job_material_id'] ?? 0) === (int) $jobMaterial['id']
+            && (int) ($movement['material_id'] ?? 0) === (int) $jobMaterial['material_id']) {
+            return $movement;
+        }
+    }
+
+    $fallback = $connection->prepare(
+        'SELECT id, company_id, material_id, movement_type, quantity, job_id, job_material_id
+         FROM material_movements
+         WHERE company_id = :company_id
+           AND job_material_id = :job_material_id
+         LIMIT 1'
+    );
+    $fallback->execute([
+        'company_id' => $companyId,
+        'job_material_id' => (int) $jobMaterial['id'],
+    ]);
+    $movement = $fallback->fetch();
+
+    return is_array($movement)
+        && (int) ($movement['material_id'] ?? 0) === (int) $jobMaterial['material_id']
+        ? $movement
+        : null;
+}
+
+function job_material_entry_movement_type(string $entryType): string
+{
+    return $entryType === 'returned' ? 'in' : 'out';
 }
 
 function user_can_manage_materials_catalogue(array $user): bool

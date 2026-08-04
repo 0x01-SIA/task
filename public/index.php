@@ -450,6 +450,7 @@ function job_material_form_values(array $source): array
 {
     return [
         'material_id' => positive_int_or_null($source['material_id'] ?? null),
+        'entry_type' => in_array(($source['entry_type'] ?? ''), ['used', 'returned'], true) ? (string) $source['entry_type'] : 'used',
         'quantity' => trim((string) ($source['quantity'] ?? '')),
     ];
 }
@@ -487,6 +488,10 @@ function validate_job_material_create(array $values): array
         $errors['quantity'] = 'Enter a quantity greater than zero using up to 3 decimal places.';
     }
 
+    if (!in_array((string) ($values['entry_type'] ?? ''), ['used', 'returned'], true)) {
+        $errors['entry_type'] = 'Select whether the material was used or returned.';
+    }
+
     return $errors;
 }
 
@@ -495,6 +500,18 @@ function validate_job_material_quantity(string $quantity): ?string
     return normalize_quantity_value($quantity) === null
         ? 'Enter a quantity greater than zero using up to 3 decimal places.'
         : null;
+}
+
+function validate_job_material_entry_type(string $entryType): ?string
+{
+    return in_array($entryType, ['used', 'returned'], true)
+        ? null
+        : 'Select whether the material was used or returned.';
+}
+
+function job_material_entry_type_label(string $entryType): string
+{
+    return $entryType === 'returned' ? 'Returned' : 'Used';
 }
 
 function material_option_label(array $material): string
@@ -3358,13 +3375,16 @@ try {
                 break;
             }
 
-            add_job_material_usage(
+            add_job_material_entry(
                 (int) $job['id'],
                 (int) $values['material_id'],
+                (string) $values['entry_type'],
                 (string) normalize_quantity_value($values['quantity']),
                 isset($viewer['id']) ? (int) $viewer['id'] : null
             );
-            flash('success', 'Material usage recorded successfully.');
+            flash('success', $values['entry_type'] === 'returned'
+                ? 'Material return recorded successfully.'
+                : 'Material usage recorded successfully.');
             redirect('/jobs/' . $job['id']);
             break;
 
@@ -3400,26 +3420,29 @@ try {
             }
 
             $quantity = trim((string) ($_POST['quantity'] ?? ''));
+            $entryType = trim((string) ($_POST['entry_type'] ?? ''));
             $error = validate_job_material_quantity($quantity);
+            $typeError = validate_job_material_entry_type($entryType);
 
-            if ($error !== null) {
+            if ($error !== null || $typeError !== null) {
                 render_job_show_page($job, $viewer, [
-                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity]],
-                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error]],
+                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity, 'entry_type' => $entryType]],
+                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error, 'entry_type' => $typeError]],
                 ], false, 422);
                 break;
             }
 
-            if (!update_job_material_quantity(
+            if (!update_job_material_entry(
                 (int) $job['id'],
                 (int) $jobMaterial['id'],
+                $entryType,
                 (string) normalize_quantity_value($quantity),
                 isset($viewer['id']) ? (int) $viewer['id'] : null
             )) {
-                flash('error', 'This material usage could not be updated.');
+                flash('error', 'This job material entry could not be updated.');
                 redirect('/jobs/' . $job['id']);
             }
-            flash('success', 'Material quantity updated successfully.');
+            flash('success', 'Job material entry updated successfully.');
             redirect('/jobs/' . $job['id']);
             break;
 
@@ -3463,8 +3486,12 @@ try {
                 log_route_exception('jobs.materials.delete', $exception, [
                     'job_id' => (int) $job['id'],
                     'job_material_id' => (int) $jobMaterial['id'],
+                    'material_id' => (int) $jobMaterial['material_id'],
+                    'movement_id' => $jobMaterial['movement_id'] ?? null,
                     'company_id' => current_company_id(),
                     'user_id' => $viewer['id'] ?? null,
+                    'job_status' => (string) ($job['status'] ?? ''),
+                    'exception_class' => $exception::class,
                     'route' => '/jobs/{jobId}/materials/{id}/delete',
                 ]);
                 flash('error', 'The material usage could not be removed safely.');
@@ -4266,13 +4293,16 @@ try {
                 break;
             }
 
-            add_job_material_usage(
+            add_job_material_entry(
                 (int) $job['id'],
                 (int) $values['material_id'],
+                (string) $values['entry_type'],
                 (string) normalize_quantity_value($values['quantity']),
                 isset($viewer['id']) ? (int) $viewer['id'] : null
             );
-            flash('success', 'Material usage recorded successfully.');
+            flash('success', $values['entry_type'] === 'returned'
+                ? 'Material return recorded successfully.'
+                : 'Material usage recorded successfully.');
             redirect('/work/jobs/' . $job['id']);
             break;
 
@@ -4307,23 +4337,29 @@ try {
             }
 
             $quantity = trim((string) ($_POST['quantity'] ?? ''));
+            $entryType = trim((string) ($_POST['entry_type'] ?? ''));
             $error = validate_job_material_quantity($quantity);
+            $typeError = validate_job_material_entry_type($entryType);
 
-            if ($error !== null) {
+            if ($error !== null || $typeError !== null) {
                 render_job_show_page($job, $viewer, [
-                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity]],
-                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error]],
+                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity, 'entry_type' => $entryType]],
+                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error, 'entry_type' => $typeError]],
                 ], true, 422);
                 break;
             }
 
-            update_job_material_quantity(
+            if (!update_job_material_entry(
                 (int) $job['id'],
                 (int) $jobMaterial['id'],
+                $entryType,
                 (string) normalize_quantity_value($quantity),
                 isset($viewer['id']) ? (int) $viewer['id'] : null
-            );
-            flash('success', 'Material quantity updated successfully.');
+            )) {
+                flash('error', 'This job material entry could not be updated.');
+                redirect('/work/jobs/' . $job['id']);
+            }
+            flash('success', 'Job material entry updated successfully.');
             redirect('/work/jobs/' . $job['id']);
             break;
 
@@ -4357,8 +4393,24 @@ try {
                 abort(403, 'Access denied', 'This material usage can no longer be removed.');
             }
 
-            if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
-                flash('error', 'The material usage could not be removed.');
+            try {
+                if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
+                    flash('error', 'The material usage could not be removed.');
+                    redirect('/work/jobs/' . $job['id']);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('work.jobs.materials.delete', $exception, [
+                    'job_id' => (int) $job['id'],
+                    'job_material_id' => (int) $jobMaterial['id'],
+                    'material_id' => (int) $jobMaterial['material_id'],
+                    'movement_id' => $jobMaterial['movement_id'] ?? null,
+                    'company_id' => current_company_id(),
+                    'user_id' => $viewer['id'] ?? null,
+                    'job_status' => (string) ($job['status'] ?? ''),
+                    'exception_class' => $exception::class,
+                    'route' => '/work/jobs/{jobId}/materials/{id}/delete',
+                ]);
+                flash('error', 'The material usage could not be removed safely.');
                 redirect('/work/jobs/' . $job['id']);
             }
 

@@ -293,7 +293,9 @@ function ensure_job_materials_company_scope(PDO $connection): void
     ensure_job_materials_table($connection);
     ensure_column($connection, 'job_materials', 'company_id', 'ALTER TABLE job_materials ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
     ensure_column($connection, 'job_materials', 'movement_id', 'ALTER TABLE job_materials ADD COLUMN movement_id BIGINT UNSIGNED DEFAULT NULL AFTER material_id');
+    ensure_column($connection, 'job_materials', 'entry_type', "ALTER TABLE job_materials ADD COLUMN entry_type ENUM('used','returned') NOT NULL DEFAULT 'used' AFTER movement_id");
     ensure_column($connection, 'job_materials', 'occurred_at', 'ALTER TABLE job_materials ADD COLUMN occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
+    $connection->exec("ALTER TABLE job_materials MODIFY entry_type ENUM('used','returned') NOT NULL DEFAULT 'used'");
     $connection->exec('ALTER TABLE job_materials MODIFY quantity DECIMAL(14,3) NOT NULL');
     ensure_index_absent($connection, 'job_materials', 'uq_job_materials_job_id_material_id', 'ALTER TABLE job_materials DROP INDEX uq_job_materials_job_id_material_id');
     ensure_index($connection, 'job_materials', 'idx_job_materials_company_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_company_id (company_id)');
@@ -652,6 +654,7 @@ function ensure_job_materials_table(PDO $connection): void
             job_id BIGINT UNSIGNED NOT NULL,
             material_id BIGINT UNSIGNED NOT NULL,
             movement_id BIGINT UNSIGNED DEFAULT NULL,
+            entry_type ENUM('used','returned') NOT NULL DEFAULT 'used',
             quantity DECIMAL(14,3) NOT NULL,
             recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
             occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -674,7 +677,8 @@ function ensure_job_materials_table(PDO $connection): void
     ensure_column($connection, 'job_materials', 'job_id', 'ALTER TABLE job_materials ADD COLUMN job_id BIGINT UNSIGNED NOT NULL AFTER id');
     ensure_column($connection, 'job_materials', 'material_id', 'ALTER TABLE job_materials ADD COLUMN material_id BIGINT UNSIGNED NOT NULL AFTER job_id');
     ensure_column($connection, 'job_materials', 'movement_id', 'ALTER TABLE job_materials ADD COLUMN movement_id BIGINT UNSIGNED DEFAULT NULL AFTER material_id');
-    ensure_column($connection, 'job_materials', 'quantity', 'ALTER TABLE job_materials ADD COLUMN quantity DECIMAL(14,3) NOT NULL AFTER movement_id');
+    ensure_column($connection, 'job_materials', 'entry_type', "ALTER TABLE job_materials ADD COLUMN entry_type ENUM('used','returned') NOT NULL DEFAULT 'used' AFTER movement_id");
+    ensure_column($connection, 'job_materials', 'quantity', 'ALTER TABLE job_materials ADD COLUMN quantity DECIMAL(14,3) NOT NULL AFTER entry_type');
     ensure_column($connection, 'job_materials', 'recorded_by_user_id', 'ALTER TABLE job_materials ADD COLUMN recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL AFTER quantity');
     ensure_column($connection, 'job_materials', 'occurred_at', 'ALTER TABLE job_materials ADD COLUMN occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
     ensure_column($connection, 'job_materials', 'created_at', 'ALTER TABLE job_materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER occurred_at');
@@ -697,10 +701,10 @@ function migrate_existing_job_material_movements(PDO $connection): void
     }
 
     $statement = $connection->query(
-        'SELECT id, company_id, job_id, material_id, quantity, recorded_by_user_id, COALESCE(occurred_at, updated_at, created_at, CURRENT_TIMESTAMP) AS occurred_at
+        "SELECT id, company_id, job_id, material_id, movement_id, entry_type, quantity, recorded_by_user_id, COALESCE(occurred_at, updated_at, created_at, CURRENT_TIMESTAMP) AS occurred_at
          FROM job_materials
          WHERE movement_id IS NULL
-         ORDER BY id ASC'
+         ORDER BY id ASC"
     );
     $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
 
@@ -736,6 +740,7 @@ function migrate_existing_job_material_movements(PDO $connection): void
     $updateJobMaterial = $connection->prepare(
         'UPDATE job_materials
          SET movement_id = :movement_id,
+             entry_type = :entry_type,
              occurred_at = :occurred_at
          WHERE id = :id'
     );
@@ -764,8 +769,18 @@ function migrate_existing_job_material_movements(PDO $connection): void
             $movementId = (int) $connection->lastInsertId();
         }
 
+        $movementTypeStatement = $connection->prepare(
+            'SELECT movement_type
+             FROM material_movements
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $movementTypeStatement->execute(['id' => (int) $movementId]);
+        $movementType = (string) ($movementTypeStatement->fetchColumn() ?: 'out');
+
         $updateJobMaterial->execute([
             'movement_id' => (int) $movementId,
+            'entry_type' => $movementType === 'in' ? 'returned' : 'used',
             'occurred_at' => (string) $row['occurred_at'],
             'id' => (int) $row['id'],
         ]);

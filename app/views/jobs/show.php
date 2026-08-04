@@ -263,8 +263,8 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
             <div class="job-assets-header">
                 <div>
                     <p class="text-uppercase text-secondary small fw-semibold mb-2">Materials</p>
-                    <h2 class="h5 mb-1">Materials Used</h2>
-                    <p class="text-secondary mb-0">Record material usage on this job and keep historical usage visible even if catalogue items are later deactivated.</p>
+                    <h2 class="h5 mb-1">Job Material Movements</h2>
+                    <p class="text-secondary mb-0">Record materials used on this job or returned back into stock, while keeping the history visible even if catalogue items are later deactivated.</p>
                 </div>
             </div>
 
@@ -289,6 +289,16 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                             <?php endif; ?>
                         </div>
                         <div class="col-12 col-sm-6 col-lg-2">
+                            <label class="form-label" for="material_entry_type">Type</label>
+                            <select class="form-select<?= isset($materialUsageErrors['entry_type']) ? ' is-invalid' : '' ?>" id="material_entry_type" name="entry_type" required>
+                                <option value="used" <?= ($materialUsageValues['entry_type'] ?? 'used') === 'used' ? 'selected' : '' ?>>Used</option>
+                                <option value="returned" <?= ($materialUsageValues['entry_type'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned</option>
+                            </select>
+                            <?php if (isset($materialUsageErrors['entry_type'])): ?>
+                                <div class="invalid-feedback"><?= h($materialUsageErrors['entry_type']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-12 col-sm-6 col-lg-2">
                             <label class="form-label" for="material_quantity">Quantity</label>
                             <input class="form-control<?= isset($materialUsageErrors['quantity']) ? ' is-invalid' : '' ?>" id="material_quantity" name="quantity" type="text" value="<?= h($materialUsageValues['quantity'] ?? '') ?>" inputmode="decimal" placeholder="0.00" required>
                             <?php if (isset($materialUsageErrors['quantity'])): ?>
@@ -310,7 +320,8 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                         <thead>
                         <tr>
                             <th scope="col">Material</th>
-                            <th scope="col">Quantity Used</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Quantity</th>
                             <th scope="col">Recorded By</th>
                             <th scope="col">Recorded</th>
                             <th scope="col" class="text-end">Actions</th>
@@ -319,7 +330,9 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                         <tbody>
                         <?php foreach ($jobMaterials as $jobMaterial): ?>
                             <?php $editError = $materialEditErrors[(int) $jobMaterial['id']]['quantity'] ?? null; ?>
+                            <?php $editTypeError = $materialEditErrors[(int) $jobMaterial['id']]['entry_type'] ?? null; ?>
                             <?php $editValue = $materialEditValues[(int) $jobMaterial['id']]['quantity'] ?? format_decimal_quantity($jobMaterial['quantity']); ?>
+                            <?php $editEntryType = $materialEditValues[(int) $jobMaterial['id']]['entry_type'] ?? (string) ($jobMaterial['entry_type'] ?? 'used'); ?>
                             <tr>
                                 <td>
                                     <div class="fw-semibold"><?= h($jobMaterial['material_name']) ?></div>
@@ -330,6 +343,7 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                                         <?php endif; ?>
                                     </div>
                                 </td>
+                                <td><?= h(job_material_entry_type_label((string) ($jobMaterial['entry_type'] ?? 'used'))) ?></td>
                                 <td><?= h(format_decimal_quantity($jobMaterial['quantity']) . ' ' . $jobMaterial['material_unit']) ?></td>
                                 <td><?= h($jobMaterial['recorded_by_name'] ?: 'Unknown user') ?></td>
                                 <td><?= h(format_datetime($jobMaterial['updated_at'] ?? $jobMaterial['created_at'] ?? null)) ?></td>
@@ -338,13 +352,20 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                                         <div class="job-material-actions">
                                             <form method="post" action="<?= h(app_url($materialRouteBase . '/' . $jobMaterial['id'] . '/edit')) ?>" class="job-material-inline-form">
                                                 <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                                <select class="form-select form-select-sm<?= $editTypeError !== null ? ' is-invalid' : '' ?>" name="entry_type" aria-label="Type for <?= h($jobMaterial['material_name']) ?>">
+                                                    <option value="used" <?= $editEntryType === 'used' ? 'selected' : '' ?>>Used</option>
+                                                    <option value="returned" <?= $editEntryType === 'returned' ? 'selected' : '' ?>>Returned</option>
+                                                </select>
                                                 <input class="form-control form-control-sm<?= $editError !== null ? ' is-invalid' : '' ?>" name="quantity" type="text" value="<?= h($editValue) ?>" inputmode="decimal" aria-label="Quantity for <?= h($jobMaterial['material_name']) ?>">
                                                 <button class="btn btn-outline-primary btn-sm" type="submit">Update</button>
+                                                <?php if ($editTypeError !== null): ?>
+                                                    <div class="invalid-feedback d-block text-start"><?= h($editTypeError) ?></div>
+                                                <?php endif; ?>
                                                 <?php if ($editError !== null): ?>
                                                     <div class="invalid-feedback d-block text-start"><?= h($editError) ?></div>
                                                 <?php endif; ?>
                                             </form>
-                                            <form method="post" action="<?= h(app_url($materialRouteBase . '/' . $jobMaterial['id'] . '/delete')) ?>" onsubmit="return confirm('Remove this material usage record?');">
+                                            <form method="post" action="<?= h(app_url($materialRouteBase . '/' . $jobMaterial['id'] . '/delete')) ?>" onsubmit="return confirm('Remove this job material entry?');">
                                                 <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
                                                 <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
                                             </form>
