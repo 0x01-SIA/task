@@ -316,3 +316,86 @@ function update_location(int $id, array $data): void
         'is_active' => $data['is_active'],
     ]);
 }
+
+function location_deletion_dependencies(int $locationId): array
+{
+    $companyId = current_company_id();
+
+    if ($companyId === null) {
+        return [];
+    }
+
+    $connection = locations_connection();
+    $definitions = [
+        'jobs' => [
+            'label' => 'jobs',
+            'sql' => 'SELECT COUNT(*) FROM jobs WHERE company_id = :company_id AND location_id = :location_id',
+        ],
+        'tasks' => [
+            'label' => 'tasks',
+            'sql' => 'SELECT COUNT(*) FROM tasks WHERE company_id = :company_id AND location_id = :location_id',
+        ],
+    ];
+    $dependencies = [];
+
+    foreach ($definitions as $key => $definition) {
+        $statement = $connection->prepare($definition['sql']);
+        $statement->execute([
+            'company_id' => $companyId,
+            'location_id' => $locationId,
+        ]);
+        $count = (int) $statement->fetchColumn();
+
+        if ($count > 0) {
+            $dependencies[$key] = [
+                'label' => $definition['label'],
+                'count' => $count,
+            ];
+        }
+    }
+
+    return $dependencies;
+}
+
+function can_delete_location(int $locationId): array
+{
+    $location = find_location_by_id($locationId);
+
+    if ($location === null) {
+        return [
+            'allowed' => false,
+            'location' => null,
+            'dependencies' => [],
+            'message' => 'The location could not be found.',
+        ];
+    }
+
+    $dependencies = location_deletion_dependencies($locationId);
+
+    if ($dependencies !== []) {
+        return [
+            'allowed' => false,
+            'location' => $location,
+            'dependencies' => $dependencies,
+            'message' => 'This location cannot be deleted because it is referenced by operational records.',
+        ];
+    }
+
+    return [
+        'allowed' => true,
+        'location' => $location,
+        'dependencies' => [],
+        'message' => null,
+    ];
+}
+
+function delete_location_record(int $locationId): bool
+{
+    $params = ['id' => $locationId];
+    $sql = 'DELETE FROM locations WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = locations_connection()->prepare($sql);
+    $statement->execute($params);
+
+    return $statement->rowCount() > 0;
+}

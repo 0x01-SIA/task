@@ -25,6 +25,10 @@ declare(strict_types=1);
                 <div class="alert alert-success mb-4" role="status"><?= h($successMessage) ?></div>
             <?php endif; ?>
 
+            <?php if (($errorMessage ?? null) !== null): ?>
+                <div class="alert alert-danger mb-4" role="alert"><?= h($errorMessage) ?></div>
+            <?php endif; ?>
+
             <?php if ($customers === []): ?>
                 <p class="text-secondary mb-0">No customers have been added yet.</p>
             <?php else: ?>

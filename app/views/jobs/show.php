@@ -21,6 +21,10 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                     <a class="btn btn-outline-secondary" href="<?= h(app_url('/jobs')) ?>">Back to Jobs</a>
                     <?php if ($canManageJobs): ?>
                         <a class="btn btn-primary" href="<?= h(app_url('/jobs/' . $job['id'] . '/edit')) ?>">Edit Job</a>
+                        <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this job? This cannot be undone.');">
+                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                            <button class="btn btn-outline-danger" type="submit">Delete Job</button>
+                        </form>
                     <?php endif; ?>
                 </div>
             </div>

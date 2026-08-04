@@ -21,6 +21,22 @@ function not_found(string $resourceName): never
     abort(404, 'Page not found', $resourceName . ' could not be found.');
 }
 
+function log_route_exception(string $context, Throwable $exception, array $details = []): void
+{
+    $pairs = [];
+
+    foreach ($details as $key => $value) {
+        $pairs[] = $key . '=' . ($value === null ? 'null' : (string) $value);
+    }
+
+    error_log(sprintf(
+        '[%s] %s%s',
+        $context,
+        implode(', ', $pairs),
+        $pairs === [] ? $exception->getMessage() : ': ' . $exception->getMessage()
+    ));
+}
+
 function location_form_values(array $source, ?int $defaultCustomerId = null): array
 {
     $customerId = positive_int_or_null($source['customer_id'] ?? null);
@@ -1840,6 +1856,7 @@ try {
                 'pageTitle' => 'Customers',
                 'customers' => all_customers(),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
             break;
 
@@ -1885,7 +1902,53 @@ try {
                 'customer' => $customer,
                 'locations' => list_locations_for_customer((int) $customer['id']),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
+            break;
+
+        case preg_match('#^/customers/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $deletion = can_delete_customer((int) $matches[1]);
+
+            if (($deletion['customer'] ?? null) === null) {
+                not_found('Customer');
+            }
+
+            if (!(bool) ($deletion['allowed'] ?? false)) {
+                flash('error', (string) $deletion['message']);
+                redirect('/customers/' . (int) $matches[1]);
+            }
+
+            try {
+                if (!delete_customer_record((int) $matches[1])) {
+                    flash('error', 'The customer could not be deleted.');
+                    redirect('/customers/' . (int) $matches[1]);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('customers.delete', $exception, [
+                    'customer_id' => (int) $matches[1],
+                    'company_id' => current_company_id(),
+                    'user_id' => current_user()['id'] ?? null,
+                    'route' => '/customers/{id}/delete',
+                ]);
+                flash('error', 'The customer could not be deleted. Please try again.');
+                redirect('/customers/' . (int) $matches[1]);
+            }
+
+            flash('success', 'Customer deleted successfully.');
+            redirect('/customers');
             break;
 
         case $path === '/locations':
@@ -1915,6 +1978,8 @@ try {
                     'customers' => all_customers(),
                     'selectedCustomer' => $selectedCustomer,
                     'selectedCustomerId' => $filterCustomerId,
+                    'successMessage' => flash('success'),
+                    'errorMessage' => flash('error'),
                 ]);
                 break;
             }
@@ -2003,7 +2068,56 @@ try {
                 'pageTitle' => $location['name'],
                 'location' => $location,
                 'recentJobs' => recent_jobs_for_location((int) $location['id']),
+                'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
+            break;
+
+        case preg_match('#^/locations/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $deletion = can_delete_location((int) $matches[1]);
+
+            if (($deletion['location'] ?? null) === null) {
+                not_found('Location');
+            }
+
+            $location = $deletion['location'];
+
+            if (!(bool) ($deletion['allowed'] ?? false)) {
+                flash('error', (string) $deletion['message']);
+                redirect('/locations/' . (int) $matches[1]);
+            }
+
+            try {
+                if (!delete_location_record((int) $matches[1])) {
+                    flash('error', 'The location could not be deleted.');
+                    redirect('/locations/' . (int) $matches[1]);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('locations.delete', $exception, [
+                    'location_id' => (int) $matches[1],
+                    'company_id' => current_company_id(),
+                    'user_id' => current_user()['id'] ?? null,
+                    'route' => '/locations/{id}/delete',
+                ]);
+                flash('error', 'The location could not be deleted. Please try again.');
+                redirect('/locations/' . (int) $matches[1]);
+            }
+
+            flash('success', 'Location deleted successfully.');
+            redirect('/customers/' . (int) $location['customer_id']);
             break;
 
         case preg_match('#^/locations/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
@@ -2628,6 +2742,51 @@ try {
             redirect('/materials/' . $material['id']);
             break;
 
+        case preg_match('#^/materials/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $deletion = can_delete_material((int) $matches[1]);
+
+            if (($deletion['material'] ?? null) === null) {
+                not_found('Material');
+            }
+
+            if (!(bool) ($deletion['allowed'] ?? false)) {
+                flash('error', (string) $deletion['message']);
+                redirect('/materials/' . (int) $matches[1]);
+            }
+
+            try {
+                if (!delete_material_record((int) $matches[1])) {
+                    flash('error', 'The material could not be deleted.');
+                    redirect('/materials/' . (int) $matches[1]);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('materials.delete', $exception, [
+                    'material_id' => (int) $matches[1],
+                    'company_id' => current_company_id(),
+                    'user_id' => current_user()['id'] ?? null,
+                    'route' => '/materials/{id}/delete',
+                ]);
+                flash('error', 'The material could not be deleted. Please try again.');
+                redirect('/materials/' . (int) $matches[1]);
+            }
+
+            flash('success', 'Material deleted successfully.');
+            redirect('/materials');
+            break;
+
         case $path === '/tasks':
             require_role(['admin', 'dispatcher']);
 
@@ -2706,6 +2865,7 @@ try {
                 'filters' => $filters,
                 'customers' => all_customers(),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
             break;
 
@@ -2749,6 +2909,7 @@ try {
                 'task' => $task,
                 'linkedJobs' => list_jobs_for_task((int) $task['id']),
                 'successMessage' => flash('success'),
+                'errorMessage' => flash('error'),
             ]);
             break;
 
@@ -2855,6 +3016,51 @@ try {
             update_task_status((int) $task['id'], $status);
             flash('success', 'Task status updated successfully.');
             redirect('/tasks/' . $task['id']);
+            break;
+
+        case preg_match('#^/tasks/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $deletion = can_delete_task((int) $matches[1]);
+
+            if (($deletion['task'] ?? null) === null) {
+                not_found('Task');
+            }
+
+            if (!(bool) ($deletion['allowed'] ?? false)) {
+                flash('error', (string) $deletion['message']);
+                redirect('/tasks/' . (int) $matches[1]);
+            }
+
+            try {
+                if (!delete_task_record((int) $matches[1])) {
+                    flash('error', 'The task could not be deleted.');
+                    redirect('/tasks/' . (int) $matches[1]);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('tasks.delete', $exception, [
+                    'task_id' => (int) $matches[1],
+                    'company_id' => current_company_id(),
+                    'user_id' => current_user()['id'] ?? null,
+                    'route' => '/tasks/{id}/delete',
+                ]);
+                flash('error', 'The task could not be deleted. Please try again.');
+                redirect('/tasks/' . (int) $matches[1]);
+            }
+
+            flash('success', 'Task deleted successfully.');
+            redirect('/tasks');
             break;
 
         case preg_match('#^/tasks/([1-9][0-9]*)/jobs/create$#', $path, $matches) === 1:
@@ -3118,6 +3324,7 @@ try {
 
         case preg_match('#^/jobs/([1-9][0-9]*)/materials$#', $path, $matches) === 1:
             require_role(['admin', 'dispatcher']);
+            require_active_company_context();
 
             if ($method !== 'POST') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
@@ -3163,6 +3370,7 @@ try {
 
         case preg_match('#^/jobs/([1-9][0-9]*)/materials/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
             require_role(['admin', 'dispatcher']);
+            require_active_company_context();
 
             if ($method !== 'POST') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
@@ -3202,18 +3410,22 @@ try {
                 break;
             }
 
-            update_job_material_quantity(
+            if (!update_job_material_quantity(
                 (int) $job['id'],
                 (int) $jobMaterial['id'],
                 (string) normalize_quantity_value($quantity),
                 isset($viewer['id']) ? (int) $viewer['id'] : null
-            );
+            )) {
+                flash('error', 'This material usage could not be updated.');
+                redirect('/jobs/' . $job['id']);
+            }
             flash('success', 'Material quantity updated successfully.');
             redirect('/jobs/' . $job['id']);
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)/materials/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
             require_role(['admin', 'dispatcher']);
+            require_active_company_context();
 
             if ($method !== 'POST') {
                 abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
@@ -3242,8 +3454,20 @@ try {
                 abort(403, 'Access denied', 'You do not have permission to remove this material usage.');
             }
 
-            if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
-                flash('error', 'The material usage could not be removed.');
+            try {
+                if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
+                    flash('error', 'The material usage could not be removed.');
+                    redirect('/jobs/' . $job['id']);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('jobs.materials.delete', $exception, [
+                    'job_id' => (int) $job['id'],
+                    'job_material_id' => (int) $jobMaterial['id'],
+                    'company_id' => current_company_id(),
+                    'user_id' => $viewer['id'] ?? null,
+                    'route' => '/jobs/{jobId}/materials/{id}/delete',
+                ]);
+                flash('error', 'The material usage could not be removed safely.');
                 redirect('/jobs/' . $job['id']);
             }
 
@@ -3563,6 +3787,52 @@ try {
             }
 
             render_job_show_page($job, current_user());
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/delete$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $deletion = can_delete_job((int) $matches[1], $viewer);
+
+            if (($deletion['job'] ?? null) === null) {
+                not_found('Job');
+            }
+
+            if (!(bool) ($deletion['allowed'] ?? false)) {
+                flash('error', (string) $deletion['message']);
+                redirect('/jobs/' . (int) $matches[1]);
+            }
+
+            try {
+                if (!delete_job_record((int) $matches[1], $viewer)) {
+                    flash('error', 'The job could not be deleted.');
+                    redirect('/jobs/' . (int) $matches[1]);
+                }
+            } catch (Throwable $exception) {
+                log_route_exception('jobs.delete', $exception, [
+                    'job_id' => (int) $matches[1],
+                    'company_id' => current_company_id(),
+                    'user_id' => $viewer['id'] ?? null,
+                    'route' => '/jobs/{id}/delete',
+                ]);
+                flash('error', 'The job could not be deleted. Please try again.');
+                redirect('/jobs/' . (int) $matches[1]);
+            }
+
+            flash('success', 'Job deleted successfully.');
+            redirect('/jobs');
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)/edit$#', $path, $matches) === 1:

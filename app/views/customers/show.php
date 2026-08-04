@@ -14,6 +14,10 @@ declare(strict_types=1);
                 <div class="d-flex flex-wrap gap-2">
                     <a class="btn btn-outline-primary" href="<?= h(app_url('/customers')) ?>">Back to Customers</a>
                     <a class="btn btn-primary" href="<?= h(app_url('/locations/create?customer_id=' . $customer['id'])) ?>">Add Location</a>
+                    <form method="post" action="<?= h(app_url('/customers/' . $customer['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this customer? This cannot be undone.');">
+                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                        <button class="btn btn-outline-danger" type="submit">Delete Customer</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -23,6 +27,10 @@ declare(strict_types=1);
         <div class="card-body p-4">
             <?php if (($successMessage ?? null) !== null): ?>
                 <div class="alert alert-success mb-4" role="status"><?= h($successMessage) ?></div>
+            <?php endif; ?>
+
+            <?php if (($errorMessage ?? null) !== null): ?>
+                <div class="alert alert-danger mb-4" role="alert"><?= h($errorMessage) ?></div>
             <?php endif; ?>
 
             <div class="info-grid">

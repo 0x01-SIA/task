@@ -465,3 +465,67 @@ function dashboard_attention_tasks(int $limit = 6): array
          LIMIT {$limit}"
     );
 }
+
+function task_deletion_dependencies(int $taskId): array
+{
+    $params = ['task_id' => $taskId];
+    $sql = 'SELECT COUNT(*) FROM jobs WHERE task_id = :task_id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = tasks_connection()->prepare($sql);
+    $statement->execute($params);
+    $jobCount = (int) $statement->fetchColumn();
+
+    if ($jobCount === 0) {
+        return [];
+    }
+
+    return [
+        'jobs' => [
+            'label' => 'linked jobs',
+            'count' => $jobCount,
+        ],
+    ];
+}
+
+function can_delete_task(int $taskId): array
+{
+    $task = find_task_by_id($taskId);
+
+    if ($task === null) {
+        return [
+            'allowed' => false,
+            'task' => null,
+            'dependencies' => [],
+            'message' => 'The task could not be found.',
+        ];
+    }
+
+    $dependencies = task_deletion_dependencies($taskId);
+
+    if ($dependencies !== []) {
+        return [
+            'allowed' => false,
+            'task' => $task,
+            'dependencies' => $dependencies,
+            'message' => 'This task cannot be deleted because it is linked to existing jobs.',
+        ];
+    }
+
+    return [
+        'allowed' => true,
+        'task' => $task,
+        'dependencies' => [],
+        'message' => null,
+    ];
+}
+
+function delete_task_record(int $taskId): bool
+{
+    $params = ['id' => $taskId];
+    $sql = 'DELETE FROM tasks WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = tasks_connection()->prepare($sql);
+    $statement->execute($params);
+
+    return $statement->rowCount() > 0;
+}

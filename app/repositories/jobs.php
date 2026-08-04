@@ -695,3 +695,99 @@ function recent_jobs_for_location(int $locationId, int $limit = 5): array
 
     return is_array($jobs) ? $jobs : [];
 }
+
+function job_deletion_dependencies(int $jobId, ?array $viewer = null): array
+{
+    $connection = jobs_connection();
+    $definitions = [
+        'notes' => [
+            'label' => 'job notes',
+            'sql' => 'SELECT COUNT(*) FROM job_notes WHERE job_id = :job_id',
+        ],
+        'materials' => [
+            'label' => 'material usage',
+            'sql' => 'SELECT COUNT(*) FROM job_materials WHERE job_id = :job_id',
+        ],
+        'attachments' => [
+            'label' => 'attachments',
+            'sql' => 'SELECT COUNT(*) FROM job_attachments WHERE job_id = :job_id',
+        ],
+        'photos' => [
+            'label' => 'photos',
+            'sql' => 'SELECT COUNT(*) FROM job_photos WHERE job_id = :job_id',
+        ],
+        'customer_confirmation' => [
+            'label' => 'customer confirmation',
+            'sql' => 'SELECT COUNT(*) FROM job_customer_confirmations WHERE job_id = :job_id',
+        ],
+    ];
+    $dependencies = [];
+
+    foreach ($definitions as $key => $definition) {
+        $statement = $connection->prepare($definition['sql']);
+        $statement->execute(['job_id' => $jobId]);
+        $count = (int) $statement->fetchColumn();
+
+        if ($count > 0) {
+            $dependencies[$key] = [
+                'label' => $definition['label'],
+                'count' => $count,
+            ];
+        }
+    }
+
+    return $dependencies;
+}
+
+function can_delete_job(int $jobId, ?array $viewer = null): array
+{
+    $job = find_job_by_id($jobId, $viewer);
+
+    if ($job === null) {
+        return [
+            'allowed' => false,
+            'job' => null,
+            'dependencies' => [],
+            'message' => 'The job could not be found.',
+        ];
+    }
+
+    $dependencies = job_deletion_dependencies($jobId, $viewer);
+
+    if ($dependencies !== []) {
+        return [
+            'allowed' => false,
+            'job' => $job,
+            'dependencies' => $dependencies,
+            'message' => blocked_job_deletion_message($dependencies),
+        ];
+    }
+
+    return [
+        'allowed' => true,
+        'job' => $job,
+        'dependencies' => [],
+        'message' => null,
+    ];
+}
+
+function delete_job_record(int $jobId, ?array $viewer = null): bool
+{
+    $params = ['id' => $jobId];
+    $sql = 'DELETE FROM jobs WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params, $viewer, false);
+    $statement = jobs_connection()->prepare($sql);
+    $statement->execute($params);
+
+    return $statement->rowCount() > 0;
+}
+
+function blocked_job_deletion_message(array $dependencies): string
+{
+    $labels = array_map(
+        static fn (array $dependency): string => $dependency['label'],
+        array_values($dependencies)
+    );
+
+    return 'This job cannot be deleted because it has related ' . implode(', ', $labels) . '.';
+}

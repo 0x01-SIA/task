@@ -381,15 +381,43 @@ function delete_job_material(int $jobId, int $jobMaterialId): bool
     $connection->beginTransaction();
 
     try {
-        $movementStatement = $connection->prepare(
-            'DELETE FROM material_movements
-             WHERE id = :movement_id
-               AND company_id = :company_id'
-        );
-        $movementStatement->execute([
-            'movement_id' => (int) $jobMaterial['movement_id'],
-            'company_id' => $companyId,
-        ]);
+        $movementId = $jobMaterial['movement_id'] !== null ? (int) $jobMaterial['movement_id'] : null;
+
+        if ($movementId !== null) {
+            $unlinkJobMaterialStatement = $connection->prepare(
+                'UPDATE job_materials
+                 SET movement_id = NULL
+                 WHERE company_id = :company_id
+                   AND job_id = :job_id
+                   AND id = :id'
+            );
+            $unlinkJobMaterialStatement->execute([
+                'company_id' => $companyId,
+                'job_id' => $jobId,
+                'id' => $jobMaterialId,
+            ]);
+
+            $unlinkMovementStatement = $connection->prepare(
+                'UPDATE material_movements
+                 SET job_material_id = NULL
+                 WHERE id = :movement_id
+                   AND company_id = :company_id'
+            );
+            $unlinkMovementStatement->execute([
+                'movement_id' => $movementId,
+                'company_id' => $companyId,
+            ]);
+
+            $movementStatement = $connection->prepare(
+                'DELETE FROM material_movements
+                 WHERE id = :movement_id
+                   AND company_id = :company_id'
+            );
+            $movementStatement->execute([
+                'movement_id' => $movementId,
+                'company_id' => $companyId,
+            ]);
+        }
 
         $statement = $connection->prepare(
             'DELETE FROM job_materials
@@ -449,4 +477,91 @@ function require_material_company_id(array $data): int
     }
 
     return $companyId;
+}
+
+function material_deletion_dependencies(int $materialId): array
+{
+    $companyId = current_company_id();
+
+    if ($companyId === null) {
+        return [];
+    }
+
+    $connection = materials_connection();
+    $definitions = [
+        'job_usage' => [
+            'label' => 'job usage history',
+            'sql' => 'SELECT COUNT(*) FROM job_materials WHERE company_id = :company_id AND material_id = :material_id',
+        ],
+        'movement_history' => [
+            'label' => 'stock history',
+            'sql' => 'SELECT COUNT(*) FROM material_movements WHERE company_id = :company_id AND material_id = :material_id',
+        ],
+        'inventory_history' => [
+            'label' => 'inventory records',
+            'sql' => 'SELECT COUNT(*) FROM material_inventory_lines WHERE company_id = :company_id AND material_id = :material_id',
+        ],
+    ];
+    $dependencies = [];
+
+    foreach ($definitions as $key => $definition) {
+        $statement = $connection->prepare($definition['sql']);
+        $statement->execute([
+            'company_id' => $companyId,
+            'material_id' => $materialId,
+        ]);
+        $count = (int) $statement->fetchColumn();
+
+        if ($count > 0) {
+            $dependencies[$key] = [
+                'label' => $definition['label'],
+                'count' => $count,
+            ];
+        }
+    }
+
+    return $dependencies;
+}
+
+function can_delete_material(int $materialId): array
+{
+    $material = find_material_by_id($materialId);
+
+    if ($material === null) {
+        return [
+            'allowed' => false,
+            'material' => null,
+            'dependencies' => [],
+            'message' => 'The material could not be found.',
+        ];
+    }
+
+    $dependencies = material_deletion_dependencies($materialId);
+
+    if ($dependencies !== []) {
+        return [
+            'allowed' => false,
+            'material' => $material,
+            'dependencies' => $dependencies,
+            'message' => 'This material cannot be deleted because it has stock or usage history.',
+        ];
+    }
+
+    return [
+        'allowed' => true,
+        'material' => $material,
+        'dependencies' => [],
+        'message' => null,
+    ];
+}
+
+function delete_material_record(int $materialId): bool
+{
+    $params = ['id' => $materialId];
+    $sql = 'DELETE FROM materials WHERE id = :id';
+    $sql .= scoped_company_sql('company_id', $params);
+    $statement = materials_connection()->prepare($sql);
+    $statement->execute($params);
+
+    return $statement->rowCount() > 0;
 }

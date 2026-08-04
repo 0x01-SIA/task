@@ -27,6 +27,10 @@ $jobPathBase = (($viewer['role'] ?? '') === 'worker') ? '/work/jobs/' : '/jobs/'
                     <?php endif; ?>
                     <?php if (user_can_manage_materials_catalogue($viewer)): ?>
                         <a class="btn btn-primary" href="<?= h(app_url('/materials/' . $material['id'] . '/edit')) ?>">Edit Material</a>
+                        <form method="post" action="<?= h(app_url('/materials/' . $material['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this material? This cannot be undone.');">
+                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                            <button class="btn btn-outline-danger" type="submit">Delete Material</button>
+                        </form>
                     <?php endif; ?>
                 </div>
             </div>

@@ -14,10 +14,22 @@ declare(strict_types=1);
                 <div class="d-flex flex-wrap gap-2">
                     <a class="btn btn-outline-primary" href="<?= h(app_url('/customers/' . $location['customer_id'])) ?>">View Customer</a>
                     <a class="btn btn-primary" href="<?= h(app_url('/locations/' . $location['id'] . '/edit')) ?>">Edit Location</a>
+                    <form method="post" action="<?= h(app_url('/locations/' . $location['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this location? This cannot be undone.');">
+                        <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                        <button class="btn btn-outline-danger" type="submit">Delete Location</button>
+                    </form>
                 </div>
             </div>
         </div>
     </section>
+
+    <?php if (($successMessage ?? null) !== null): ?>
+        <div class="alert alert-success mb-0" role="status"><?= h($successMessage) ?></div>
+    <?php endif; ?>
+
+    <?php if (($errorMessage ?? null) !== null): ?>
+        <div class="alert alert-danger mb-0" role="alert"><?= h($errorMessage) ?></div>
+    <?php endif; ?>
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">

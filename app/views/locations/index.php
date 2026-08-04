@@ -18,6 +18,14 @@ declare(strict_types=1);
 
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
+            <?php if (($successMessage ?? null) !== null): ?>
+                <div class="alert alert-success mb-4" role="status"><?= h($successMessage) ?></div>
+            <?php endif; ?>
+
+            <?php if (($errorMessage ?? null) !== null): ?>
+                <div class="alert alert-danger mb-4" role="alert"><?= h($errorMessage) ?></div>
+            <?php endif; ?>
+
             <form method="get" action="<?= h(app_url('/locations')) ?>" class="row g-3 align-items-end">
                 <div class="col-md-8 col-lg-6">
                     <label class="form-label" for="customer_id">Filter by Customer</label>
