@@ -63,16 +63,17 @@ $mobileDrawerId = 'mobile-nav-drawer';
                     </button>
                 <?php endif; ?>
 
-                <a class="app-brand" href="<?= h(app_url(home_path_for_user($user))) ?>">
-                    <span class="app-brand__mark" aria-hidden="true">
-                        <span></span>
-                    </span>
-                    <span class="app-brand__text">
-                        <span class="app-brand__name">Task</span>
-                        <?php if ($user !== null): ?>
-                            <span class="app-brand__section"><?= h($currentSectionLabel) ?></span>
-                        <?php endif; ?>
-                    </span>
+                <a
+                    class="app-brand"
+                    href="<?= h(app_url(home_path_for_user($user))) ?>"
+                    aria-label="Task App dashboard"
+                >
+                    <img
+                        src="<?= h(asset_url('images/task-app-icon.png')) ?>"
+                        alt=""
+                        width="44"
+                        height="44"
+                    >
                 </a>
 
                 <?php if ($user !== null && $navigationItems !== []): ?>

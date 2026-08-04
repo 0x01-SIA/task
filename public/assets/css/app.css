@@ -1518,50 +1518,27 @@ a:focus {
 .app-brand {
     display: inline-flex;
     align-items: center;
-    gap: 0.85rem;
-    min-width: 0;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.625rem;
     color: var(--color-text);
     text-decoration: none;
 }
 
-.app-brand__mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.45rem;
-    height: 2.45rem;
-    border-radius: 0.9rem;
-    background: var(--color-accent-soft);
-    border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+.app-brand:hover,
+.app-brand:focus-visible {
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+    outline: none;
 }
 
-.app-brand__mark span {
-    width: 1rem;
-    height: 1rem;
-    border-radius: 0.35rem;
-    background: var(--color-accent);
-    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--color-accent) 18%, transparent);
-}
-
-.app-brand__text {
-    display: grid;
-    gap: 0.08rem;
-    min-width: 0;
-}
-
-.app-brand__name {
-    font-size: 1.02rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-}
-
-.app-brand__section {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
+.app-brand img {
+    display: block;
+    width: 2.75rem;
+    height: 2.75rem;
+    object-fit: contain;
 }
 
 .app-menu-toggle,
@@ -2411,10 +2388,6 @@ html[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
         display: none;
     }
 
-    .app-brand__section {
-        display: none;
-    }
-
     .responsive-status-chips,
     .mobile-card-list {
         display: grid;
@@ -2439,13 +2412,9 @@ html[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
         padding: 0.6rem 0;
     }
 
-    .app-brand__mark {
-        width: 2.2rem;
-        height: 2.2rem;
-    }
-
-    .app-brand__name {
-        font-size: 0.98rem;
+    .app-brand img {
+        width: 2.375rem;
+        height: 2.375rem;
     }
 
     .mobile-card__meta {
