@@ -58,7 +58,7 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                     <div>
                         <p class="text-uppercase text-secondary small fw-semibold mb-2">Week</p>
                         <h2 class="h4 mb-1"><?= h($weekStart->format('j F') . ' – ' . $weekEnd->format('j F Y')) ?></h2>
-                        <p class="text-secondary mb-0">Monday to Sunday scheduling overview.</p>
+                        <p class="text-secondary mb-0">Monday to Friday stay visible. Weekend days appear only when jobs are planned.</p>
                     </div>
                     <div class="calendar-toolbar__actions">
                         <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $previousWeek->format('Y-m-d'))) ?>">Previous week</a>
@@ -67,7 +67,7 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                     </div>
                 </div>
 
-                <div class="calendar-week mt-4" role="table" aria-label="Weekly job calendar">
+                <div class="calendar-week mt-4" role="table" aria-label="Weekly job calendar" style="--calendar-week-columns: <?= h((string) $weekDayColumnCount) ?>;">
                     <?php foreach ($weekDays as $day): ?>
                         <section class="calendar-week__day<?= $day['is_today'] ? ' calendar-week__day--today' : '' ?>" role="cell" aria-label="<?= h($day['date']->format('Y-m-d')) ?>">
                             <div class="calendar-week__header">

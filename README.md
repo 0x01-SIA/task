@@ -246,6 +246,7 @@ Job calendar behavior:
 - `/jobs/calendar` defaults to the current week when no valid calendar query parameters are supplied.
 - Supported views are `week` and `month`, selected with `?view=week` or `?view=month`. Invalid view values fall back to `week`.
 - Week view uses `?date=YYYY-MM-DD` as its anchor date, starts on Monday, and falls back to today when `date` is missing or invalid.
+- Week view always shows Monday through Friday, and only shows Saturday or Sunday when at least one job is planned on that day.
 - Month view uses `?month=YYYY-MM` and falls back to the current month when `month` is missing or invalid.
 - Scheduled jobs are placed on the calendar using the existing `jobs.planned_date` field.
 - Jobs without a planned date are excluded from calendar day cells and are summarized separately as unscheduled active jobs.

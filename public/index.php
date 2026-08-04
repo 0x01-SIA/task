@@ -3330,6 +3330,15 @@ try {
                 ];
             }
 
+            $weekDays = array_values(array_filter(
+                $weekDays,
+                static function (array $day): bool {
+                    $weekdayNumber = (int) $day['date']->format('N');
+
+                    return $weekdayNumber <= 5 || $day['jobs'] !== [];
+                }
+            ));
+
             $calendarWeeks = [];
             $week = [];
             $monthGridPeriod = new DatePeriod(
@@ -3367,6 +3376,7 @@ try {
                 'previousMonth' => $selectedMonth->modify('-1 month'),
                 'nextMonth' => $selectedMonth->modify('+1 month'),
                 'weekDays' => $weekDays,
+                'weekDayColumnCount' => count($weekDays),
                 'calendarWeeks' => $calendarWeeks,
                 'unscheduledActiveJobsCount' => count_unscheduled_active_jobs(jobs_connection(), $viewer),
                 'weekdayLabels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
