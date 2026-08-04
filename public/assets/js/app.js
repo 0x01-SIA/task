@@ -243,3 +243,255 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
     });
     window.addEventListener('resize', resizeCanvas);
 });
+
+(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const storageKey = 'task-theme-preference';
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const menuToggle = document.querySelector('[data-menu-toggle]');
+    const menuPanel = document.querySelector('[data-menu-panel]');
+    const drawer = document.querySelector('[data-drawer]');
+    const drawerToggle = document.querySelector('[data-drawer-toggle]');
+    const drawerClose = document.querySelector('[data-drawer-close]');
+    const overlay = document.querySelector('[data-app-overlay]');
+    const themeButtons = Array.from(document.querySelectorAll('[data-theme-option]'));
+    let lastDrawerTrigger = null;
+    let menuOpen = false;
+    let drawerOpen = false;
+
+    const focusableSelector = [
+        'a[href]',
+        'button:not([disabled])',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        'textarea:not([disabled])',
+        '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+
+    const resolveTheme = (preference) => (
+        preference === 'dark' || (preference === 'system' && media.matches) ? 'dark' : 'light'
+    );
+
+    const applyTheme = (preference) => {
+        const normalizedPreference = ['light', 'dark', 'system'].includes(preference) ? preference : 'system';
+        const resolvedTheme = resolveTheme(normalizedPreference);
+
+        root.setAttribute('data-theme-preference', normalizedPreference);
+        root.setAttribute('data-theme', resolvedTheme);
+        root.setAttribute('data-bs-theme', resolvedTheme);
+        localStorage.setItem(storageKey, normalizedPreference);
+
+        themeButtons.forEach((button) => {
+            const isActive = button.getAttribute('data-theme-option') === normalizedPreference;
+            button.classList.toggle('is-active', isActive);
+            button.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        });
+    };
+
+    const storedTheme = localStorage.getItem(storageKey) || root.getAttribute('data-theme-preference') || 'system';
+    applyTheme(storedTheme);
+    media.addEventListener('change', () => {
+        const currentPreference = root.getAttribute('data-theme-preference') || 'system';
+
+        if (currentPreference === 'system') {
+            applyTheme('system');
+        }
+    });
+
+    themeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const selectedTheme = button.getAttribute('data-theme-option') || 'system';
+            applyTheme(selectedTheme);
+        });
+    });
+
+    const firstFocusable = (container) => {
+        if (!(container instanceof HTMLElement)) {
+            return null;
+        }
+
+        return container.querySelector(focusableSelector);
+    };
+
+    const updateOverlay = () => {
+        if (!(overlay instanceof HTMLElement)) {
+            return;
+        }
+
+        overlay.hidden = !drawerOpen;
+        body.classList.toggle('app-shell--locked', drawerOpen);
+    };
+
+    const closeMenu = ({ restoreFocus = true } = {}) => {
+        if (!menuOpen || !(menuPanel instanceof HTMLElement) || !(menuToggle instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        menuOpen = false;
+        menuPanel.hidden = true;
+        menuToggle.setAttribute('aria-expanded', 'false');
+
+        if (restoreFocus) {
+            menuToggle.focus();
+        }
+
+        updateOverlay();
+    };
+
+    const openMenu = () => {
+        if (!(menuPanel instanceof HTMLElement) || !(menuToggle instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        closeDrawer({ restoreFocus: false });
+        menuOpen = true;
+        menuPanel.hidden = false;
+        menuToggle.setAttribute('aria-expanded', 'true');
+        updateOverlay();
+        firstFocusable(menuPanel)?.focus();
+    };
+
+    const closeDrawer = ({ restoreFocus = true } = {}) => {
+        if (!drawerOpen || !(drawer instanceof HTMLElement)) {
+            return;
+        }
+
+        drawerOpen = false;
+        drawer.hidden = true;
+        drawer.setAttribute('aria-hidden', 'true');
+
+        if (drawerToggle instanceof HTMLButtonElement) {
+            drawerToggle.setAttribute('aria-expanded', 'false');
+        }
+
+        if (restoreFocus && lastDrawerTrigger instanceof HTMLElement) {
+            lastDrawerTrigger.focus();
+        }
+
+        updateOverlay();
+    };
+
+    const openDrawer = (trigger) => {
+        if (!(drawer instanceof HTMLElement)) {
+            return;
+        }
+
+        closeMenu({ restoreFocus: false });
+        lastDrawerTrigger = trigger instanceof HTMLElement ? trigger : drawerToggle;
+        drawerOpen = true;
+        drawer.hidden = false;
+        drawer.setAttribute('aria-hidden', 'false');
+
+        if (drawerToggle instanceof HTMLButtonElement) {
+            drawerToggle.setAttribute('aria-expanded', 'true');
+        }
+
+        updateOverlay();
+        firstFocusable(drawer)?.focus();
+    };
+
+    menuToggle?.addEventListener('click', () => {
+        if (menuOpen) {
+            closeMenu();
+            return;
+        }
+
+        openMenu();
+    });
+
+    drawerToggle?.addEventListener('click', (event) => {
+        const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+
+        if (drawerOpen) {
+            closeDrawer();
+            return;
+        }
+
+        openDrawer(trigger);
+    });
+
+    drawerClose?.addEventListener('click', () => {
+        closeDrawer();
+    });
+
+    drawer?.querySelectorAll('a, button[type="submit"]').forEach((element) => {
+        element.addEventListener('click', () => {
+            closeDrawer({ restoreFocus: false });
+        });
+    });
+
+    overlay?.addEventListener('click', () => {
+        closeDrawer({ restoreFocus: false });
+    });
+
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+
+        if (!(target instanceof Node)) {
+            return;
+        }
+
+        if (menuOpen && menuPanel instanceof HTMLElement && menuToggle instanceof HTMLButtonElement) {
+            const clickedInsideMenu = menuPanel.contains(target) || menuToggle.contains(target);
+
+            if (!clickedInsideMenu) {
+                closeMenu({ restoreFocus: false });
+            }
+        }
+
+        if (drawerOpen && drawer instanceof HTMLElement && drawerToggle instanceof HTMLButtonElement) {
+            const clickedInsideDrawer = drawer.contains(target) || drawerToggle.contains(target);
+
+            if (!clickedInsideDrawer) {
+                closeDrawer({ restoreFocus: false });
+            }
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeMenu();
+            closeDrawer();
+        }
+
+        if (event.key !== 'Tab') {
+            return;
+        }
+
+        const activeContainer = menuOpen
+            ? menuPanel
+            : drawerOpen
+                ? drawer
+                : null;
+
+        if (!(activeContainer instanceof HTMLElement)) {
+            return;
+        }
+
+        const focusableElements = Array.from(activeContainer.querySelectorAll(focusableSelector))
+            .filter((element) => element instanceof HTMLElement && !element.hasAttribute('hidden'));
+
+        if (focusableElements.length === 0) {
+            return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        const activeElement = document.activeElement;
+
+        if (event.shiftKey && activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+        } else if (!event.shiftKey && activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 767) {
+            closeDrawer({ restoreFocus: false });
+        }
+    });
+})();

@@ -603,6 +603,44 @@ function role_label(string $role): string
     };
 }
 
+function user_initials(?array $user = null): string
+{
+    $user ??= current_user();
+    $name = trim((string) ($user['name'] ?? ''));
+
+    if ($name === '') {
+        return 'TA';
+    }
+
+    $parts = preg_split('/\s+/', $name) ?: [];
+    $initials = '';
+
+    foreach ($parts as $part) {
+        if ($part === '') {
+            continue;
+        }
+
+        $initials .= strtoupper(substr($part, 0, 1));
+
+        if (strlen($initials) >= 2) {
+            break;
+        }
+    }
+
+    return $initials !== '' ? $initials : 'TA';
+}
+
+function current_navigation_label(array $navigationItems): string
+{
+    foreach ($navigationItems as $item) {
+        if (is_current_path((string) ($item['path'] ?? ''))) {
+            return (string) ($item['label'] ?? 'Task');
+        }
+    }
+
+    return 'Task';
+}
+
 function user_role_options(): array
 {
     return [
