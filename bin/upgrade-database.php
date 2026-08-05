@@ -755,6 +755,7 @@ function ensure_device_installations_table(PDO $connection): void
     ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_usage', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_usage FOREIGN KEY (device_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_material', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_material FOREIGN KEY (device_material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_created_by', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+    ensure_foreign_key_rules($connection, 'device_installations', 'fk_device_installations_usage', 'CASCADE', 'CASCADE', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_usage FOREIGN KEY (device_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE');
 }
 
 function ensure_device_installation_accessories_table(PDO $connection): void
@@ -789,6 +790,8 @@ function ensure_device_installation_accessories_table(PDO $connection): void
     ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_installation', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_installation FOREIGN KEY (device_installation_id) REFERENCES device_installations (id) ON DELETE CASCADE ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_material', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_material FOREIGN KEY (accessory_material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_usage', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_usage FOREIGN KEY (accessory_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE');
+    ensure_foreign_key_rules($connection, 'device_installation_accessories', 'fk_device_installation_accessories_installation', 'CASCADE', 'CASCADE', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_installation FOREIGN KEY (device_installation_id) REFERENCES device_installations (id) ON DELETE CASCADE ON UPDATE CASCADE');
+    ensure_foreign_key_rules($connection, 'device_installation_accessories', 'fk_device_installation_accessories_usage', 'CASCADE', 'CASCADE', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_usage FOREIGN KEY (accessory_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE');
 }
 
 function mark_known_device_materials(PDO $connection): void
@@ -1003,4 +1006,39 @@ function ensure_foreign_key(PDO $connection, string $table, string $constraint, 
     if ($statement->fetchColumn() === false) {
         $connection->exec($sql);
     }
+}
+
+function ensure_foreign_key_rules(
+    PDO $connection,
+    string $table,
+    string $constraint,
+    string $deleteRule,
+    string $updateRule,
+    string $sql
+): void {
+    $statement = $connection->prepare(
+        'SELECT DELETE_RULE, UPDATE_RULE
+         FROM information_schema.REFERENTIAL_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE()
+           AND TABLE_NAME = :table_name
+           AND CONSTRAINT_NAME = :constraint_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => $table,
+        'constraint_name' => $constraint,
+    ]);
+    $rules = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!is_array($rules)) {
+        return;
+    }
+
+    if (strcasecmp((string) ($rules['DELETE_RULE'] ?? ''), $deleteRule) === 0
+        && strcasecmp((string) ($rules['UPDATE_RULE'] ?? ''), $updateRule) === 0) {
+        return;
+    }
+
+    $connection->exec(sprintf('ALTER TABLE %s DROP FOREIGN KEY %s', $table, $constraint));
+    $connection->exec($sql);
 }

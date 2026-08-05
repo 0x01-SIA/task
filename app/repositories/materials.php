@@ -399,6 +399,8 @@ function delete_job_material(int $jobId, int $jobMaterialId): bool
     try {
         if (job_material_is_device($jobMaterial) && (string) $jobMaterial['entry_type'] === 'used') {
             $deleted = delete_device_installation_cascade($connection, $companyId, $jobId, $jobMaterial);
+        } elseif (($accessoryLink = find_device_installation_accessory_by_usage_id($companyId, $jobMaterialId)) !== null) {
+            $deleted = delete_device_installation_accessory_usage($connection, $companyId, $jobId, $jobMaterial, $accessoryLink);
         } else {
             $deleted = delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial);
         }
@@ -573,6 +575,16 @@ function delete_basic_job_material_entry(PDO $connection, int $companyId, int $j
     }
 
     if (material_movement_is_protected($companyId, (int) $jobMaterial['material_id'], (string) $jobMaterial['occurred_at'])) {
+        error_log(sprintf(
+            '[job_materials.delete] Movement is protected by approved inventory (job_id=%d, job_material_id=%d, material_id=%d, movement_id=%s, company_id=%s, occurred_at=%s)',
+            $jobId,
+            (int) $jobMaterial['id'],
+            (int) $jobMaterial['material_id'],
+            $jobMaterial['movement_id'] !== null ? (string) $jobMaterial['movement_id'] : 'null',
+            $companyId,
+            (string) $jobMaterial['occurred_at']
+        ));
+
         return false;
     }
 
@@ -625,6 +637,43 @@ function delete_basic_job_material_entry(PDO $connection, int $companyId, int $j
     ]);
 
     return $statement->rowCount() > 0;
+}
+
+function delete_device_installation_accessory_usage(
+    PDO $connection,
+    int $companyId,
+    int $jobId,
+    array $jobMaterial,
+    array $accessoryLink
+): bool {
+    $statement = $connection->prepare(
+        'DELETE FROM device_installation_accessories
+         WHERE id = :id
+           AND company_id = :company_id
+           AND device_installation_id = :device_installation_id
+           AND accessory_material_usage_id = :accessory_material_usage_id'
+    );
+    $statement->execute([
+        'id' => (int) $accessoryLink['id'],
+        'company_id' => $companyId,
+        'device_installation_id' => (int) $accessoryLink['device_installation_id'],
+        'accessory_material_usage_id' => (int) $accessoryLink['accessory_material_usage_id'],
+    ]);
+
+    if ($statement->rowCount() !== 1) {
+        error_log(sprintf(
+            '[job_materials.delete] Accessory link could not be removed (job_id=%d, job_material_id=%d, accessory_link_id=%d, device_installation_id=%d, company_id=%d)',
+            $jobId,
+            (int) $jobMaterial['id'],
+            (int) $accessoryLink['id'],
+            (int) $accessoryLink['device_installation_id'],
+            $companyId
+        ));
+
+        return false;
+    }
+
+    return delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial);
 }
 
 function save_device_installation_details(
@@ -803,19 +852,10 @@ function sync_device_installation_accessories(
 
         $jobMaterial = find_job_material_by_id($jobId, (int) $existingAccessory['accessory_material_usage_id']);
 
-        if ($jobMaterial === null || !delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial)) {
+        if ($jobMaterial === null
+            || !delete_device_installation_accessory_usage($connection, $companyId, $jobId, $jobMaterial, $existingAccessory)) {
             throw new RuntimeException('A linked accessory usage could not be removed safely.');
         }
-
-        $statement = $connection->prepare(
-            'DELETE FROM device_installation_accessories
-             WHERE id = :id
-               AND company_id = :company_id'
-        );
-        $statement->execute([
-            'id' => (int) $existingAccessory['id'],
-            'company_id' => $companyId,
-        ]);
     }
 }
 
@@ -827,19 +867,10 @@ function delete_device_installation_cascade(PDO $connection, int $companyId, int
         foreach (list_device_installation_accessory_links($companyId, (int) $installation['id']) as $accessoryLink) {
             $accessoryJobMaterial = find_job_material_by_id($jobId, (int) $accessoryLink['accessory_material_usage_id']);
 
-            if ($accessoryJobMaterial === null || !delete_basic_job_material_entry($connection, $companyId, $jobId, $accessoryJobMaterial)) {
+            if ($accessoryJobMaterial === null
+                || !delete_device_installation_accessory_usage($connection, $companyId, $jobId, $accessoryJobMaterial, $accessoryLink)) {
                 throw new RuntimeException('A linked accessory usage could not be removed safely.');
             }
-
-            $statement = $connection->prepare(
-                'DELETE FROM device_installation_accessories
-                 WHERE id = :id
-                   AND company_id = :company_id'
-            );
-            $statement->execute([
-                'id' => (int) $accessoryLink['id'],
-                'company_id' => $companyId,
-            ]);
         }
 
         $statement = $connection->prepare(
@@ -1059,6 +1090,32 @@ function list_device_installation_accessory_links(int $companyId, int $installat
     $rows = $statement->fetchAll();
 
     return is_array($rows) ? $rows : [];
+}
+
+function find_device_installation_accessory_by_usage_id(int $companyId, int $jobMaterialId): ?array
+{
+    $statement = materials_connection()->prepare(
+        'SELECT
+            id,
+            company_id,
+            device_installation_id,
+            accessory_material_id,
+            accessory_material_usage_id,
+            quantity,
+            created_at,
+            updated_at
+         FROM device_installation_accessories
+         WHERE company_id = :company_id
+           AND accessory_material_usage_id = :accessory_material_usage_id
+         LIMIT 1'
+    );
+    $statement->execute([
+        'company_id' => $companyId,
+        'accessory_material_usage_id' => $jobMaterialId,
+    ]);
+    $row = $statement->fetch();
+
+    return is_array($row) ? $row : null;
 }
 
 function material_is_device(array $material): bool
