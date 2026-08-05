@@ -815,16 +815,18 @@ function material_movement_is_protected(int $companyId, int $materialId, string 
 {
     $statement = material_stock_connection()->prepare(
         "SELECT 1
-         FROM material_inventory_lines lines
-         INNER JOIN material_inventories inv ON inv.id = lines.inventory_id
-         WHERE lines.company_id = :company_id
-           AND lines.material_id = :material_id
+         FROM material_inventory_lines mil
+         INNER JOIN material_inventories inv ON inv.id = mil.inventory_id
+         WHERE mil.company_id = :company_id
+           AND inv.company_id = :company_id_inventory
+           AND mil.material_id = :material_id
            AND inv.status = 'approved'
-           AND inv.approved_at >= :occurred_at
+           AND inv.approved_at > :occurred_at
          LIMIT 1"
     );
     $statement->execute([
         'company_id' => $companyId,
+        'company_id_inventory' => $companyId,
         'material_id' => $materialId,
         'occurred_at' => $occurredAt,
     ]);
