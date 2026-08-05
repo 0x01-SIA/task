@@ -379,7 +379,7 @@ function update_job_material_entry(
     }
 }
 
-function delete_job_material(int $jobId, int $jobMaterialId): bool
+function delete_job_material(int $jobId, int $jobMaterialId, ?int $actingUserId = null): bool
 {
     $companyId = current_company_id();
 
@@ -398,11 +398,11 @@ function delete_job_material(int $jobId, int $jobMaterialId): bool
 
     try {
         if (job_material_is_device($jobMaterial) && (string) $jobMaterial['entry_type'] === 'used') {
-            $deleted = delete_device_installation_cascade($connection, $companyId, $jobId, $jobMaterial);
+            $deleted = delete_device_installation_cascade($connection, $companyId, $jobId, $jobMaterial, $actingUserId);
         } elseif (($accessoryLink = find_device_installation_accessory_by_usage_id($companyId, $jobMaterialId)) !== null) {
-            $deleted = delete_device_installation_accessory_usage($connection, $companyId, $jobId, $jobMaterial, $accessoryLink);
+            $deleted = delete_device_installation_accessory_usage($connection, $companyId, $jobId, $jobMaterial, $accessoryLink, $actingUserId);
         } else {
-            $deleted = delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial);
+            $deleted = delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial, $actingUserId);
         }
 
         $connection->commit();
@@ -557,7 +557,13 @@ function update_basic_job_material_entry(
     return true;
 }
 
-function delete_basic_job_material_entry(PDO $connection, int $companyId, int $jobId, array $jobMaterial): bool
+function delete_basic_job_material_entry(
+    PDO $connection,
+    int $companyId,
+    int $jobId,
+    array $jobMaterial,
+    ?int $actingUserId = null
+): bool
 {
     $movement = find_linked_job_material_movement($companyId, $jobMaterial);
 
@@ -574,19 +580,7 @@ function delete_basic_job_material_entry(PDO $connection, int $companyId, int $j
         return false;
     }
 
-    if (material_movement_is_protected($companyId, (int) $jobMaterial['material_id'], (string) $jobMaterial['occurred_at'])) {
-        error_log(sprintf(
-            '[job_materials.delete] Movement is protected by approved inventory (job_id=%d, job_material_id=%d, material_id=%d, movement_id=%s, company_id=%s, occurred_at=%s)',
-            $jobId,
-            (int) $jobMaterial['id'],
-            (int) $jobMaterial['material_id'],
-            $jobMaterial['movement_id'] !== null ? (string) $jobMaterial['movement_id'] : 'null',
-            $companyId,
-            (string) $jobMaterial['occurred_at']
-        ));
-
-        return false;
-    }
+    $movementProtected = material_movement_is_protected($companyId, (int) $jobMaterial['material_id'], (string) $jobMaterial['occurred_at']);
 
     $movementId = (int) $movement['id'];
 
@@ -614,15 +608,24 @@ function delete_basic_job_material_entry(PDO $connection, int $companyId, int $j
         'company_id' => $companyId,
     ]);
 
-    $movementStatement = $connection->prepare(
-        'DELETE FROM material_movements
-         WHERE id = :movement_id
-           AND company_id = :company_id'
-    );
-    $movementStatement->execute([
-        'movement_id' => $movementId,
-        'company_id' => $companyId,
-    ]);
+    if ($movementProtected) {
+        create_job_material_removal_reversal(
+            $companyId,
+            $jobMaterial,
+            $movement,
+            $actingUserId
+        );
+    } else {
+        $movementStatement = $connection->prepare(
+            'DELETE FROM material_movements
+             WHERE id = :movement_id
+               AND company_id = :company_id'
+        );
+        $movementStatement->execute([
+            'movement_id' => $movementId,
+            'company_id' => $companyId,
+        ]);
+    }
 
     $statement = $connection->prepare(
         'DELETE FROM job_materials
@@ -644,7 +647,8 @@ function delete_device_installation_accessory_usage(
     int $companyId,
     int $jobId,
     array $jobMaterial,
-    array $accessoryLink
+    array $accessoryLink,
+    ?int $actingUserId = null
 ): bool {
     $statement = $connection->prepare(
         'DELETE FROM device_installation_accessories
@@ -673,7 +677,7 @@ function delete_device_installation_accessory_usage(
         return false;
     }
 
-    return delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial);
+    return delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial, $actingUserId);
 }
 
 function save_device_installation_details(
@@ -853,13 +857,19 @@ function sync_device_installation_accessories(
         $jobMaterial = find_job_material_by_id($jobId, (int) $existingAccessory['accessory_material_usage_id']);
 
         if ($jobMaterial === null
-            || !delete_device_installation_accessory_usage($connection, $companyId, $jobId, $jobMaterial, $existingAccessory)) {
+            || !delete_device_installation_accessory_usage($connection, $companyId, $jobId, $jobMaterial, $existingAccessory, $recordedByUserId)) {
             throw new RuntimeException('A linked accessory usage could not be removed safely.');
         }
     }
 }
 
-function delete_device_installation_cascade(PDO $connection, int $companyId, int $jobId, array $jobMaterial): bool
+function delete_device_installation_cascade(
+    PDO $connection,
+    int $companyId,
+    int $jobId,
+    array $jobMaterial,
+    ?int $actingUserId = null
+): bool
 {
     $installation = find_device_installation_by_usage_id($companyId, (int) $jobMaterial['id']);
 
@@ -868,7 +878,7 @@ function delete_device_installation_cascade(PDO $connection, int $companyId, int
             $accessoryJobMaterial = find_job_material_by_id($jobId, (int) $accessoryLink['accessory_material_usage_id']);
 
             if ($accessoryJobMaterial === null
-                || !delete_device_installation_accessory_usage($connection, $companyId, $jobId, $accessoryJobMaterial, $accessoryLink)) {
+                || !delete_device_installation_accessory_usage($connection, $companyId, $jobId, $accessoryJobMaterial, $accessoryLink, $actingUserId)) {
                 throw new RuntimeException('A linked accessory usage could not be removed safely.');
             }
         }
@@ -884,7 +894,36 @@ function delete_device_installation_cascade(PDO $connection, int $companyId, int
         ]);
     }
 
-    return delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial);
+    return delete_basic_job_material_entry($connection, $companyId, $jobId, $jobMaterial, $actingUserId);
+}
+
+function create_job_material_removal_reversal(
+    int $companyId,
+    array $jobMaterial,
+    array $movement,
+    ?int $actingUserId = null
+): void {
+    $movementType = (string) ($movement['movement_type'] ?? '');
+
+    if (!in_array($movementType, ['in', 'out'], true)) {
+        throw new RuntimeException('The linked stock movement could not be reversed safely.');
+    }
+
+    create_material_movement([
+        'company_id' => $companyId,
+        'material_id' => (int) $jobMaterial['material_id'],
+        'movement_type' => $movementType === 'in' ? 'out' : 'in',
+        'quantity' => (string) $jobMaterial['quantity'],
+        'job_id' => (int) $jobMaterial['job_id'],
+        'job_material_id' => null,
+        'created_by_user_id' => $actingUserId,
+        'note' => sprintf(
+            'Reversal for removed job material #%d (original movement #%d).',
+            (int) $jobMaterial['id'],
+            (int) $movement['id']
+        ),
+        'occurred_at' => (new DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
+    ]);
 }
 
 function find_linked_job_material_movement(int $companyId, array $jobMaterial): ?array

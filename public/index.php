@@ -3768,7 +3768,7 @@ try {
             }
 
             try {
-                if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
+                if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'], isset($viewer['id']) ? (int) $viewer['id'] : null)) {
                     flash('error', 'The material usage could not be removed.');
                     redirect('/jobs/' . $job['id']);
                 }
@@ -4753,7 +4753,7 @@ try {
             }
 
             try {
-                if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'])) {
+                if (!delete_job_material((int) $job['id'], (int) $jobMaterial['id'], isset($viewer['id']) ? (int) $viewer['id'] : null)) {
                     flash('error', 'The material usage could not be removed.');
                     redirect('/work/jobs/' . $job['id']);
                 }
