@@ -550,6 +550,335 @@ const decodeBase64Json = (encoded) => {
     }
 };
 
+const searchableSelectInstances = new WeakMap();
+let searchableSelectActiveInstance = null;
+
+const closeActiveSearchableSelect = ({ restoreFocus = false } = {}) => {
+    if (searchableSelectActiveInstance === null) {
+        return;
+    }
+
+    searchableSelectActiveInstance.close({ restoreFocus });
+};
+
+const ensureSearchableSelectGlobalListeners = (() => {
+    let attached = false;
+
+    return () => {
+        if (attached) {
+            return;
+        }
+
+        document.addEventListener('pointerdown', (event) => {
+            if (!(event.target instanceof Node) || searchableSelectActiveInstance === null) {
+                return;
+            }
+
+            if (searchableSelectActiveInstance.root.contains(event.target)) {
+                return;
+            }
+
+            closeActiveSearchableSelect();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || searchableSelectActiveInstance === null) {
+                return;
+            }
+
+            event.preventDefault();
+            closeActiveSearchableSelect({ restoreFocus: true });
+        });
+
+        attached = true;
+    };
+})();
+
+const enhanceSearchableSelect = (select, {
+    placeholder = 'Select an option',
+    searchPlaceholder = 'Search',
+    emptyMessage = 'No results found',
+} = {}) => {
+    if (!(select instanceof HTMLSelectElement) || searchableSelectInstances.has(select)) {
+        return searchableSelectInstances.get(select) || null;
+    }
+
+    ensureSearchableSelectGlobalListeners();
+
+    const optionData = Array.from(select.options).map((option, index) => ({
+        value: option.value,
+        label: option.textContent?.trim() || '',
+        searchText: `${option.textContent || ''} ${option.getAttribute('data-search') || ''}`.trim().toLowerCase(),
+        disabled: option.disabled,
+        isPlaceholder: index === 0 && option.value === '',
+    }));
+    const hasPlaceholderOption = optionData.some((option) => option.isPlaceholder);
+
+    select.classList.add('searchable-select__native');
+    select.setAttribute('tabindex', '-1');
+
+    const root = document.createElement('div');
+    root.className = `searchable-select${select.classList.contains('is-invalid') ? ' is-invalid' : ''}`;
+    root.dataset.searchableSelect = '';
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'searchable-select__trigger';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+
+    const triggerLabel = document.createElement('span');
+    triggerLabel.className = 'searchable-select__trigger-label';
+
+    const triggerMeta = document.createElement('span');
+    triggerMeta.className = 'searchable-select__trigger-meta';
+    triggerMeta.textContent = 'Search';
+
+    trigger.append(triggerLabel, triggerMeta);
+
+    const panel = document.createElement('div');
+    panel.className = 'searchable-select__panel';
+    panel.hidden = true;
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.className = 'searchable-select__input';
+    searchInput.placeholder = searchPlaceholder;
+    searchInput.setAttribute('aria-label', searchPlaceholder);
+    searchInput.autocomplete = 'off';
+    searchInput.spellcheck = false;
+
+    const results = document.createElement('div');
+    results.className = 'searchable-select__results';
+    results.setAttribute('role', 'listbox');
+
+    const emptyState = document.createElement('div');
+    emptyState.className = 'searchable-select__empty';
+    emptyState.textContent = emptyMessage;
+    emptyState.hidden = true;
+
+    panel.append(searchInput, results, emptyState);
+    select.parentNode?.insertBefore(root, select);
+    root.append(select, trigger, panel);
+
+    let filteredOptions = [];
+    let activeIndex = -1;
+
+    const syncInvalidState = () => {
+        root.classList.toggle('is-invalid', select.classList.contains('is-invalid'));
+        trigger.disabled = select.disabled;
+    };
+
+    const selectedOption = () => optionData.find((option) => option.value === select.value) || optionData[0] || null;
+
+    const updateTriggerLabel = () => {
+        const currentOption = selectedOption();
+        const hasSelection = currentOption !== null && !currentOption.isPlaceholder && currentOption.value !== '';
+
+        triggerLabel.textContent = hasSelection ? currentOption.label : placeholder;
+        trigger.classList.toggle('is-placeholder', !hasSelection);
+        trigger.title = hasSelection ? currentOption.label : placeholder;
+    };
+
+    const setActiveOption = (index) => {
+        activeIndex = index;
+
+        results.querySelectorAll('.searchable-select__option').forEach((optionElement, optionIndex) => {
+            const isActive = optionIndex === activeIndex;
+            optionElement.classList.toggle('is-active', isActive);
+
+            if (isActive) {
+                optionElement.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    };
+
+    const applySelection = (value) => {
+        if (select.value === value) {
+            updateTriggerLabel();
+            return;
+        }
+
+        select.value = value;
+        updateTriggerLabel();
+        syncInvalidState();
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    const renderOptions = () => {
+        const query = searchInput.value.trim().toLowerCase();
+        const currentValue = select.value;
+
+        filteredOptions = optionData.filter((option) => {
+            if (option.disabled) {
+                return false;
+            }
+
+            if (option.isPlaceholder) {
+                return hasPlaceholderOption && query === '';
+            }
+
+            return query === '' || option.searchText.includes(query);
+        });
+
+        results.innerHTML = '';
+
+        filteredOptions.forEach((option) => {
+            const optionButton = document.createElement('button');
+            optionButton.type = 'button';
+            optionButton.className = 'searchable-select__option';
+            optionButton.setAttribute('role', 'option');
+            optionButton.dataset.value = option.value;
+            optionButton.textContent = option.label;
+
+            if (option.value === currentValue) {
+                optionButton.classList.add('is-selected');
+                optionButton.setAttribute('aria-selected', 'true');
+            }
+
+            optionButton.addEventListener('click', () => {
+                applySelection(option.value);
+                instance.close({ restoreFocus: true });
+            });
+
+            results.append(optionButton);
+        });
+
+        emptyState.hidden = filteredOptions.length > 0;
+        activeIndex = filteredOptions.findIndex((option) => option.value === currentValue && !option.isPlaceholder);
+
+        if (activeIndex < 0 && filteredOptions.length > 0) {
+            activeIndex = 0;
+        }
+
+        setActiveOption(activeIndex);
+    };
+
+    const instance = {
+        root,
+        close: ({ restoreFocus = false } = {}) => {
+            if (panel.hidden) {
+                return;
+            }
+
+            panel.hidden = true;
+            root.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+            searchInput.value = '';
+            searchableSelectActiveInstance = searchableSelectActiveInstance === instance ? null : searchableSelectActiveInstance;
+            renderOptions();
+
+            if (restoreFocus) {
+                trigger.focus();
+            }
+        },
+        open: () => {
+            if (!panel.hidden) {
+                searchInput.focus();
+                searchInput.select();
+                return;
+            }
+
+            if (searchableSelectActiveInstance !== null && searchableSelectActiveInstance !== instance) {
+                searchableSelectActiveInstance.close();
+            }
+
+            searchableSelectActiveInstance = instance;
+            panel.hidden = false;
+            root.classList.add('is-open');
+            trigger.setAttribute('aria-expanded', 'true');
+            renderOptions();
+            searchInput.focus();
+            searchInput.select();
+        },
+        sync: () => {
+            syncInvalidState();
+            updateTriggerLabel();
+            renderOptions();
+        },
+    };
+
+    trigger.addEventListener('click', () => {
+        if (select.disabled) {
+            return;
+        }
+
+        if (panel.hidden) {
+            instance.open();
+            return;
+        }
+
+        instance.close({ restoreFocus: true });
+    });
+
+    trigger.addEventListener('keydown', (event) => {
+        if (!['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+            return;
+        }
+
+        event.preventDefault();
+        instance.open();
+    });
+
+    searchInput.addEventListener('input', () => {
+        renderOptions();
+    });
+
+    searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+
+            if (filteredOptions.length === 0) {
+                return;
+            }
+
+            setActiveOption(Math.min(activeIndex + 1, filteredOptions.length - 1));
+            return;
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+
+            if (filteredOptions.length === 0) {
+                return;
+            }
+
+            setActiveOption(Math.max(activeIndex - 1, 0));
+            return;
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault();
+
+            if (activeIndex < 0 || !filteredOptions[activeIndex]) {
+                return;
+            }
+
+            applySelection(filteredOptions[activeIndex].value);
+            instance.close({ restoreFocus: true });
+            return;
+        }
+
+        if (event.key === 'Tab') {
+            instance.close();
+        }
+    });
+
+    select.addEventListener('change', () => {
+        updateTriggerLabel();
+        renderOptions();
+    });
+
+    const observer = new MutationObserver(() => {
+        syncInvalidState();
+    });
+    observer.observe(select, { attributes: true, attributeFilter: ['class', 'disabled'] });
+
+    searchableSelectInstances.set(select, instance);
+    instance.sync();
+    return instance;
+};
+
 document.querySelectorAll('[data-job-material-form]').forEach((form) => {
     if (!(form instanceof HTMLFormElement)) {
         return;
@@ -565,6 +894,12 @@ document.querySelectorAll('[data-job-material-form]').forEach((form) => {
     if (!(materialSelect instanceof HTMLSelectElement) || !(entryTypeSelect instanceof HTMLSelectElement) || !(quantityInput instanceof HTMLInputElement)) {
         return;
     }
+
+    enhanceSearchableSelect(materialSelect, {
+        placeholder: 'Select a material',
+        searchPlaceholder: 'Search by SKU or material name',
+        emptyMessage: 'No materials match your search',
+    });
 
     const selectedMaterial = () => materialCatalog.find((material) => String(material.id) === materialSelect.value) || null;
 
@@ -620,6 +955,7 @@ document.querySelectorAll('[data-job-material-form]').forEach((form) => {
         const select = document.createElement('select');
         select.className = 'form-select';
         select.name = 'accessory_material_id[]';
+        select.setAttribute('data-accessory-search-select', '');
         select.add(new Option('Select accessory', ''));
         accessoryCatalog.forEach((accessory) => {
             const option = new Option(accessory.label, String(accessory.id));
@@ -642,6 +978,11 @@ document.querySelectorAll('[data-job-material-form]').forEach((form) => {
         removeButton.setAttribute('data-remove-accessory-row', '');
 
         row.append(select, quantity, removeButton);
+        enhanceSearchableSelect(select, {
+            placeholder: 'Select accessory',
+            searchPlaceholder: 'Search by SKU or accessory name',
+            emptyMessage: 'No accessories match your search',
+        });
         return row;
     };
 
@@ -721,7 +1062,8 @@ document.querySelectorAll('[data-job-material-form]').forEach((form) => {
 
     usedDeviceEditor.querySelectorAll('[data-add-accessory-row]').forEach((button) => {
         button.addEventListener('click', () => {
-            accessoryRows.append(buildAccessoryRow());
+            const row = buildAccessoryRow();
+            accessoryRows.append(row);
             syncAccessoryEmptyState();
         });
     });
@@ -739,4 +1081,11 @@ document.querySelectorAll('[data-job-material-form]').forEach((form) => {
     });
 
     syncAccessoryEmptyState();
+    usedDeviceEditor.querySelectorAll('[data-accessory-search-select]').forEach((select) => {
+        enhanceSearchableSelect(select, {
+            placeholder: 'Select accessory',
+            searchPlaceholder: 'Search by SKU or accessory name',
+            emptyMessage: 'No accessories match your search',
+        });
+    });
 });

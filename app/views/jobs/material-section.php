@@ -158,7 +158,7 @@ $showReturnField = ($materialUsageValues['entry_type'] ?? 'used') === 'returned'
                             <div class="device-accessory-list mt-3" data-accessory-rows>
                                 <?php foreach (($usedDeviceEditorValues['accessories'] ?? []) as $row): ?>
                                     <div class="device-accessory-row">
-                                        <select class="form-select" name="accessory_material_id[]">
+                                        <select class="form-select" name="accessory_material_id[]" data-accessory-search-select>
                                             <option value="">Select accessory</option>
                                             <?php foreach ($allowedDeviceAccessories as $accessoryMaterial): ?>
                                                 <option value="<?= h($accessoryMaterial['id']) ?>" <?= (int) ($row['material_id'] ?? 0) === (int) $accessoryMaterial['id'] ? 'selected' : '' ?>>
