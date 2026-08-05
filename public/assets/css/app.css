@@ -884,9 +884,10 @@ html[data-theme="dark"] .searchable-select__option.is-selected {
 
 .worker-note {
     padding: 1rem;
-    border: 1px solid #dbe4ee;
+    border: 1px solid var(--color-border);
     border-radius: 0.9rem;
-    background: #f8fafc;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
 }
 
 .worker-note__meta {
@@ -895,8 +896,12 @@ html[data-theme="dark"] .searchable-select__option.is-selected {
     justify-content: space-between;
     gap: 0.75rem;
     margin-bottom: 0.5rem;
-    color: #64748b;
+    color: var(--color-text-muted);
     font-size: 0.9rem;
+}
+
+.worker-note strong {
+    color: var(--color-text);
 }
 
 .job-assets-header {
