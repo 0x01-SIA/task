@@ -128,6 +128,25 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                 <p class="info-label">Internal Notes</p>
                 <p class="mb-0"><?= nl2br(h($job['internal_notes'] ?: 'No internal notes recorded.')) ?></p>
             </div>
+
+            <div class="mt-4">
+                <p class="info-label">Field Updates</p>
+                <?php if ($notes === []): ?>
+                    <p class="mb-0 text-secondary">No field updates have been added yet.</p>
+                <?php else: ?>
+                    <div class="worker-notes-list">
+                        <?php foreach ($notes as $note): ?>
+                            <article class="worker-note">
+                                <div class="worker-note__meta">
+                                    <strong><?= h($note['author_name'] ?: 'Unknown user') ?></strong>
+                                    <span><?= h(format_datetime($note['created_at'] ?? null)) ?></span>
+                                </div>
+                                <p class="mb-0"><?= nl2br(h($note['note'])) ?></p>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
     </section>
 

@@ -1096,6 +1096,7 @@ function render_job_show_page(
         'job' => $job,
         'attachments' => list_job_attachments((int) $job['id']),
         'photos' => list_job_photos((int) $job['id']),
+        'notes' => list_job_notes((int) $job['id']),
         'jobMaterials' => list_job_materials((int) $job['id']),
         'activeMaterials' => list_active_materials(),
         'allowedDeviceAccessories' => list_allowed_device_accessory_materials(),
@@ -1118,7 +1119,6 @@ function render_job_show_page(
     ];
 
     if ($workerView) {
-        $baseData['notes'] = list_job_notes((int) $job['id']);
         $baseData['noteValue'] = '';
         $baseData['noteError'] = null;
     }
