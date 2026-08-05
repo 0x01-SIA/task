@@ -175,7 +175,6 @@ $showReturnField = ($materialUsageValues['entry_type'] ?? 'used') === 'returned'
                         </div>
                         <div class="col-12 d-flex flex-wrap gap-2">
                             <button class="btn btn-primary" type="submit">Save device</button>
-                            <button class="btn btn-outline-secondary" type="button" data-used-device-editor-close>Cancel</button>
                         </div>
                     </form>
                 </section>
