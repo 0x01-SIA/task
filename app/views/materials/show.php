@@ -18,7 +18,15 @@ $jobPathBase = (($viewer['role'] ?? '') === 'worker') ? '/work/jobs/' : '/jobs/'
                 <div>
                     <p class="text-uppercase text-secondary small fw-semibold mb-2">Material</p>
                     <h1 class="h3 mb-2"><?= h($material['name']) ?></h1>
-                    <p class="text-secondary mb-0"><?= h(($material['sku'] ?? '') !== '' ? $material['sku'] : 'No SKU/code provided') ?></p>
+                    <p class="text-secondary mb-2"><?= h(($material['sku'] ?? '') !== '' ? $material['sku'] : 'No SKU/code provided') ?></p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php if ((int) ($material['is_device'] ?? 0) === 1): ?>
+                            <span class="badge text-bg-primary">Device</span>
+                        <?php endif; ?>
+                        <?php if ((int) ($material['is_device_accessory'] ?? 0) === 1): ?>
+                            <span class="badge text-bg-info">Device accessory</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     <a class="btn btn-outline-secondary" href="<?= h(app_url('/materials')) ?>">Back to Materials</a>
@@ -82,6 +90,14 @@ $jobPathBase = (($viewer['role'] ?? '') === 'worker') ? '/work/jobs/' : '/jobs/'
                             <?= (int) $material['is_active'] === 1 ? 'Active' : 'Inactive' ?>
                         </span>
                     </p>
+                </div>
+                <div>
+                    <p class="info-label">Device</p>
+                    <p class="mb-0"><?= (int) ($material['is_device'] ?? 0) === 1 ? 'Yes' : 'No' ?></p>
+                </div>
+                <div>
+                    <p class="info-label">Accessory Eligible</p>
+                    <p class="mb-0"><?= (int) ($material['is_device_accessory'] ?? 0) === 1 ? 'Yes' : 'No' ?></p>
                 </div>
                 <div>
                     <p class="info-label">Created</p>

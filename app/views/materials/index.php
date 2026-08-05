@@ -87,7 +87,17 @@ declare(strict_types=1);
                         <?php foreach ($materials as $material): ?>
                             <tr>
                                 <td class="fw-semibold"><?= h($material['name']) ?></td>
-                                <td><?= h($material['sku'] ?: 'Not provided') ?></td>
+                                <td>
+                                    <div><?= h($material['sku'] ?: 'Not provided') ?></div>
+                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                        <?php if ((int) ($material['is_device'] ?? 0) === 1): ?>
+                                            <span class="badge text-bg-primary">Device</span>
+                                        <?php endif; ?>
+                                        <?php if ((int) ($material['is_device_accessory'] ?? 0) === 1): ?>
+                                            <span class="badge text-bg-info">Accessory</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
                                 <td><?= h($material['unit']) ?></td>
                                 <td>
                                     <span class="badge <?= (int) $material['is_active'] === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>">

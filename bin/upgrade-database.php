@@ -43,6 +43,7 @@ try {
     ensure_materials_company_scope($connection);
     ensure_material_stock_tables($connection);
     ensure_job_materials_company_scope($connection);
+    ensure_device_tracking_schema($connection);
     migrate_existing_job_material_movements($connection);
     ensure_default_company_exists($connection);
 
@@ -281,6 +282,22 @@ function ensure_materials_company_scope(PDO $connection): void
     ensure_foreign_key($connection, 'materials', 'fk_materials_company', 'ALTER TABLE materials ADD CONSTRAINT fk_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
 
+function ensure_device_tracking_schema(PDO $connection): void
+{
+    ensure_column($connection, 'materials', 'is_device', 'ALTER TABLE materials ADD COLUMN is_device TINYINT(1) NOT NULL DEFAULT 0 AFTER description');
+    ensure_column($connection, 'materials', 'is_device_accessory', 'ALTER TABLE materials ADD COLUMN is_device_accessory TINYINT(1) NOT NULL DEFAULT 0 AFTER is_device');
+    $connection->exec('ALTER TABLE materials MODIFY is_device TINYINT(1) NOT NULL DEFAULT 0');
+    $connection->exec('ALTER TABLE materials MODIFY is_device_accessory TINYINT(1) NOT NULL DEFAULT 0');
+    ensure_index($connection, 'materials', 'idx_materials_is_device', 'ALTER TABLE materials ADD KEY idx_materials_is_device (is_device)');
+    ensure_index($connection, 'materials', 'idx_materials_is_device_accessory', 'ALTER TABLE materials ADD KEY idx_materials_is_device_accessory (is_device_accessory)');
+
+    ensure_column($connection, 'job_materials', 'device_identifier', 'ALTER TABLE job_materials ADD COLUMN device_identifier VARCHAR(255) DEFAULT NULL AFTER quantity');
+
+    ensure_device_installations_table($connection);
+    ensure_device_installation_accessories_table($connection);
+    mark_known_device_materials($connection);
+}
+
 function ensure_material_stock_tables(PDO $connection): void
 {
     ensure_material_movements_table($connection);
@@ -513,6 +530,8 @@ function ensure_materials_table(PDO $connection): void
             sku VARCHAR(100) DEFAULT NULL,
             unit VARCHAR(50) NOT NULL,
             description TEXT DEFAULT NULL,
+            is_device TINYINT(1) NOT NULL DEFAULT 0,
+            is_device_accessory TINYINT(1) NOT NULL DEFAULT 0,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -520,6 +539,8 @@ function ensure_materials_table(PDO $connection): void
             KEY idx_materials_company_id (company_id),
             KEY idx_materials_name (name),
             KEY idx_materials_sku (sku),
+            KEY idx_materials_is_device (is_device),
+            KEY idx_materials_is_device_accessory (is_device_accessory),
             KEY idx_materials_is_active (is_active),
             CONSTRAINT fk_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
@@ -529,12 +550,16 @@ function ensure_materials_table(PDO $connection): void
     ensure_column($connection, 'materials', 'sku', 'ALTER TABLE materials ADD COLUMN sku VARCHAR(100) DEFAULT NULL AFTER name');
     ensure_column($connection, 'materials', 'unit', 'ALTER TABLE materials ADD COLUMN unit VARCHAR(50) NOT NULL AFTER sku');
     ensure_column($connection, 'materials', 'description', 'ALTER TABLE materials ADD COLUMN description TEXT DEFAULT NULL AFTER unit');
+    ensure_column($connection, 'materials', 'is_device', 'ALTER TABLE materials ADD COLUMN is_device TINYINT(1) NOT NULL DEFAULT 0 AFTER description');
+    ensure_column($connection, 'materials', 'is_device_accessory', 'ALTER TABLE materials ADD COLUMN is_device_accessory TINYINT(1) NOT NULL DEFAULT 0 AFTER is_device');
     ensure_column($connection, 'materials', 'is_active', 'ALTER TABLE materials ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER description');
     ensure_column($connection, 'materials', 'created_at', 'ALTER TABLE materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active');
     ensure_column($connection, 'materials', 'updated_at', 'ALTER TABLE materials ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
 
     ensure_index($connection, 'materials', 'idx_materials_name', 'ALTER TABLE materials ADD KEY idx_materials_name (name)');
     ensure_index($connection, 'materials', 'idx_materials_sku', 'ALTER TABLE materials ADD KEY idx_materials_sku (sku)');
+    ensure_index($connection, 'materials', 'idx_materials_is_device', 'ALTER TABLE materials ADD KEY idx_materials_is_device (is_device)');
+    ensure_index($connection, 'materials', 'idx_materials_is_device_accessory', 'ALTER TABLE materials ADD KEY idx_materials_is_device_accessory (is_device_accessory)');
     ensure_index($connection, 'materials', 'idx_materials_is_active', 'ALTER TABLE materials ADD KEY idx_materials_is_active (is_active)');
 }
 
@@ -656,6 +681,7 @@ function ensure_job_materials_table(PDO $connection): void
             movement_id BIGINT UNSIGNED DEFAULT NULL,
             entry_type ENUM('used','returned') NOT NULL DEFAULT 'used',
             quantity DECIMAL(14,3) NOT NULL,
+            device_identifier VARCHAR(255) DEFAULT NULL,
             recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
             occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -679,6 +705,7 @@ function ensure_job_materials_table(PDO $connection): void
     ensure_column($connection, 'job_materials', 'movement_id', 'ALTER TABLE job_materials ADD COLUMN movement_id BIGINT UNSIGNED DEFAULT NULL AFTER material_id');
     ensure_column($connection, 'job_materials', 'entry_type', "ALTER TABLE job_materials ADD COLUMN entry_type ENUM('used','returned') NOT NULL DEFAULT 'used' AFTER movement_id");
     ensure_column($connection, 'job_materials', 'quantity', 'ALTER TABLE job_materials ADD COLUMN quantity DECIMAL(14,3) NOT NULL AFTER entry_type');
+    ensure_column($connection, 'job_materials', 'device_identifier', 'ALTER TABLE job_materials ADD COLUMN device_identifier VARCHAR(255) DEFAULT NULL AFTER quantity');
     ensure_column($connection, 'job_materials', 'recorded_by_user_id', 'ALTER TABLE job_materials ADD COLUMN recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL AFTER quantity');
     ensure_column($connection, 'job_materials', 'occurred_at', 'ALTER TABLE job_materials ADD COLUMN occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER recorded_by_user_id');
     ensure_column($connection, 'job_materials', 'created_at', 'ALTER TABLE job_materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER occurred_at');
@@ -692,6 +719,89 @@ function ensure_job_materials_table(PDO $connection): void
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_material', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_material FOREIGN KEY (material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_movement', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_movement FOREIGN KEY (movement_id) REFERENCES material_movements (id) ON DELETE SET NULL ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_recorded_by_user', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_recorded_by_user FOREIGN KEY (recorded_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensure_device_installations_table(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS device_installations (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            company_id BIGINT UNSIGNED NOT NULL,
+            job_id BIGINT UNSIGNED NOT NULL,
+            device_material_usage_id BIGINT UNSIGNED NOT NULL,
+            device_material_id BIGINT UNSIGNED NOT NULL,
+            device_identifier VARCHAR(255) NOT NULL,
+            object_name VARCHAR(255) NOT NULL,
+            created_by BIGINT UNSIGNED DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_device_installations_usage_id (device_material_usage_id),
+            KEY idx_device_installations_company_job (company_id, job_id),
+            KEY idx_device_installations_company_material (company_id, device_material_id),
+            CONSTRAINT fk_device_installations_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installations_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installations_usage FOREIGN KEY (device_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installations_material FOREIGN KEY (device_material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installations_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensure_index($connection, 'device_installations', 'uq_device_installations_usage_id', 'ALTER TABLE device_installations ADD UNIQUE KEY uq_device_installations_usage_id (device_material_usage_id)');
+    ensure_index($connection, 'device_installations', 'idx_device_installations_company_job', 'ALTER TABLE device_installations ADD KEY idx_device_installations_company_job (company_id, job_id)');
+    ensure_index($connection, 'device_installations', 'idx_device_installations_company_material', 'ALTER TABLE device_installations ADD KEY idx_device_installations_company_material (company_id, device_material_id)');
+    ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_company', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_job', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_usage', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_usage FOREIGN KEY (device_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_material', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_material FOREIGN KEY (device_material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installations', 'fk_device_installations_created_by', 'ALTER TABLE device_installations ADD CONSTRAINT fk_device_installations_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensure_device_installation_accessories_table(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS device_installation_accessories (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            company_id BIGINT UNSIGNED NOT NULL,
+            device_installation_id BIGINT UNSIGNED NOT NULL,
+            accessory_material_id BIGINT UNSIGNED NOT NULL,
+            accessory_material_usage_id BIGINT UNSIGNED NOT NULL,
+            quantity DECIMAL(14,3) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_device_installation_accessories_installation_material (device_installation_id, accessory_material_id),
+            UNIQUE KEY uq_device_installation_accessories_usage_id (accessory_material_usage_id),
+            KEY idx_device_installation_accessories_company_installation (company_id, device_installation_id),
+            KEY idx_device_installation_accessories_company_material (company_id, accessory_material_id),
+            CONSTRAINT fk_device_installation_accessories_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installation_accessories_installation FOREIGN KEY (device_installation_id) REFERENCES device_installations (id) ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installation_accessories_material FOREIGN KEY (accessory_material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_device_installation_accessories_usage FOREIGN KEY (accessory_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensure_index($connection, 'device_installation_accessories', 'uq_device_installation_accessories_installation_material', 'ALTER TABLE device_installation_accessories ADD UNIQUE KEY uq_device_installation_accessories_installation_material (device_installation_id, accessory_material_id)');
+    ensure_index($connection, 'device_installation_accessories', 'uq_device_installation_accessories_usage_id', 'ALTER TABLE device_installation_accessories ADD UNIQUE KEY uq_device_installation_accessories_usage_id (accessory_material_usage_id)');
+    ensure_index($connection, 'device_installation_accessories', 'idx_device_installation_accessories_company_installation', 'ALTER TABLE device_installation_accessories ADD KEY idx_device_installation_accessories_company_installation (company_id, device_installation_id)');
+    ensure_index($connection, 'device_installation_accessories', 'idx_device_installation_accessories_company_material', 'ALTER TABLE device_installation_accessories ADD KEY idx_device_installation_accessories_company_material (company_id, accessory_material_id)');
+    ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_company', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_installation', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_installation FOREIGN KEY (device_installation_id) REFERENCES device_installations (id) ON DELETE CASCADE ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_material', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_material FOREIGN KEY (accessory_material_id) REFERENCES materials (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'device_installation_accessories', 'fk_device_installation_accessories_usage', 'ALTER TABLE device_installation_accessories ADD CONSTRAINT fk_device_installation_accessories_usage FOREIGN KEY (accessory_material_usage_id) REFERENCES job_materials (id) ON DELETE CASCADE ON UPDATE CASCADE');
+}
+
+function mark_known_device_materials(PDO $connection): void
+{
+    $statement = $connection->prepare(
+        'UPDATE materials
+         SET is_device = 1
+         WHERE sku = :sku'
+    );
+
+    foreach (['GL_J', 'GL_L', 'GM_J', 'GM_L'] as $sku) {
+        $statement->execute(['sku' => $sku]);
+    }
 }
 
 function migrate_existing_job_material_movements(PDO $connection): void

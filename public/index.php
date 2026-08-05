@@ -403,12 +403,20 @@ function material_form_values(array $source, array $defaults = []): array
     $isActive = array_key_exists('is_active', $source)
         ? (string) $source['is_active']
         : (string) ($defaults['is_active'] ?? '1');
+    $isDevice = array_key_exists('is_device', $source)
+        ? (string) $source['is_device']
+        : (string) ($defaults['is_device'] ?? '0');
+    $isDeviceAccessory = array_key_exists('is_device_accessory', $source)
+        ? (string) $source['is_device_accessory']
+        : (string) ($defaults['is_device_accessory'] ?? '0');
 
     return [
         'name' => trim((string) ($source['name'] ?? ($defaults['name'] ?? ''))),
         'sku' => trim((string) ($source['sku'] ?? ($defaults['sku'] ?? ''))),
         'unit' => trim((string) ($source['unit'] ?? ($defaults['unit'] ?? ''))),
         'description' => trim((string) ($source['description'] ?? ($defaults['description'] ?? ''))),
+        'is_device' => $isDevice === '1' ? '1' : '0',
+        'is_device_accessory' => $isDeviceAccessory === '1' ? '1' : '0',
         'is_active' => $isActive === '0' ? '0' : '1',
     ];
 }
@@ -442,6 +450,8 @@ function save_material_payload(array $values, int $companyId): array
         'sku' => $values['sku'] !== '' ? $values['sku'] : null,
         'unit' => $values['unit'],
         'description' => $values['description'] !== '' ? $values['description'] : null,
+        'is_device' => $values['is_device'] === '1' ? 1 : 0,
+        'is_device_accessory' => $values['is_device_accessory'] === '1' ? 1 : 0,
         'is_active' => $values['is_active'] === '1' ? 1 : 0,
     ];
 }
@@ -452,7 +462,32 @@ function job_material_form_values(array $source): array
         'material_id' => positive_int_or_null($source['material_id'] ?? null),
         'entry_type' => in_array(($source['entry_type'] ?? ''), ['used', 'returned'], true) ? (string) $source['entry_type'] : 'used',
         'quantity' => trim((string) ($source['quantity'] ?? '')),
+        'device_identifier' => trim((string) ($source['device_identifier'] ?? '')),
+        'object_name' => trim((string) ($source['object_name'] ?? '')),
+        'accessories' => job_material_accessory_values($source),
     ];
+}
+
+function job_material_accessory_values(array $source): array
+{
+    $materialIds = $source['accessory_material_id'] ?? [];
+    $quantities = $source['accessory_quantity'] ?? [];
+
+    if (!is_array($materialIds) || !is_array($quantities)) {
+        return [];
+    }
+
+    $rows = [];
+    $rowCount = max(count($materialIds), count($quantities));
+
+    for ($index = 0; $index < $rowCount; $index++) {
+        $rows[] = [
+            'material_id' => positive_int_or_null($materialIds[$index] ?? null),
+            'quantity' => trim((string) ($quantities[$index] ?? '')),
+        ];
+    }
+
+    return $rows;
 }
 
 function normalize_quantity_value(string $value): ?string
@@ -473,6 +508,7 @@ function normalize_quantity_value(string $value): ?string
 function validate_job_material_create(array $values): array
 {
     $errors = [];
+    $material = null;
 
     if (($values['material_id'] ?? null) === null) {
         $errors['material_id'] = 'Select a valid material.';
@@ -484,22 +520,139 @@ function validate_job_material_create(array $values): array
         }
     }
 
-    if (normalize_quantity_value((string) ($values['quantity'] ?? '')) === null) {
-        $errors['quantity'] = 'Enter a quantity greater than zero using up to 3 decimal places.';
+    $quantityError = validate_job_material_quantity((string) ($values['quantity'] ?? ''), $material);
+
+    if ($quantityError !== null) {
+        $errors['quantity'] = $quantityError;
     }
 
     if (!in_array((string) ($values['entry_type'] ?? ''), ['used', 'returned'], true)) {
         $errors['entry_type'] = 'Select whether the material was used or returned.';
     }
 
+    if ($material !== null && material_is_device($material)) {
+        if (($values['device_identifier'] ?? '') === '') {
+            $errors['device_identifier'] = (($values['entry_type'] ?? 'used') === 'returned')
+                ? 'Returned device ID is required.'
+                : 'Device ID is required.';
+        } elseif (strlen((string) $values['device_identifier']) > 255) {
+            $errors['device_identifier'] = 'Device ID must be 255 characters or fewer.';
+        }
+
+        if (($values['entry_type'] ?? 'used') === 'used') {
+            if (($values['object_name'] ?? '') === '') {
+                $errors['object_name'] = 'Object name is required for installed devices.';
+            } elseif (strlen((string) $values['object_name']) > 255) {
+                $errors['object_name'] = 'Object name must be 255 characters or fewer.';
+            }
+
+            $accessoryErrors = validate_device_accessory_rows((array) ($values['accessories'] ?? []));
+
+            if ($accessoryErrors !== []) {
+                $errors['accessories'] = $accessoryErrors;
+            }
+        }
+    }
+
     return $errors;
 }
 
-function validate_job_material_quantity(string $quantity): ?string
+function validate_job_material_quantity(string $quantity, ?array $material = null): ?string
 {
+    if ($material !== null && material_is_device($material)) {
+        return normalize_quantity_value($quantity) === fixed_device_quantity()
+            ? null
+            : 'Device quantities are fixed to 1.';
+    }
+
     return normalize_quantity_value($quantity) === null
         ? 'Enter a quantity greater than zero using up to 3 decimal places.'
         : null;
+}
+
+function validate_device_accessory_rows(array $rows): array
+{
+    $errors = [];
+    $allowedAccessories = [];
+
+    foreach (list_allowed_device_accessory_materials() as $material) {
+        $allowedAccessories[(int) $material['id']] = $material;
+    }
+
+    $seenMaterialIds = [];
+
+    foreach ($rows as $index => $row) {
+        $materialId = $row['material_id'] ?? null;
+        $quantity = (string) ($row['quantity'] ?? '');
+        $rowNumber = $index + 1;
+
+        if ($materialId === null && $quantity === '') {
+            continue;
+        }
+
+        if ($materialId === null) {
+            $errors[] = 'Select an accessory material for row ' . $rowNumber . '.';
+            continue;
+        }
+
+        if (isset($seenMaterialIds[(int) $materialId])) {
+            $errors[] = 'Each accessory may only be selected once.';
+            continue;
+        }
+
+        $seenMaterialIds[(int) $materialId] = true;
+
+        if (!isset($allowedAccessories[(int) $materialId])) {
+            $errors[] = 'One of the selected accessories is not allowed.';
+            continue;
+        }
+
+        if (normalize_positive_material_quantity($quantity) === null) {
+            $errors[] = 'Accessory quantities must be greater than zero using up to 3 decimal places.';
+        }
+    }
+
+    return $errors;
+}
+
+function normalized_device_accessory_rows(array $rows): array
+{
+    $normalized = [];
+
+    foreach ($rows as $row) {
+        $materialId = $row['material_id'] ?? null;
+        $quantity = trim((string) ($row['quantity'] ?? ''));
+
+        if ($materialId === null && $quantity === '') {
+            continue;
+        }
+
+        if ($materialId === null) {
+            continue;
+        }
+
+        $normalizedQuantity = normalize_positive_material_quantity($quantity);
+
+        if ($normalizedQuantity === null) {
+            continue;
+        }
+
+        $normalized[] = [
+            'material_id' => (int) $materialId,
+            'quantity' => $normalizedQuantity,
+        ];
+    }
+
+    return $normalized;
+}
+
+function job_material_device_payload(array $values): array
+{
+    return [
+        'device_identifier' => trim((string) ($values['device_identifier'] ?? '')),
+        'object_name' => trim((string) ($values['object_name'] ?? '')),
+        'accessories' => normalized_device_accessory_rows((array) ($values['accessories'] ?? [])),
+    ];
 }
 
 function validate_job_material_entry_type(string $entryType): ?string
@@ -516,13 +669,15 @@ function job_material_entry_type_label(string $entryType): string
 
 function material_option_label(array $material): string
 {
-    $label = (string) $material['name'];
+    $label = (string) ($material['name'] ?? $material['material_name'] ?? '');
 
-    if (($material['sku'] ?? null) !== null && trim((string) $material['sku']) !== '') {
-        $label .= ' (' . trim((string) $material['sku']) . ')';
+    $sku = trim((string) ($material['sku'] ?? $material['material_sku'] ?? ''));
+
+    if ($sku !== '') {
+        $label .= ' (' . $sku . ')';
     }
 
-    return $label . ' - ' . (string) $material['unit'];
+    return $label . ' - ' . (string) ($material['unit'] ?? $material['material_unit'] ?? '');
 }
 
 function requested_material_movement_limit(mixed $value): int
@@ -943,6 +1098,8 @@ function render_job_show_page(
         'photos' => list_job_photos((int) $job['id']),
         'jobMaterials' => list_job_materials((int) $job['id']),
         'activeMaterials' => list_active_materials(),
+        'allowedDeviceAccessories' => list_allowed_device_accessory_materials(),
+        'deviceInstallationsByUsage' => list_job_device_installations((int) $job['id']),
         'customerConfirmation' => find_job_customer_confirmation((int) $job['id']),
         'customerConfirmationValues' => customer_confirmation_form_values([]),
         'customerConfirmationErrors' => [],
@@ -950,6 +1107,7 @@ function render_job_show_page(
         'materialUsageErrors' => [],
         'materialEditValues' => [],
         'materialEditErrors' => [],
+        'usedDeviceEditorState' => null,
         'viewer' => $viewer,
         'successMessage' => flash('success'),
         'errorMessage' => flash('error'),
@@ -2723,6 +2881,8 @@ try {
                         'sku' => (string) ($material['sku'] ?? ''),
                         'unit' => (string) $material['unit'],
                         'description' => (string) ($material['description'] ?? ''),
+                        'is_device' => (int) ($material['is_device'] ?? 0) === 1 ? '1' : '0',
+                        'is_device_accessory' => (int) ($material['is_device_accessory'] ?? 0) === 1 ? '1' : '0',
                         'is_active' => (int) ($material['is_active'] ?? 0) === 1 ? '1' : '0',
                     ]),
                     'errors' => [],
@@ -3411,22 +3571,43 @@ try {
 
             $values = job_material_form_values($_POST);
             $errors = validate_job_material_create($values);
+            $selectedMaterial = ($values['material_id'] ?? null) !== null
+                ? find_material_by_id((int) $values['material_id'])
+                : null;
 
             if ($errors !== []) {
                 render_job_show_page($job, $viewer, [
                     'materialUsageValues' => $values,
                     'materialUsageErrors' => $errors,
+                    'usedDeviceEditorState' => $selectedMaterial !== null
+                        && material_is_device($selectedMaterial)
+                        && ($values['entry_type'] ?? 'used') === 'used'
+                        ? [
+                            'mode' => 'create',
+                            'formAction' => '/jobs/' . $job['id'] . '/materials',
+                            'material' => $selectedMaterial,
+                            'values' => $values,
+                            'errors' => $errors,
+                            'jobMaterialId' => null,
+                        ]
+                        : null,
                 ], false, 422);
                 break;
             }
 
-            add_job_material_entry(
-                (int) $job['id'],
-                (int) $values['material_id'],
-                (string) $values['entry_type'],
-                (string) normalize_quantity_value($values['quantity']),
-                isset($viewer['id']) ? (int) $viewer['id'] : null
-            );
+            try {
+                add_job_material_entry(
+                    (int) $job['id'],
+                    (int) $values['material_id'],
+                    (string) $values['entry_type'],
+                    (string) normalize_quantity_value($values['quantity']),
+                    isset($viewer['id']) ? (int) $viewer['id'] : null,
+                    job_material_device_payload($values)
+                );
+            } catch (Throwable $exception) {
+                flash('error', safe_error_message($exception->getMessage()));
+                redirect('/jobs/' . $job['id']);
+            }
             flash('success', $values['entry_type'] === 'returned'
                 ? 'Material return recorded successfully.'
                 : 'Material usage recorded successfully.');
@@ -3464,29 +3645,93 @@ try {
                 abort(403, 'Access denied', 'You do not have permission to update this material usage.');
             }
 
-            $quantity = trim((string) ($_POST['quantity'] ?? ''));
-            $entryType = trim((string) ($_POST['entry_type'] ?? ''));
-            $error = validate_job_material_quantity($quantity);
-            $typeError = validate_job_material_entry_type($entryType);
+            $isDevice = job_material_is_device($jobMaterial);
 
-            if ($error !== null || $typeError !== null) {
-                render_job_show_page($job, $viewer, [
-                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity, 'entry_type' => $entryType]],
-                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error, 'entry_type' => $typeError]],
-                ], false, 422);
-                break;
+            if ($isDevice) {
+                $values = job_material_form_values($_POST);
+                $values['material_id'] = (int) $jobMaterial['material_id'];
+                $values['entry_type'] = (string) $jobMaterial['entry_type'];
+                $values['quantity'] = fixed_device_quantity();
+                $material = find_material_by_id((int) $jobMaterial['material_id']);
+                $errors = validate_job_material_create($values);
+
+                if ($material !== null && isset($errors['material_id'])) {
+                    unset($errors['material_id']);
+                }
+
+                if ($errors !== []) {
+                    render_job_show_page($job, $viewer, [
+                        'usedDeviceEditorState' => (string) $jobMaterial['entry_type'] === 'used'
+                            ? [
+                                'mode' => 'edit',
+                                'formAction' => '/jobs/' . $job['id'] . '/materials/' . $jobMaterial['id'] . '/edit',
+                                'material' => $material,
+                                'values' => $values,
+                                'errors' => $errors,
+                                'jobMaterialId' => (int) $jobMaterial['id'],
+                            ]
+                            : null,
+                        'materialEditValues' => (string) $jobMaterial['entry_type'] === 'returned'
+                            ? [(int) $jobMaterial['id'] => $values]
+                            : [],
+                        'materialEditErrors' => (string) $jobMaterial['entry_type'] === 'returned'
+                            ? [(int) $jobMaterial['id'] => $errors]
+                            : [],
+                    ], false, 422);
+                    break;
+                }
+
+                try {
+                    $updated = update_job_material_entry(
+                        (int) $job['id'],
+                        (int) $jobMaterial['id'],
+                        (string) $jobMaterial['entry_type'],
+                        fixed_device_quantity(),
+                        isset($viewer['id']) ? (int) $viewer['id'] : null,
+                        job_material_device_payload($values)
+                    );
+                } catch (Throwable $exception) {
+                    flash('error', safe_error_message($exception->getMessage()));
+                    redirect('/jobs/' . $job['id']);
+                }
+
+                if (!$updated) {
+                    flash('error', 'This job material entry could not be updated.');
+                    redirect('/jobs/' . $job['id']);
+                }
+            } else {
+                $quantity = trim((string) ($_POST['quantity'] ?? ''));
+                $entryType = trim((string) ($_POST['entry_type'] ?? ''));
+                $error = validate_job_material_quantity($quantity);
+                $typeError = validate_job_material_entry_type($entryType);
+
+                if ($error !== null || $typeError !== null) {
+                    render_job_show_page($job, $viewer, [
+                        'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity, 'entry_type' => $entryType]],
+                        'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error, 'entry_type' => $typeError]],
+                    ], false, 422);
+                    break;
+                }
+
+                try {
+                    $updated = update_job_material_entry(
+                        (int) $job['id'],
+                        (int) $jobMaterial['id'],
+                        $entryType,
+                        (string) normalize_quantity_value($quantity),
+                        isset($viewer['id']) ? (int) $viewer['id'] : null
+                    );
+                } catch (Throwable $exception) {
+                    flash('error', safe_error_message($exception->getMessage()));
+                    redirect('/jobs/' . $job['id']);
+                }
+
+                if (!$updated) {
+                    flash('error', 'This job material entry could not be updated.');
+                    redirect('/jobs/' . $job['id']);
+                }
             }
 
-            if (!update_job_material_entry(
-                (int) $job['id'],
-                (int) $jobMaterial['id'],
-                $entryType,
-                (string) normalize_quantity_value($quantity),
-                isset($viewer['id']) ? (int) $viewer['id'] : null
-            )) {
-                flash('error', 'This job material entry could not be updated.');
-                redirect('/jobs/' . $job['id']);
-            }
             flash('success', 'Job material entry updated successfully.');
             redirect('/jobs/' . $job['id']);
             break;
@@ -4314,22 +4559,43 @@ try {
 
             $values = job_material_form_values($_POST);
             $errors = validate_job_material_create($values);
+            $selectedMaterial = ($values['material_id'] ?? null) !== null
+                ? find_material_by_id((int) $values['material_id'])
+                : null;
 
             if ($errors !== []) {
                 render_job_show_page($job, $viewer, [
                     'materialUsageValues' => $values,
                     'materialUsageErrors' => $errors,
+                    'usedDeviceEditorState' => $selectedMaterial !== null
+                        && material_is_device($selectedMaterial)
+                        && ($values['entry_type'] ?? 'used') === 'used'
+                        ? [
+                            'mode' => 'create',
+                            'formAction' => '/work/jobs/' . $job['id'] . '/materials',
+                            'material' => $selectedMaterial,
+                            'values' => $values,
+                            'errors' => $errors,
+                            'jobMaterialId' => null,
+                        ]
+                        : null,
                 ], true, 422);
                 break;
             }
 
-            add_job_material_entry(
-                (int) $job['id'],
-                (int) $values['material_id'],
-                (string) $values['entry_type'],
-                (string) normalize_quantity_value($values['quantity']),
-                isset($viewer['id']) ? (int) $viewer['id'] : null
-            );
+            try {
+                add_job_material_entry(
+                    (int) $job['id'],
+                    (int) $values['material_id'],
+                    (string) $values['entry_type'],
+                    (string) normalize_quantity_value($values['quantity']),
+                    isset($viewer['id']) ? (int) $viewer['id'] : null,
+                    job_material_device_payload($values)
+                );
+            } catch (Throwable $exception) {
+                flash('error', safe_error_message($exception->getMessage()));
+                redirect('/work/jobs/' . $job['id']);
+            }
             flash('success', $values['entry_type'] === 'returned'
                 ? 'Material return recorded successfully.'
                 : 'Material usage recorded successfully.');
@@ -4366,28 +4632,91 @@ try {
                 abort(403, 'Access denied', 'This material usage can no longer be updated.');
             }
 
-            $quantity = trim((string) ($_POST['quantity'] ?? ''));
-            $entryType = trim((string) ($_POST['entry_type'] ?? ''));
-            $error = validate_job_material_quantity($quantity);
-            $typeError = validate_job_material_entry_type($entryType);
+            $isDevice = job_material_is_device($jobMaterial);
 
-            if ($error !== null || $typeError !== null) {
-                render_job_show_page($job, $viewer, [
-                    'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity, 'entry_type' => $entryType]],
-                    'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error, 'entry_type' => $typeError]],
-                ], true, 422);
-                break;
-            }
+            if ($isDevice) {
+                $values = job_material_form_values($_POST);
+                $values['material_id'] = (int) $jobMaterial['material_id'];
+                $values['entry_type'] = (string) $jobMaterial['entry_type'];
+                $values['quantity'] = fixed_device_quantity();
+                $material = find_material_by_id((int) $jobMaterial['material_id']);
+                $errors = validate_job_material_create($values);
 
-            if (!update_job_material_entry(
-                (int) $job['id'],
-                (int) $jobMaterial['id'],
-                $entryType,
-                (string) normalize_quantity_value($quantity),
-                isset($viewer['id']) ? (int) $viewer['id'] : null
-            )) {
-                flash('error', 'This job material entry could not be updated.');
-                redirect('/work/jobs/' . $job['id']);
+                if ($material !== null && isset($errors['material_id'])) {
+                    unset($errors['material_id']);
+                }
+
+                if ($errors !== []) {
+                    render_job_show_page($job, $viewer, [
+                        'usedDeviceEditorState' => (string) $jobMaterial['entry_type'] === 'used'
+                            ? [
+                                'mode' => 'edit',
+                                'formAction' => '/work/jobs/' . $job['id'] . '/materials/' . $jobMaterial['id'] . '/edit',
+                                'material' => $material,
+                                'values' => $values,
+                                'errors' => $errors,
+                                'jobMaterialId' => (int) $jobMaterial['id'],
+                            ]
+                            : null,
+                        'materialEditValues' => (string) $jobMaterial['entry_type'] === 'returned'
+                            ? [(int) $jobMaterial['id'] => $values]
+                            : [],
+                        'materialEditErrors' => (string) $jobMaterial['entry_type'] === 'returned'
+                            ? [(int) $jobMaterial['id'] => $errors]
+                            : [],
+                    ], true, 422);
+                    break;
+                }
+
+                try {
+                    $updated = update_job_material_entry(
+                        (int) $job['id'],
+                        (int) $jobMaterial['id'],
+                        (string) $jobMaterial['entry_type'],
+                        fixed_device_quantity(),
+                        isset($viewer['id']) ? (int) $viewer['id'] : null,
+                        job_material_device_payload($values)
+                    );
+                } catch (Throwable $exception) {
+                    flash('error', safe_error_message($exception->getMessage()));
+                    redirect('/work/jobs/' . $job['id']);
+                }
+
+                if (!$updated) {
+                    flash('error', 'This job material entry could not be updated.');
+                    redirect('/work/jobs/' . $job['id']);
+                }
+            } else {
+                $quantity = trim((string) ($_POST['quantity'] ?? ''));
+                $entryType = trim((string) ($_POST['entry_type'] ?? ''));
+                $error = validate_job_material_quantity($quantity);
+                $typeError = validate_job_material_entry_type($entryType);
+
+                if ($error !== null || $typeError !== null) {
+                    render_job_show_page($job, $viewer, [
+                        'materialEditValues' => [(int) $jobMaterial['id'] => ['quantity' => $quantity, 'entry_type' => $entryType]],
+                        'materialEditErrors' => [(int) $jobMaterial['id'] => ['quantity' => $error, 'entry_type' => $typeError]],
+                    ], true, 422);
+                    break;
+                }
+
+                try {
+                    $updated = update_job_material_entry(
+                        (int) $job['id'],
+                        (int) $jobMaterial['id'],
+                        $entryType,
+                        (string) normalize_quantity_value($quantity),
+                        isset($viewer['id']) ? (int) $viewer['id'] : null
+                    );
+                } catch (Throwable $exception) {
+                    flash('error', safe_error_message($exception->getMessage()));
+                    redirect('/work/jobs/' . $job['id']);
+                }
+
+                if (!$updated) {
+                    flash('error', 'This job material entry could not be updated.');
+                    redirect('/work/jobs/' . $job['id']);
+                }
             }
             flash('success', 'Job material entry updated successfully.');
             redirect('/work/jobs/' . $job['id']);

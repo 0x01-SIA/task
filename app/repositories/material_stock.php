@@ -185,6 +185,8 @@ function company_material_stock_list(int $companyId, array $filters = []): array
                 m.sku,
                 m.unit,
                 m.description,
+                m.is_device,
+                m.is_device_accessory,
                 m.is_active,
                 m.created_at,
                 m.updated_at,

@@ -324,6 +324,8 @@ CREATE TABLE materials (
     sku VARCHAR(100) DEFAULT NULL,
     unit VARCHAR(50) NOT NULL,
     description TEXT DEFAULT NULL,
+    is_device TINYINT(1) NOT NULL DEFAULT 0,
+    is_device_accessory TINYINT(1) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -331,6 +333,8 @@ CREATE TABLE materials (
     KEY idx_materials_company_id (company_id),
     KEY idx_materials_name (name),
     KEY idx_materials_sku (sku),
+    KEY idx_materials_is_device (is_device),
+    KEY idx_materials_is_device_accessory (is_device_accessory),
     KEY idx_materials_is_active (is_active),
     CONSTRAINT fk_materials_company
         FOREIGN KEY (company_id) REFERENCES companies (id)
@@ -445,6 +449,7 @@ CREATE TABLE job_materials (
     movement_id BIGINT UNSIGNED DEFAULT NULL,
     entry_type ENUM('used', 'returned') NOT NULL DEFAULT 'used',
     quantity DECIMAL(14,3) NOT NULL,
+    device_identifier VARCHAR(255) DEFAULT NULL,
     recorded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
     occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -474,5 +479,74 @@ CREATE TABLE job_materials (
     CONSTRAINT fk_job_materials_recorded_by_user
         FOREIGN KEY (recorded_by_user_id) REFERENCES users (id)
         ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE device_installations (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    job_id BIGINT UNSIGNED NOT NULL,
+    device_material_usage_id BIGINT UNSIGNED NOT NULL,
+    device_material_id BIGINT UNSIGNED NOT NULL,
+    device_identifier VARCHAR(255) NOT NULL,
+    object_name VARCHAR(255) NOT NULL,
+    created_by BIGINT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_device_installations_usage_id (device_material_usage_id),
+    KEY idx_device_installations_company_job (company_id, job_id),
+    KEY idx_device_installations_company_material (company_id, device_material_id),
+    CONSTRAINT fk_device_installations_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_usage
+        FOREIGN KEY (device_material_usage_id) REFERENCES job_materials (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_material
+        FOREIGN KEY (device_material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE device_installation_accessories (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    device_installation_id BIGINT UNSIGNED NOT NULL,
+    accessory_material_id BIGINT UNSIGNED NOT NULL,
+    accessory_material_usage_id BIGINT UNSIGNED NOT NULL,
+    quantity DECIMAL(14,3) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_device_installation_accessories_installation_material (device_installation_id, accessory_material_id),
+    UNIQUE KEY uq_device_installation_accessories_usage_id (accessory_material_usage_id),
+    KEY idx_device_installation_accessories_company_installation (company_id, device_installation_id),
+    KEY idx_device_installation_accessories_company_material (company_id, accessory_material_id),
+    CONSTRAINT fk_device_installation_accessories_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installation_accessories_installation
+        FOREIGN KEY (device_installation_id) REFERENCES device_installations (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installation_accessories_material
+        FOREIGN KEY (accessory_material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installation_accessories_usage
+        FOREIGN KEY (accessory_material_usage_id) REFERENCES job_materials (id)
+        ON DELETE CASCADE
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

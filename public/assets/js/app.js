@@ -541,3 +541,202 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
         }
     });
 })();
+
+const decodeBase64Json = (encoded) => {
+    try {
+        return JSON.parse(atob(encoded || ''));
+    } catch (error) {
+        return null;
+    }
+};
+
+document.querySelectorAll('[data-job-material-form]').forEach((form) => {
+    if (!(form instanceof HTMLFormElement)) {
+        return;
+    }
+
+    const materialCatalog = decodeBase64Json(form.getAttribute('data-material-catalog') || '') || [];
+    const materialSelect = form.querySelector('[data-job-material-select]');
+    const entryTypeSelect = form.querySelector('[data-job-material-entry-type]');
+    const quantityInput = form.querySelector('[data-job-material-quantity]');
+    const returnField = form.querySelector('[data-device-return-field]');
+    const usedDeviceEditor = document.querySelector('[data-used-device-editor]');
+
+    if (!(materialSelect instanceof HTMLSelectElement) || !(entryTypeSelect instanceof HTMLSelectElement) || !(quantityInput instanceof HTMLInputElement)) {
+        return;
+    }
+
+    const selectedMaterial = () => materialCatalog.find((material) => String(material.id) === materialSelect.value) || null;
+
+    const updateMaterialFormState = () => {
+        const material = selectedMaterial();
+        const isDevice = material?.is_device === true;
+        const isReturned = entryTypeSelect.value === 'returned';
+
+        if (isDevice) {
+            quantityInput.value = '1.000';
+            quantityInput.readOnly = true;
+        } else {
+            quantityInput.readOnly = false;
+        }
+
+        if (returnField instanceof HTMLElement) {
+            const shouldShow = isDevice && isReturned;
+            returnField.hidden = !shouldShow;
+            returnField.classList.toggle('is-visible', shouldShow);
+        }
+    };
+
+    materialSelect.addEventListener('change', updateMaterialFormState);
+    entryTypeSelect.addEventListener('change', updateMaterialFormState);
+    updateMaterialFormState();
+
+    if (!(usedDeviceEditor instanceof HTMLElement)) {
+        return;
+    }
+
+    const accessoryCatalog = decodeBase64Json(usedDeviceEditor.getAttribute('data-accessory-catalog') || '') || [];
+    const editorForm = usedDeviceEditor.querySelector('[data-used-device-editor-form]');
+    const editorMaterialId = usedDeviceEditor.querySelector('[data-used-device-material-id]');
+    const accessoryRows = usedDeviceEditor.querySelector('[data-accessory-rows]');
+    const accessoryEmptyState = usedDeviceEditor.querySelector('[data-accessory-empty-state]');
+
+    if (!(editorForm instanceof HTMLFormElement) || !(editorMaterialId instanceof HTMLInputElement) || !(accessoryRows instanceof HTMLElement)) {
+        return;
+    }
+
+    const syncAccessoryEmptyState = () => {
+        if (!(accessoryEmptyState instanceof HTMLElement)) {
+            return;
+        }
+
+        accessoryEmptyState.classList.toggle('d-none', accessoryCatalog.length > 0 || accessoryRows.children.length > 0);
+    };
+
+    const buildAccessoryRow = (value = {}) => {
+        const row = document.createElement('div');
+        row.className = 'device-accessory-row';
+
+        const select = document.createElement('select');
+        select.className = 'form-select';
+        select.name = 'accessory_material_id[]';
+        select.add(new Option('Select accessory', ''));
+        accessoryCatalog.forEach((accessory) => {
+            const option = new Option(accessory.label, String(accessory.id));
+            option.selected = String(value.material_id || '') === String(accessory.id);
+            select.add(option);
+        });
+
+        const quantity = document.createElement('input');
+        quantity.className = 'form-control';
+        quantity.name = 'accessory_quantity[]';
+        quantity.type = 'text';
+        quantity.inputMode = 'decimal';
+        quantity.placeholder = 'Qty';
+        quantity.value = typeof value.quantity === 'string' ? value.quantity : '';
+
+        const removeButton = document.createElement('button');
+        removeButton.className = 'btn btn-outline-danger btn-sm';
+        removeButton.type = 'button';
+        removeButton.textContent = 'Remove';
+        removeButton.setAttribute('data-remove-accessory-row', '');
+
+        row.append(select, quantity, removeButton);
+        return row;
+    };
+
+    const openEditor = (payload) => {
+        const material = materialCatalog.find((item) => String(item.id) === String(payload.material_id || ''));
+        const title = usedDeviceEditor.querySelector('.device-editor__header h3');
+        const subtitle = usedDeviceEditor.querySelector('.device-editor__header p');
+        const deviceIdInput = usedDeviceEditor.querySelector('#used_device_identifier');
+        const objectNameInput = usedDeviceEditor.querySelector('#object_name');
+
+        editorForm.action = payload.formAction || form.action;
+        editorMaterialId.value = String(payload.material_id || '');
+        usedDeviceEditor.hidden = false;
+        usedDeviceEditor.classList.add('is-open');
+
+        if (title instanceof HTMLElement) {
+            title.textContent = payload.mode === 'edit' ? 'Edit installed device' : 'Add installed device';
+        }
+
+        if (subtitle instanceof HTMLElement && material) {
+            const skuPart = material.sku ? ` (${material.sku})` : '';
+            subtitle.textContent = `${material.name}${skuPart} - ${material.unit} · Quantity fixed to 1`;
+        }
+
+        if (deviceIdInput instanceof HTMLInputElement) {
+            deviceIdInput.value = typeof payload.device_identifier === 'string' ? payload.device_identifier : '';
+        }
+
+        if (objectNameInput instanceof HTMLInputElement) {
+            objectNameInput.value = typeof payload.object_name === 'string' ? payload.object_name : '';
+        }
+
+        accessoryRows.innerHTML = '';
+        (Array.isArray(payload.accessories) ? payload.accessories : []).forEach((accessory) => {
+            accessoryRows.append(buildAccessoryRow(accessory));
+        });
+        syncAccessoryEmptyState();
+        usedDeviceEditor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    const closeEditor = () => {
+        usedDeviceEditor.hidden = true;
+        usedDeviceEditor.classList.remove('is-open');
+    };
+
+    form.addEventListener('submit', (event) => {
+        const material = selectedMaterial();
+
+        if (material?.is_device !== true || entryTypeSelect.value !== 'used') {
+            return;
+        }
+
+        event.preventDefault();
+        openEditor({
+            mode: 'create',
+            formAction: form.action,
+            material_id: material.id,
+            device_identifier: '',
+            object_name: '',
+            accessories: [],
+        });
+    });
+
+    usedDeviceEditor.querySelectorAll('[data-used-device-editor-close]').forEach((button) => {
+        button.addEventListener('click', closeEditor);
+    });
+
+    document.querySelectorAll('[data-open-used-device-editor]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const payload = decodeBase64Json(button.getAttribute('data-open-used-device-editor') || '');
+
+            if (payload && typeof payload === 'object') {
+                openEditor(payload);
+            }
+        });
+    });
+
+    usedDeviceEditor.querySelectorAll('[data-add-accessory-row]').forEach((button) => {
+        button.addEventListener('click', () => {
+            accessoryRows.append(buildAccessoryRow());
+            syncAccessoryEmptyState();
+        });
+    });
+
+    usedDeviceEditor.addEventListener('click', (event) => {
+        const target = event.target;
+
+        if (!(target instanceof HTMLElement) || !target.hasAttribute('data-remove-accessory-row')) {
+            return;
+        }
+
+        event.preventDefault();
+        target.closest('.device-accessory-row')?.remove();
+        syncAccessoryEmptyState();
+    });
+
+    syncAccessoryEmptyState();
+});

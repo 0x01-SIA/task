@@ -63,6 +63,20 @@ declare(strict_types=1);
                     </div>
 
                     <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" id="is_device" name="is_device" type="checkbox" value="1" <?= ($values['is_device'] ?? '0') === '1' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="is_device">This material is a device</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" id="is_device_accessory" name="is_device_accessory" type="checkbox" value="1" <?= ($values['is_device_accessory'] ?? '0') === '1' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="is_device_accessory">This material can be selected as a device accessory</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
                         <label class="form-label" for="description">Description</label>
                         <textarea class="form-control" id="description" name="description" rows="4"><?= h($values['description'] ?? '') ?></textarea>
                     </div>
