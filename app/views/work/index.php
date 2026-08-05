@@ -51,7 +51,13 @@ $sectionMeta = [
                 <?php else: ?>
                     <div class="worker-job-list">
                         <?php foreach ($jobs as $job): ?>
-                            <a class="worker-job-card" href="<?= h(app_url('/work/jobs/' . $job['id'])) ?>">
+                            <?php $contact = job_contact_details($job); ?>
+                            <article class="worker-job-card">
+                                <a
+                                    class="worker-job-card__overlay"
+                                    href="<?= h(app_url('/work/jobs/' . $job['id'])) ?>"
+                                    aria-label="<?= h('Open job ' . $job['job_number'] . ': ' . $job['title']) ?>"
+                                ></a>
                                 <div class="worker-job-card__top">
                                     <div>
                                         <p class="worker-job-card__number"><?= h($job['job_number']) ?></p>
@@ -73,15 +79,27 @@ $sectionMeta = [
                                         <dd><?= h($job['customer_name']) ?></dd>
                                     </div>
                                     <div>
-                                        <dt>Location</dt>
-                                        <dd><?= h($job['location_name'] ?: location_address($job) ?: 'Location not provided') ?></dd>
+                                        <dt>Contact</dt>
+                                        <dd class="worker-job-card__detail">
+                                            <?php if (job_has_contact_details($job)): ?>
+                                                <span><?= h($contact['name'] !== '' ? $contact['name'] : 'Primary customer contact') ?></span>
+                                                <?php if ($contact['phone'] !== ''): ?>
+                                                    <a class="worker-job-card__contact-link" href="<?= h('tel:' . phone_href($contact['phone'])) ?>"><?= h($contact['phone']) ?></a>
+                                                <?php endif; ?>
+                                                <?php if ($contact['email'] !== ''): ?>
+                                                    <a class="worker-job-card__contact-link" href="<?= h('mailto:' . $contact['email']) ?>"><?= h($contact['email']) ?></a>
+                                                <?php endif; ?>
+                                            <?php else: ?>
+                                                <span>No contact information available</span>
+                                            <?php endif; ?>
+                                        </dd>
                                     </div>
                                     <div>
                                         <dt>Scheduled</dt>
                                         <dd><?= h(format_job_scheduled_start($job)) ?></dd>
                                     </div>
                                 </dl>
-                            </a>
+                            </article>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>

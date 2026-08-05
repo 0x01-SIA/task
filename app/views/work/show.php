@@ -5,6 +5,10 @@ declare(strict_types=1);
 $canRecordMaterials = user_can_record_job_material($viewer, $job);
 $canModifyMaterials = user_can_modify_job_material($viewer, $job);
 $materialRouteBase = '/work/jobs/' . $job['id'] . '/materials';
+$contact = job_contact_details($job);
+$address = location_address($job);
+$mapsUri = maps_uri($address);
+$mapsSearchUrl = maps_search_url($address);
 ?>
 <div class="d-grid gap-4">
     <section class="card shadow-sm border-0">
@@ -86,10 +90,6 @@ $materialRouteBase = '/work/jobs/' . $job['id'] . '/materials';
                     <p class="mb-0"><?= h($job['location_name'] ?: 'Assigned location') ?></p>
                 </div>
                 <div>
-                    <p class="info-label">Full Address</p>
-                    <p class="mb-0 worker-selectable-text"><?= nl2br(h(location_address($job) ?: 'Not provided')) ?></p>
-                </div>
-                <div>
                     <p class="info-label">Assigned Worker</p>
                     <p class="mb-0"><?= h($job['assigned_worker_name'] ?: 'Unassigned') ?></p>
                 </div>
@@ -108,6 +108,60 @@ $materialRouteBase = '/work/jobs/' . $job['id'] . '/materials';
                 <div>
                     <p class="info-label">Updated</p>
                     <p class="mb-0"><?= h(format_datetime($job['updated_at'] ?? null)) ?></p>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-1">
+                <div class="col-12 col-lg-6">
+                    <div class="worker-info-panel">
+                        <p class="info-label">Contact</p>
+                        <?php if (job_has_contact_details($job)): ?>
+                            <dl class="worker-contact-list mb-0">
+                                <?php if ($contact['name'] !== ''): ?>
+                                    <div>
+                                        <dt>Name</dt>
+                                        <dd><?= h($contact['name']) ?></dd>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($contact['phone'] !== ''): ?>
+                                    <div>
+                                        <dt>Phone</dt>
+                                        <dd><a class="worker-contact-link" href="<?= h('tel:' . phone_href($contact['phone'])) ?>"><?= h($contact['phone']) ?></a></dd>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($contact['email'] !== ''): ?>
+                                    <div>
+                                        <dt>Email</dt>
+                                        <dd><a class="worker-contact-link" href="<?= h('mailto:' . $contact['email']) ?>"><?= h($contact['email']) ?></a></dd>
+                                    </div>
+                                <?php endif; ?>
+                            </dl>
+                        <?php else: ?>
+                            <p class="job-empty-state mb-0">No contact information available.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="worker-info-panel">
+                        <p class="info-label">Full Address</p>
+                        <?php if ($address !== ''): ?>
+                            <p class="mb-0 worker-selectable-text worker-address-text"><?= nl2br(h($address)) ?></p>
+                            <?php if ($mapsUri !== null && $mapsSearchUrl !== null): ?>
+                                <div class="worker-address-actions">
+                                    <a
+                                        class="btn btn-primary"
+                                        href="<?= h($mapsUri) ?>"
+                                        data-map-link
+                                        data-map-fallback="<?= h($mapsSearchUrl) ?>"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >Open in Maps</a>
+                                </div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <p class="job-empty-state mb-0">No address available.</p>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 

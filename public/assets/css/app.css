@@ -322,7 +322,7 @@ body.app-shell {
 
 .info-label {
     margin-bottom: 0.35rem;
-    color: #64748b;
+    color: var(--color-text-muted);
     font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -457,6 +457,7 @@ body.app-shell {
 }
 
 .worker-job-card {
+    position: relative;
     display: grid;
     gap: 0.85rem;
     padding: 1rem;
@@ -468,6 +469,13 @@ body.app-shell {
     box-shadow: 0 0.25rem 1rem rgba(15, 23, 42, 0.04);
 }
 
+.worker-job-card__overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+}
+
 .worker-job-card:hover,
 .worker-job-card:focus {
     border-color: #93c5fd;
@@ -477,6 +485,8 @@ body.app-shell {
 }
 
 .worker-job-card__top {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -485,7 +495,7 @@ body.app-shell {
 
 .worker-job-card__number {
     margin: 0 0 0.25rem;
-    color: #64748b;
+    color: var(--color-text-muted);
     font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -495,18 +505,22 @@ body.app-shell {
 .worker-job-card__title {
     margin: 0;
     font-size: 1.05rem;
-    color: #0f172a;
+    color: var(--color-text);
 }
 
 .worker-job-card__meta {
+    position: relative;
+    z-index: 2;
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
-    color: #475569;
+    color: var(--color-text-muted);
     font-size: 0.95rem;
 }
 
 .worker-job-card__details {
+    position: relative;
+    z-index: 2;
     display: grid;
     gap: 0.85rem;
     margin: 0;
@@ -514,7 +528,7 @@ body.app-shell {
 
 .worker-job-card__details dt {
     margin-bottom: 0.2rem;
-    color: #64748b;
+    color: var(--color-text-muted);
     font-size: 0.78rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -523,7 +537,67 @@ body.app-shell {
 
 .worker-job-card__details dd {
     margin: 0;
-    color: #0f172a;
+    color: var(--color-text);
+}
+
+.worker-job-card__detail,
+.worker-contact-list {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.worker-job-card__detail > span,
+.worker-contact-list dd,
+.worker-address-text {
+    color: var(--color-text);
+}
+
+.worker-job-card__contact-link,
+.worker-contact-link {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.worker-info-panel {
+    display: grid;
+    gap: 0.75rem;
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.9rem;
+    background: var(--color-surface-muted);
+}
+
+.worker-contact-list {
+    margin: 0;
+}
+
+.worker-contact-list dt {
+    margin-bottom: 0.15rem;
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.worker-contact-list dd {
+    margin: 0;
+}
+
+.worker-address-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.job-empty-state {
+    color: var(--color-text-muted);
 }
 
 .worker-action-bar {

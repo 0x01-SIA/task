@@ -63,6 +63,52 @@ if (customerSelect && locationSelect) {
     updateLocationOptions();
 }
 
+document.querySelectorAll('[data-map-link]').forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement)) {
+        return;
+    }
+
+    const nativeHref = link.getAttribute('href') ?? '';
+    const fallbackHref = link.getAttribute('data-map-fallback') ?? '';
+
+    if (nativeHref === '' || fallbackHref === '' || !nativeHref.startsWith('geo:')) {
+        return;
+    }
+
+    link.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+        }
+
+        event.preventDefault();
+
+        let fallbackTimer = window.setTimeout(() => {
+            window.open(fallbackHref, '_blank', 'noopener,noreferrer');
+            fallbackTimer = 0;
+        }, 700);
+
+        const cancelFallback = () => {
+            if (fallbackTimer !== 0) {
+                window.clearTimeout(fallbackTimer);
+                fallbackTimer = 0;
+            }
+
+            window.removeEventListener('pagehide', cancelFallback);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                cancelFallback();
+            }
+        };
+
+        window.addEventListener('pagehide', cancelFallback, { once: true });
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.location.href = nativeHref;
+    });
+});
+
 document.querySelectorAll('[data-signature-form]').forEach((form) => {
     const canvas = form.querySelector('[data-signature-canvas]');
     const output = form.querySelector('[data-signature-output]');

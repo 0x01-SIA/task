@@ -825,6 +825,63 @@ function location_address(array $location): string
     return implode(', ', $parts);
 }
 
+function job_contact_details(array $job): array
+{
+    $name = trim((string) ($job['location_contact_name'] ?? ''));
+    if ($name === '') {
+        $name = trim((string) ($job['customer_contact_name'] ?? ''));
+    }
+
+    $phone = trim((string) ($job['location_contact_phone'] ?? ''));
+    if ($phone === '') {
+        $phone = trim((string) ($job['customer_contact_phone'] ?? ''));
+    }
+
+    $email = trim((string) ($job['customer_contact_email'] ?? ''));
+
+    return [
+        'name' => $name,
+        'phone' => $phone,
+        'email' => $email,
+    ];
+}
+
+function job_has_contact_details(array $job): bool
+{
+    $contact = job_contact_details($job);
+
+    return $contact['name'] !== '' || $contact['phone'] !== '' || $contact['email'] !== '';
+}
+
+function phone_href(string $phone): string
+{
+    $clean = preg_replace('/[^0-9+]/', '', trim($phone));
+
+    return $clean === null ? '' : $clean;
+}
+
+function maps_uri(string $address): ?string
+{
+    $normalized = trim($address);
+
+    if ($normalized === '') {
+        return null;
+    }
+
+    return 'geo:0,0?q=' . rawurlencode($normalized);
+}
+
+function maps_search_url(string $address): ?string
+{
+    $normalized = trim($address);
+
+    if ($normalized === '') {
+        return null;
+    }
+
+    return 'https://www.openstreetmap.org/search?query=' . rawurlencode($normalized);
+}
+
 function format_datetime(?string $value): string
 {
     if ($value === null || trim($value) === '') {
