@@ -302,9 +302,11 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
     const drawerClose = document.querySelector('[data-drawer-close]');
     const overlay = document.querySelector('[data-app-overlay]');
     const themeButtons = Array.from(document.querySelectorAll('[data-theme-option]'));
+    const installActionButtons = Array.from(document.querySelectorAll('[data-install-app-action]'));
     let lastDrawerTrigger = null;
     let menuOpen = false;
     let drawerOpen = false;
+    let deferredInstallPrompt = null;
 
     const focusableSelector = [
         'a[href]',
@@ -351,6 +353,57 @@ document.querySelectorAll('[data-signature-form]').forEach((form) => {
             applyTheme(selectedTheme);
         });
     });
+
+    const isStandaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    const updateInstallActionVisibility = () => {
+        const shouldShow = deferredInstallPrompt !== null && !isStandaloneApp();
+
+        installActionButtons.forEach((button) => {
+            button.hidden = !shouldShow;
+        });
+    };
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        updateInstallActionVisibility();
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        updateInstallActionVisibility();
+    });
+
+    window.matchMedia('(display-mode: standalone)').addEventListener('change', () => {
+        if (isStandaloneApp()) {
+            deferredInstallPrompt = null;
+        }
+
+        updateInstallActionVisibility();
+    });
+
+    installActionButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (deferredInstallPrompt === null) {
+                updateInstallActionVisibility();
+                return;
+            }
+
+            const installPrompt = deferredInstallPrompt;
+            deferredInstallPrompt = null;
+            updateInstallActionVisibility();
+
+            try {
+                await installPrompt.prompt();
+                await installPrompt.userChoice;
+            } catch (error) {
+                // Browsers may reject if the prompt is no longer available; keep the action hidden until a new event arrives.
+            }
+        });
+    });
+
+    updateInstallActionVisibility();
 
     const firstFocusable = (container) => {
         if (!(container instanceof HTMLElement)) {

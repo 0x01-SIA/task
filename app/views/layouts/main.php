@@ -20,7 +20,11 @@ $mobileDrawerId = 'mobile-nav-drawer';
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#416db5">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <script>
         (() => {
@@ -40,6 +44,8 @@ $mobileDrawerId = 'mobile-nav-drawer';
         integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
         crossorigin="anonymous"
     >
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/images/icons/icon-192.png">
     <link rel="stylesheet" href="<?= htmlspecialchars(asset_url('css/app.css'), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 <body class="app-shell">
@@ -158,6 +164,19 @@ $mobileDrawerId = 'mobile-nav-drawer';
                             </section>
 
                             <section class="app-menu-section">
+                                <span class="app-menu-label">App</span>
+                                <button
+                                    class="app-menu-action"
+                                    type="button"
+                                    data-install-app-action
+                                    role="menuitem"
+                                    hidden
+                                >
+                                    Install Task App
+                                </button>
+                            </section>
+
+                            <section class="app-menu-section">
                                 <span class="app-menu-label">Theme</span>
                                 <div class="theme-switcher" role="group" aria-label="Select theme">
                                     <?php foreach (['light' => 'Light', 'dark' => 'Dark', 'system' => 'System'] as $themeValue => $themeLabel): ?>
@@ -254,6 +273,13 @@ $mobileDrawerId = 'mobile-nav-drawer';
             </section>
 
             <section class="app-mobile-panel">
+                <p class="app-menu-label">App</p>
+                <button class="app-menu-action" type="button" data-install-app-action hidden>
+                    Install Task App
+                </button>
+            </section>
+
+            <section class="app-mobile-panel">
                 <p class="app-menu-label">Theme</p>
                 <div class="theme-switcher theme-switcher--stacked" role="group" aria-label="Select theme">
                     <?php foreach (['light' => 'Light', 'dark' => 'Dark', 'system' => 'System'] as $themeValue => $themeLabel): ?>
@@ -287,5 +313,14 @@ $mobileDrawerId = 'mobile-nav-drawer';
     </footer>
 
     <script src="<?= htmlspecialchars(asset_url('js/app.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
+    <script>
+        if ('serviceWorker' in navigator && window.isSecureContext) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').catch(() => {
+                    // Ignore registration failures and continue with the standard web app experience.
+                });
+            });
+        }
+    </script>
 </body>
 </html>

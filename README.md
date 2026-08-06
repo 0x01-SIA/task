@@ -241,6 +241,114 @@ Role access summary:
 - `dispatcher`: the same customer, location, task, and job-management access as `admin`, plus access to worker-facing `/work` pages
 - `worker`: `/work`, `GET /work/jobs/{id}`, `POST /work/jobs/{id}/start`, `POST /work/jobs/{id}/complete`, and `POST /work/jobs/{id}/notes`
 
+## Progressive Web App
+
+Task App includes installable Progressive Web App support for Chromium-based browsers with an online-first service worker.
+
+### Android installation
+
+1. Open `https://task.0x01.lv` in Chrome on Android and sign in.
+2. Open the account menu.
+3. Select `Install Task App` when it appears.
+4. Accept the browser install prompt.
+5. Launch Task App from the home screen in its standalone window.
+
+The `Install Task App` action is hidden by default and only appears after the browser fires `beforeinstallprompt`. It hides again after the prompt is used or when the app is already installed.
+
+### Current limitations
+
+- Navigation requests stay online-first and always try the live server first.
+- Authenticated HTML pages and API responses are never cached for offline use.
+- When the network is unavailable, navigation falls back only to `public/offline.html`.
+- Users cannot reliably create, edit, or sync jobs offline in this release.
+- Background sync and offline mutation replay are intentionally out of scope for the current implementation.
+
+### Icons
+
+PWA icon files live under `public/assets/images/icons/`:
+
+- `icon-192.png`
+- `icon-512.png`
+- `icon-maskable-512.png`
+
+The source artwork remains `public/assets/images/task-app-icon.png`.
+
+To regenerate the icons from the source image on macOS:
+
+```bash
+mkdir -p public/assets/images/icons /tmp/task-pwa-icons
+cp public/assets/images/task-app-icon.png /tmp/task-pwa-icons/source.png
+sips --resampleHeightWidthMax 192 /tmp/task-pwa-icons/source.png --out /tmp/task-pwa-icons/icon-192-resized.png
+sips --padToHeightWidth 192 192 --padColor 6e6e6e /tmp/task-pwa-icons/icon-192-resized.png --out public/assets/images/icons/icon-192.png
+sips --resampleHeightWidthMax 512 /tmp/task-pwa-icons/source.png --out /tmp/task-pwa-icons/icon-512-resized.png
+sips --padToHeightWidth 512 512 --padColor 6e6e6e /tmp/task-pwa-icons/icon-512-resized.png --out public/assets/images/icons/icon-512.png
+sips --resampleHeightWidthMax 410 /tmp/task-pwa-icons/source.png --out /tmp/task-pwa-icons/icon-maskable-resized.png
+sips --padToHeightWidth 512 512 --padColor 6e6e6e /tmp/task-pwa-icons/icon-maskable-resized.png --out public/assets/images/icons/icon-maskable-512.png
+```
+
+If the base icon artwork changes, regenerate all three derived files and keep extra safe padding on the maskable icon so Android launchers do not crop important details.
+
+### Service worker cache versioning
+
+- The service worker cache name is defined by `CACHE_VERSION` in `public/service-worker.js`.
+- Keep the cache prefix as `task-app-` so cleanup only touches Task App caches.
+- Increment `CACHE_VERSION` whenever cached asset URLs, offline behavior, or precache lists change.
+- After incrementing the version, deploy `service-worker.js` with `Cache-Control: no-cache` so browsers revalidate it promptly.
+
+### Production Nginx configuration
+
+Production must serve the PWA files with the correct MIME types and cache headers:
+
+- `manifest.webmanifest`: `Content-Type: application/manifest+json`
+- `service-worker.js`: a JavaScript MIME type such as `application/javascript`
+- `service-worker.js`: `Cache-Control: no-cache`
+- `offline.html`: standard HTML content type
+
+Example Nginx snippets:
+
+```nginx
+types {
+    application/manifest+json webmanifest;
+}
+
+location = /manifest.webmanifest {
+    add_header Cache-Control "public, max-age=300";
+}
+
+location = /service-worker.js {
+    add_header Cache-Control "no-cache";
+}
+
+location = /offline.html {
+    add_header Cache-Control "public, max-age=300";
+}
+```
+
+### Deployment verification
+
+Run these exact commands after deployment:
+
+```bash
+curl -I https://task.0x01.lv/manifest.webmanifest
+curl -I https://task.0x01.lv/service-worker.js
+curl -I https://task.0x01.lv/offline.html
+```
+
+Expected results:
+
+- All three requests return successful responses.
+- None of them redirect to `/login`.
+- `manifest.webmanifest` is served as `application/manifest+json`.
+- `service-worker.js` is served with a JavaScript content type.
+- `service-worker.js` is served with `Cache-Control: no-cache`.
+
+Browser checks after deployment:
+
+1. Open Chrome DevTools and confirm the Manifest panel shows `Task App`, the three icons, and the shortcuts for `/work`, `/jobs`, and `/jobs/calendar`.
+2. In the Application panel, confirm the registered service worker scope is `/` and that it is active.
+3. In the Network panel, go offline and verify a fresh navigation falls back to the offline page instead of a cached authenticated page.
+4. In Chrome on Android, verify that `Install Task App` appears only when installable, launches the browser install prompt, and disappears after installation.
+
 Job calendar behavior:
 
 - `/jobs/calendar` defaults to the current week when no valid calendar query parameters are supplied.

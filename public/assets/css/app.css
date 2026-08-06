@@ -2086,6 +2086,7 @@ a:focus {
 }
 
 .app-company-list__item,
+.app-menu-action,
 .theme-switcher__option,
 .app-menu-danger,
 .app-mobile-nav__link {
@@ -2107,8 +2108,20 @@ a:focus {
 }
 
 .app-company-list__item:hover,
+.app-menu-action:hover,
+.app-menu-action:focus,
 .app-company-list__item:focus {
     background: var(--color-surface-muted);
+}
+
+.app-menu-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 0.95rem;
+    background: transparent;
+    color: var(--color-text);
+    font-weight: 600;
 }
 
 .app-company-list__item.is-active {
