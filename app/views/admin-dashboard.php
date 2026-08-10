@@ -5,40 +5,40 @@ declare(strict_types=1);
 <div class="d-grid gap-4">
     <section class="card shadow-sm border-0">
         <div class="card-body p-4 p-lg-5">
-            <p class="text-uppercase text-secondary small fw-semibold mb-2">Operations</p>
-            <h1 class="h3 mb-2">Dashboard</h1>
-            <p class="text-secondary mb-0">A compact operational view of jobs needing attention, today’s schedule, active field work, and recent completions.</p>
+            <p class="text-uppercase text-secondary small fw-semibold mb-2"><?= h(translate_literal('Operations')) ?></p>
+            <h1 class="h3 mb-2"><?= h(translate_literal('Dashboard')) ?></h1>
+            <p class="text-secondary mb-0"><?= h(translate_literal('A compact operational view of jobs needing attention, today’s schedule, active field work, and recent completions.')) ?></p>
         </div>
     </section>
 
     <section class="row g-3">
         <div class="col-sm-6 col-xl">
             <div class="dashboard-card h-100">
-                <p class="dashboard-card-label">Unassigned Jobs</p>
+                <p class="dashboard-card-label"><?= h(translate_literal('Unassigned Jobs')) ?></p>
                 <p class="dashboard-card-value"><?= h((string) $summaryCounts['unassigned_jobs']) ?></p>
             </div>
         </div>
         <div class="col-sm-6 col-xl">
             <div class="dashboard-card h-100">
-                <p class="dashboard-card-label">Scheduled Jobs</p>
+                <p class="dashboard-card-label"><?= h(translate_literal('Scheduled Jobs')) ?></p>
                 <p class="dashboard-card-value"><?= h((string) $summaryCounts['scheduled_jobs']) ?></p>
             </div>
         </div>
         <div class="col-sm-6 col-xl">
             <div class="dashboard-card h-100">
-                <p class="dashboard-card-label">In Progress</p>
+                <p class="dashboard-card-label"><?= h(translate_literal('In Progress')) ?></p>
                 <p class="dashboard-card-value"><?= h((string) $summaryCounts['in_progress_jobs']) ?></p>
             </div>
         </div>
         <div class="col-sm-6 col-xl">
             <div class="dashboard-card h-100">
-                <p class="dashboard-card-label">Overdue Jobs</p>
+                <p class="dashboard-card-label"><?= h(translate_literal('Overdue Jobs')) ?></p>
                 <p class="dashboard-card-value"><?= h((string) $summaryCounts['overdue_jobs']) ?></p>
             </div>
         </div>
         <div class="col-sm-6 col-xl">
             <div class="dashboard-card h-100">
-                <p class="dashboard-card-label">Completed Today</p>
+                <p class="dashboard-card-label"><?= h(translate_literal('Completed Today')) ?></p>
                 <p class="dashboard-card-value"><?= h((string) $summaryCounts['completed_today']) ?></p>
             </div>
         </div>
@@ -48,28 +48,28 @@ declare(strict_types=1);
         <div class="card-body p-4">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div>
-                    <h2 class="h5 mb-1">Tasks requiring attention</h2>
-                    <p class="text-secondary mb-0">Overdue tasks, urgent open requests, due-today work, and new tasks without jobs are listed first.</p>
+                    <h2 class="h5 mb-1"><?= h(translate_literal('Tasks requiring attention')) ?></h2>
+                    <p class="text-secondary mb-0"><?= h(translate_literal('Overdue tasks, urgent open requests, due-today work, and new tasks without jobs are listed first.')) ?></p>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/tasks')) ?>">View all tasks</a>
-                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/create')) ?>">New Task</a>
+                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/tasks')) ?>"><?= h(translate_literal('View all tasks')) ?></a>
+                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/create')) ?>"><?= h(translate_literal('New Task')) ?></a>
                 </div>
             </div>
 
             <?php if ($attentionTasks === []): ?>
-                <p class="dashboard-empty mb-0">No tasks currently require attention.</p>
+                <p class="dashboard-empty mb-0"><?= h(translate_literal('No tasks currently require attention.')) ?></p>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
                             <tr>
-                                <th scope="col">Task</th>
-                                <th scope="col">Customer</th>
-                                <th scope="col">Due</th>
-                                <th scope="col">Jobs</th>
-                                <th scope="col">Priority</th>
-                                <th scope="col">Status</th>
+                                <th scope="col"><?= h(translate_literal('Task')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Customer')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Due')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Jobs')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Priority')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Status')) ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -94,25 +94,25 @@ declare(strict_types=1);
         <div class="card-body p-4">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div>
-                    <h2 class="h5 mb-1">Jobs requiring attention</h2>
-                    <p class="text-secondary mb-0">Overdue work is listed first, followed by unassigned jobs scheduled soon and active jobs still underway.</p>
+                    <h2 class="h5 mb-1"><?= h(translate_literal('Jobs requiring attention')) ?></h2>
+                    <p class="text-secondary mb-0"><?= h(translate_literal('Overdue work is listed first, followed by unassigned jobs scheduled soon and active jobs still underway.')) ?></p>
                 </div>
-                <a class="btn btn-outline-primary" href="<?= h(app_url('/jobs')) ?>">View all jobs</a>
+                <a class="btn btn-outline-primary" href="<?= h(app_url('/jobs')) ?>"><?= h(translate_literal('View all jobs')) ?></a>
             </div>
 
             <?php if ($attentionJobs === []): ?>
-                <p class="dashboard-empty mb-0">No jobs currently require attention.</p>
+                <p class="dashboard-empty mb-0"><?= h(translate_literal('No jobs currently require attention.')) ?></p>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
                             <tr>
-                                <th scope="col">Job</th>
-                                <th scope="col">Customer</th>
-                                <th scope="col">Location</th>
-                                <th scope="col">Scheduled</th>
-                                <th scope="col">Assigned Worker</th>
-                                <th scope="col">Status</th>
+                                <th scope="col"><?= h(translate_literal('Job')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Customer')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Location')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Scheduled')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Assigned Worker')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Status')) ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -122,7 +122,7 @@ declare(strict_types=1);
                                     <td><?= h($job['customer_name']) ?></td>
                                     <td><?= h($job['location_name'] ?? '—') ?></td>
                                     <td><?= h(format_job_scheduled_start($job)) ?></td>
-                                    <td><?= h($job['assigned_worker_name'] ?? 'Unassigned') ?></td>
+                                    <td><?= h($job['assigned_worker_name'] ?? translate_literal('Unassigned')) ?></td>
                                     <td><span class="badge <?= h(job_status_badge_class((string) $job['status'])) ?>"><?= h(job_status_label((string) $job['status'])) ?></span></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -138,23 +138,23 @@ declare(strict_types=1);
             <section class="card shadow-sm border-0 h-100">
                 <div class="card-body p-4">
                     <div class="mb-3">
-                        <h2 class="h5 mb-1">Today&apos;s schedule</h2>
-                        <p class="text-secondary mb-0">Scheduled jobs for <?= h(format_date(date('Y-m-d'))) ?>, ordered by start time.</p>
+                        <h2 class="h5 mb-1"><?= h(translate_literal('Today\'s schedule')) ?></h2>
+                        <p class="text-secondary mb-0"><?= h(translate_literal('Scheduled jobs for')) ?> <?= h(format_date(date('Y-m-d'))) ?>, <?= h(translate_literal('ordered by start time.')) ?></p>
                     </div>
 
                     <?php if ($todaysSchedule === []): ?>
-                        <p class="dashboard-empty mb-0">No jobs are scheduled for today.</p>
+                        <p class="dashboard-empty mb-0"><?= h(translate_literal('No jobs are scheduled for today.')) ?></p>
                     <?php else: ?>
                         <div class="table-responsive">
                             <table class="table table-sm align-middle mb-0">
                                 <thead>
                                     <tr>
-                                        <th scope="col">Time</th>
-                                        <th scope="col">Job</th>
-                                        <th scope="col">Customer</th>
-                                        <th scope="col">Location</th>
-                                        <th scope="col">Assigned Worker</th>
-                                        <th scope="col">Status</th>
+                                        <th scope="col"><?= h(translate_literal('Time')) ?></th>
+                                        <th scope="col"><?= h(translate_literal('Job')) ?></th>
+                                        <th scope="col"><?= h(translate_literal('Customer')) ?></th>
+                                        <th scope="col"><?= h(translate_literal('Location')) ?></th>
+                                        <th scope="col"><?= h(translate_literal('Assigned Worker')) ?></th>
+                                        <th scope="col"><?= h(translate_literal('Status')) ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -164,7 +164,7 @@ declare(strict_types=1);
                                             <td><a href="<?= h(app_url('/jobs/' . $job['id'])) ?>"><?= h($job['job_number']) ?></a></td>
                                             <td><?= h($job['customer_name']) ?></td>
                                             <td><?= h($job['location_name'] ?? '—') ?></td>
-                                            <td><?= h($job['assigned_worker_name'] ?? 'Unassigned') ?></td>
+                                            <td><?= h($job['assigned_worker_name'] ?? translate_literal('Unassigned')) ?></td>
                                             <td><span class="badge <?= h(job_status_badge_class((string) $job['status'])) ?>"><?= h(job_status_label((string) $job['status'])) ?></span></td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -180,12 +180,12 @@ declare(strict_types=1);
             <section class="card shadow-sm border-0 h-100">
                 <div class="card-body p-4">
                     <div class="mb-3">
-                        <h2 class="h5 mb-1">Active workers</h2>
-                        <p class="text-secondary mb-0">Workers who currently have one or more in-progress jobs.</p>
+                        <h2 class="h5 mb-1"><?= h(translate_literal('Active workers')) ?></h2>
+                        <p class="text-secondary mb-0"><?= h(translate_literal('Workers who currently have one or more in-progress jobs.')) ?></p>
                     </div>
 
                     <?php if ($activeWorkers === []): ?>
-                        <p class="dashboard-empty mb-0">No workers currently have active jobs.</p>
+                        <p class="dashboard-empty mb-0"><?= h(translate_literal('No workers currently have active jobs.')) ?></p>
                     <?php else: ?>
                         <div class="dashboard-worker-list">
                             <?php foreach ($activeWorkers as $worker): ?>
@@ -193,7 +193,7 @@ declare(strict_types=1);
                                     <div class="d-flex justify-content-between align-items-start gap-3">
                                         <div>
                                             <h3 class="h6 mb-1"><?= h($worker['name']) ?></h3>
-                                            <p class="text-secondary mb-0"><?= h((string) $worker['active_job_count']) ?> active job<?= (int) $worker['active_job_count'] === 1 ? '' : 's' ?></p>
+                                            <p class="text-secondary mb-0"><?= h((string) $worker['active_job_count']) ?> <?= h((int) $worker['active_job_count'] === 1 ? translate_literal('active job') : translate_literal('active jobs')) ?></p>
                                         </div>
                                     </div>
                                     <p class="dashboard-worker-jobs mb-0"><?= h((string) $worker['job_numbers']) ?></p>
@@ -209,21 +209,21 @@ declare(strict_types=1);
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
             <div class="mb-3">
-                <h2 class="h5 mb-1">Recently completed jobs</h2>
-                <p class="text-secondary mb-0">The latest completed work, ordered by completion time.</p>
+                <h2 class="h5 mb-1"><?= h(translate_literal('Recently completed jobs')) ?></h2>
+                <p class="text-secondary mb-0"><?= h(translate_literal('The latest completed work, ordered by completion time.')) ?></p>
             </div>
 
             <?php if ($recentlyCompletedJobs === []): ?>
-                <p class="dashboard-empty mb-0">No jobs have been completed yet.</p>
+                <p class="dashboard-empty mb-0"><?= h(translate_literal('No jobs have been completed yet.')) ?></p>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
                             <tr>
-                                <th scope="col">Job</th>
-                                <th scope="col">Customer</th>
-                                <th scope="col">Assigned Worker</th>
-                                <th scope="col">Completed</th>
+                                <th scope="col"><?= h(translate_literal('Job')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Customer')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Assigned Worker')) ?></th>
+                                <th scope="col"><?= h(translate_literal('Completed')) ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -231,7 +231,7 @@ declare(strict_types=1);
                                 <tr>
                                     <td><a href="<?= h(app_url('/jobs/' . $job['id'])) ?>"><?= h($job['job_number']) ?></a></td>
                                     <td><?= h($job['customer_name']) ?></td>
-                                    <td><?= h($job['assigned_worker_name'] ?? 'Unassigned') ?></td>
+                                    <td><?= h($job['assigned_worker_name'] ?? translate_literal('Unassigned')) ?></td>
                                     <td><?= h(format_datetime($job['actual_completed_at'] ?? null)) ?></td>
                                 </tr>
                             <?php endforeach; ?>

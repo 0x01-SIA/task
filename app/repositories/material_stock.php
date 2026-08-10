@@ -109,27 +109,27 @@ function material_stock_label(string $quantity): string
     $value = (float) $quantity;
 
     if ($value < 0) {
-        return 'Negative stock';
+        return translate_literal('Negative stock');
     }
 
     if ($value === 0.0) {
-        return 'Zero stock';
+        return translate_literal('Zero stock');
     }
 
-    return 'In stock';
+    return translate_literal('In stock');
 }
 
 function material_movement_type_label(string $type): string
 {
-    return $type === 'in' ? 'Material In' : 'Material Out';
+    return $type === 'in' ? translate_literal('Material In') : translate_literal('Material Out');
 }
 
 function material_stock_navigation_items(): array
 {
     return [
-        ['label' => 'Materials', 'path' => '/materials'],
-        ['label' => 'Movements', 'path' => '/materials/movements'],
-        ['label' => 'Inventory', 'path' => '/materials/inventories'],
+        ['label' => translate_literal('Materials'), 'path' => '/materials'],
+        ['label' => translate_literal('Movements'), 'path' => '/materials/movements'],
+        ['label' => translate_literal('Inventory'), 'path' => '/materials/inventories'],
     ];
 }
 

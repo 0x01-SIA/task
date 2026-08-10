@@ -9,12 +9,12 @@ $taskStatusOptions = task_status_options();
         <div class="card-body p-4 p-lg-5">
             <div class="responsive-page-header">
                 <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Tasks</p>
-                    <h1 class="h3 mb-2">Task Management</h1>
-                    <p class="text-secondary mb-0">Track customer requests, due dates, and the jobs planned underneath each task.</p>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2"><?= h(translate_literal('Tasks')) ?></p>
+                    <h1 class="h3 mb-2"><?= h(translate_literal('Task Management')) ?></h1>
+                    <p class="text-secondary mb-0"><?= h(translate_literal('Track customer requests, due dates, and the jobs planned underneath each task.')) ?></p>
                 </div>
                 <div class="responsive-page-header__actions">
-                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/create')) ?>">New Task</a>
+                    <a class="btn btn-primary" href="<?= h(app_url('/tasks/create')) ?>"><?= h(translate_literal('New Task')) ?></a>
                 </div>
             </div>
         </div>
@@ -28,14 +28,14 @@ $taskStatusOptions = task_status_options();
         <div class="card-body p-4">
             <form method="get" action="<?= h(app_url('/tasks')) ?>" class="row g-3 align-items-end responsive-index-toolbar">
                 <div class="col-12 col-lg-3">
-                    <label class="form-label" for="search">Search</label>
-                    <input class="form-control" id="search" name="search" type="text" value="<?= h($filters['search'] ?? '') ?>" placeholder="Task number, title, customer, location">
+                    <label class="form-label" for="search"><?= h(translate_literal('Search')) ?></label>
+                    <input class="form-control" id="search" name="search" type="text" value="<?= h($filters['search'] ?? '') ?>" placeholder="<?= h(translate_literal('Task number, title, customer, location')) ?>">
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-2">
-                    <label class="form-label" for="status">Status</label>
+                    <label class="form-label" for="status"><?= h(translate_literal('Status')) ?></label>
                     <select class="form-select" id="status" name="status">
-                        <option value="">All statuses</option>
+                        <option value=""><?= h(translate_literal('All statuses')) ?></option>
                         <?php foreach (task_status_options() as $value => $label): ?>
                             <option value="<?= h($value) ?>" <?= ($filters['status'] ?? '') === $value ? 'selected' : '' ?>><?= h($label) ?></option>
                         <?php endforeach; ?>
@@ -43,9 +43,9 @@ $taskStatusOptions = task_status_options();
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-2">
-                    <label class="form-label" for="priority">Priority</label>
+                    <label class="form-label" for="priority"><?= h(translate_literal('Priority')) ?></label>
                     <select class="form-select" id="priority" name="priority">
-                        <option value="">All priorities</option>
+                        <option value=""><?= h(translate_literal('All priorities')) ?></option>
                         <?php foreach (task_priority_options() as $value => $label): ?>
                             <option value="<?= h($value) ?>" <?= ($filters['priority'] ?? '') === $value ? 'selected' : '' ?>><?= h($label) ?></option>
                         <?php endforeach; ?>
@@ -53,9 +53,9 @@ $taskStatusOptions = task_status_options();
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-3">
-                    <label class="form-label" for="customer_id">Customer</label>
+                    <label class="form-label" for="customer_id"><?= h(translate_literal('Customer')) ?></label>
                     <select class="form-select" id="customer_id" name="customer_id">
-                        <option value="">All customers</option>
+                        <option value=""><?= h(translate_literal('All customers')) ?></option>
                         <?php foreach ($customers as $customer): ?>
                             <option value="<?= h($customer['id']) ?>" <?= (int) ($filters['customer_id'] ?? 0) === (int) $customer['id'] ? 'selected' : '' ?>>
                                 <?= h($customer['name']) ?>
@@ -65,9 +65,9 @@ $taskStatusOptions = task_status_options();
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-2">
-                    <label class="form-label" for="due_state">Due State</label>
+                    <label class="form-label" for="due_state"><?= h(translate_literal('Due State')) ?></label>
                     <select class="form-select" id="due_state" name="due_state">
-                        <option value="">All due states</option>
+                        <option value=""><?= h(translate_literal('All due states')) ?></option>
                         <?php foreach (task_due_state_options() as $value => $label): ?>
                             <option value="<?= h($value) ?>" <?= ($filters['due_state'] ?? '') === $value ? 'selected' : '' ?>><?= h($label) ?></option>
                         <?php endforeach; ?>
@@ -75,13 +75,13 @@ $taskStatusOptions = task_status_options();
                 </div>
 
                 <div class="col-12 d-flex flex-wrap gap-2">
-                    <button class="btn btn-primary" type="submit">Apply Filters</button>
-                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/tasks')) ?>">Clear Filters</a>
+                    <button class="btn btn-primary" type="submit"><?= h(translate_literal('Apply Filters')) ?></button>
+                    <a class="btn btn-outline-secondary" href="<?= h(app_url('/tasks')) ?>"><?= h(translate_literal('Clear Filters')) ?></a>
                 </div>
 
                 <div class="col-12">
-                    <div class="responsive-status-chips" aria-label="Task status quick filters">
-                        <a class="responsive-status-chips__chip<?= ($filters['status'] ?? '') === '' ? ' active' : '' ?>" href="<?= h(app_url('/tasks')) ?>">All</a>
+                    <div class="responsive-status-chips" aria-label="<?= h(translate_literal('Task status quick filters')) ?>">
+                        <a class="responsive-status-chips__chip<?= ($filters['status'] ?? '') === '' ? ' active' : '' ?>" href="<?= h(app_url('/tasks')) ?>"><?= h(translate_literal('All')) ?></a>
                         <?php foreach ($taskStatusOptions as $value => $label): ?>
                             <?php
                             $query = array_filter([
@@ -108,22 +108,22 @@ $taskStatusOptions = task_status_options();
     <section class="card shadow-sm border-0">
         <div class="card-body p-4">
             <?php if ($tasks === []): ?>
-                <p class="text-secondary mb-0">No tasks matched the current filters.</p>
+                <p class="text-secondary mb-0"><?= h(translate_literal('No tasks matched the current filters.')) ?></p>
             <?php else: ?>
                 <div class="table-responsive desktop-table">
                     <table class="table align-middle mb-0">
                         <thead>
                         <tr>
-                            <th scope="col">Task Number</th>
-                            <th scope="col">Title</th>
-                            <th scope="col">Customer</th>
-                            <th scope="col">Location</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Priority</th>
-                            <th scope="col">Requested</th>
-                            <th scope="col">Due</th>
-                            <th scope="col">Jobs</th>
-                            <th scope="col">Updated</th>
+                            <th scope="col"><?= h(translate_literal('Task Number')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Title')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Customer')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Location')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Status')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Priority')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Requested')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Due')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Jobs')) ?></th>
+                            <th scope="col"><?= h(translate_literal('Updated')) ?></th>
                         </tr>
                         </thead>
                         <tbody>
@@ -134,18 +134,18 @@ $taskStatusOptions = task_status_options();
                                 <td>
                                     <?= h($task['title']) ?>
                                     <?php if ($dueState === 'overdue'): ?>
-                                        <span class="badge text-bg-danger ms-2">Overdue</span>
+                                        <span class="badge text-bg-danger ms-2"><?= h(translate_literal('Overdue')) ?></span>
                                     <?php elseif ($dueState === 'due_today'): ?>
-                                        <span class="badge text-bg-warning ms-2">Due Today</span>
+                                        <span class="badge text-bg-warning ms-2"><?= h(translate_literal('Due Today')) ?></span>
                                     <?php endif; ?>
                                 </td>
                                 <td><?= h($task['customer_name']) ?></td>
-                                <td><?= h($task['location_name'] ?: 'Not assigned') ?></td>
+                                <td><?= h($task['location_name'] ?: translate_literal('Not assigned')) ?></td>
                                 <td><span class="badge <?= h(task_status_badge_class((string) $task['status'])) ?>"><?= h(task_status_label((string) $task['status'])) ?></span></td>
                                 <td>
                                     <?= h(task_priority_label((string) $task['priority'])) ?>
                                     <?php if (($task['priority'] ?? '') === 'urgent'): ?>
-                                        <span class="badge text-bg-danger ms-2">Urgent</span>
+                                        <span class="badge text-bg-danger ms-2"><?= h(translate_literal('Urgent')) ?></span>
                                     <?php endif; ?>
                                 </td>
                                 <td><?= h(format_date($task['requested_date'] ?? null)) ?></td>
@@ -158,13 +158,13 @@ $taskStatusOptions = task_status_options();
                     </table>
                 </div>
 
-                <div class="mobile-card-list" aria-label="Tasks">
+                <div class="mobile-card-list" aria-label="<?= h(translate_literal('Tasks')) ?>">
                     <?php foreach ($tasks as $task): ?>
                         <?php $dueState = task_due_state($task); ?>
                         <a class="mobile-card-link" href="<?= h(app_url('/tasks/' . $task['id'])) ?>">
                             <div class="mobile-card__top">
                                 <div>
-                                    <div class="mobile-card__eyebrow">Task <?= h($task['task_number']) ?></div>
+                                    <div class="mobile-card__eyebrow"><?= h(translate_literal('Task')) ?> <?= h($task['task_number']) ?></div>
                                     <h2 class="mobile-card__title"><?= h($task['title']) ?></h2>
                                 </div>
                                 <span class="badge <?= h(task_status_badge_class((string) $task['status'])) ?>">
@@ -174,38 +174,38 @@ $taskStatusOptions = task_status_options();
 
                             <div class="mobile-card__meta">
                                 <div class="mobile-card__meta-item">
-                                    <span class="mobile-card__meta-label">Customer</span>
+                                    <span class="mobile-card__meta-label"><?= h(translate_literal('Customer')) ?></span>
                                     <span class="mobile-card__meta-value"><?= h($task['customer_name']) ?></span>
                                 </div>
                                 <div class="mobile-card__meta-item">
-                                    <span class="mobile-card__meta-label">Location</span>
-                                    <span class="mobile-card__meta-value"><?= h($task['location_name'] ?: 'Not assigned') ?></span>
+                                    <span class="mobile-card__meta-label"><?= h(translate_literal('Location')) ?></span>
+                                    <span class="mobile-card__meta-value"><?= h($task['location_name'] ?: translate_literal('Not assigned')) ?></span>
                                 </div>
                                 <div class="mobile-card__meta-item">
-                                    <span class="mobile-card__meta-label">Due</span>
-                                    <span class="mobile-card__meta-value"><?= h(format_date($task['due_date'] ?? null) ?: 'No due date') ?></span>
+                                    <span class="mobile-card__meta-label"><?= h(translate_literal('Due')) ?></span>
+                                    <span class="mobile-card__meta-value"><?= h(format_date($task['due_date'] ?? null) ?: translate_literal('No due date')) ?></span>
                                 </div>
                                 <div class="mobile-card__meta-item">
-                                    <span class="mobile-card__meta-label">Priority</span>
+                                    <span class="mobile-card__meta-label"><?= h(translate_literal('Priority')) ?></span>
                                     <span class="mobile-card__meta-value"><?= h(task_priority_label((string) $task['priority'])) ?></span>
                                 </div>
                             </div>
 
                             <div class="mobile-card__flag-row">
                                 <?php if ($dueState === 'overdue'): ?>
-                                    <span class="mobile-card__flag mobile-card__flag--danger">Overdue</span>
+                                    <span class="mobile-card__flag mobile-card__flag--danger"><?= h(translate_literal('Overdue')) ?></span>
                                 <?php elseif ($dueState === 'due_today'): ?>
-                                    <span class="mobile-card__flag">Due today</span>
+                                    <span class="mobile-card__flag"><?= h(translate_literal('Due today')) ?></span>
                                 <?php endif; ?>
                                 <?php if (($task['priority'] ?? '') === 'urgent'): ?>
-                                    <span class="mobile-card__flag mobile-card__flag--danger">Urgent</span>
+                                    <span class="mobile-card__flag mobile-card__flag--danger"><?= h(translate_literal('Urgent')) ?></span>
                                 <?php endif; ?>
                                 <?php if ((int) ($task['linked_job_count'] ?? 0) > 0): ?>
-                                    <span class="mobile-card__flag"><?= h((string) $task['linked_job_count']) ?> linked jobs</span>
+                                    <span class="mobile-card__flag"><?= h((string) $task['linked_job_count']) ?> <?= h(translate_literal('linked jobs')) ?></span>
                                 <?php endif; ?>
                             </div>
 
-                            <span class="mobile-card__cta">Open task <span aria-hidden="true">›</span></span>
+                            <span class="mobile-card__cta"><?= h(translate_literal('Open task')) ?> <span aria-hidden="true">›</span></span>
                         </a>
                     <?php endforeach; ?>
                 </div>

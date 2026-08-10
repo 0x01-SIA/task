@@ -3566,7 +3566,7 @@ try {
                 'weekDayColumnCount' => count($weekDays),
                 'calendarWeeks' => $calendarWeeks,
                 'unscheduledActiveJobsCount' => count_unscheduled_active_jobs(jobs_connection(), $viewer),
-                'weekdayLabels' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                'weekdayLabels' => array_map(static fn (string $weekday): string => localized_short_weekday_name($weekday), ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
                 'viewer' => $viewer,
             ]);
             break;

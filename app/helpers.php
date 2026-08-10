@@ -303,30 +303,18 @@ function translate_literal(string $text, ?string $locale = null): string
     return is_string($translated) ? $translated : $text;
 }
 
-function localize_output(string $content, ?string $locale = null): string
-{
-    $locale ??= current_locale();
-
-    if ($locale === default_locale()) {
-        return $content;
-    }
-
-    $phrases = translation_phrase_map($locale);
-
-    if ($phrases === []) {
-        return $content;
-    }
-
-    uksort($phrases, static fn (string $left, string $right): int => strlen($right) <=> strlen($left));
-
-    return strtr($content, $phrases);
-}
-
 function locale_month_names(string $locale): array
 {
     return normalize_locale($locale) === 'lv'
         ? ['janv.', 'febr.', 'marts', 'apr.', 'maijs', 'jūn.', 'jūl.', 'aug.', 'sept.', 'okt.', 'nov.', 'dec.']
         : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+}
+
+function locale_full_month_names(string $locale): array
+{
+    return normalize_locale($locale) === 'lv'
+        ? ['janvāris', 'februāris', 'marts', 'aprīlis', 'maijs', 'jūnijs', 'jūlijs', 'augusts', 'septembris', 'oktobris', 'novembris', 'decembris']
+        : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 }
 
 function localized_short_month(int $month, ?string $locale = null): string
@@ -335,6 +323,51 @@ function localized_short_month(int $month, ?string $locale = null): string
     $months = locale_month_names($locale);
 
     return $months[max(0, min(11, $month - 1))];
+}
+
+function localized_month_name(int $month, ?string $locale = null): string
+{
+    $locale ??= current_locale();
+    $months = locale_full_month_names($locale);
+
+    return $months[max(0, min(11, $month - 1))];
+}
+
+function locale_weekday_names(string $locale): array
+{
+    return normalize_locale($locale) === 'lv'
+        ? ['Monday' => 'Pirmdiena', 'Tuesday' => 'Otrdiena', 'Wednesday' => 'Trešdiena', 'Thursday' => 'Ceturtdiena', 'Friday' => 'Piektdiena', 'Saturday' => 'Sestdiena', 'Sunday' => 'Svētdiena']
+        : ['Monday' => 'Monday', 'Tuesday' => 'Tuesday', 'Wednesday' => 'Wednesday', 'Thursday' => 'Thursday', 'Friday' => 'Friday', 'Saturday' => 'Saturday', 'Sunday' => 'Sunday'];
+}
+
+function locale_short_weekday_names(string $locale): array
+{
+    return normalize_locale($locale) === 'lv'
+        ? ['Mon' => 'Pr', 'Tue' => 'Ot', 'Wed' => 'Tr', 'Thu' => 'Ce', 'Fri' => 'Pk', 'Sat' => 'Se', 'Sun' => 'Sv']
+        : ['Mon' => 'Mon', 'Tue' => 'Tue', 'Wed' => 'Wed', 'Thu' => 'Thu', 'Fri' => 'Fri', 'Sat' => 'Sat', 'Sun' => 'Sun'];
+}
+
+function localized_weekday_name(string $weekday, ?string $locale = null): string
+{
+    $locale ??= current_locale();
+    $weekdays = locale_weekday_names($locale);
+
+    return $weekdays[$weekday] ?? $weekday;
+}
+
+function localized_short_weekday_name(string $weekday, ?string $locale = null): string
+{
+    $locale ??= current_locale();
+    $weekdays = locale_short_weekday_names($locale);
+
+    return $weekdays[$weekday] ?? $weekday;
+}
+
+function format_calendar_day(DateTimeInterface $date, bool $includeYear = false): string
+{
+    $formatted = $date->format('j') . ' ' . localized_month_name((int) $date->format('n'));
+
+    return $includeYear ? $formatted . ' ' . $date->format('Y') : $formatted;
 }
 
 function render(string $view, array $data = [], int $statusCode = 200): void
@@ -350,7 +383,7 @@ function render(string $view, array $data = [], int $statusCode = 200): void
 
     ob_start();
     require $viewFile;
-    $content = localize_output(ob_get_clean() ?: '');
+    $content = ob_get_clean() ?: '';
 
     require base_path('app/views/layouts/main.php');
 }

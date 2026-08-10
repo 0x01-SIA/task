@@ -15,36 +15,36 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
         <div class="card-body p-4 p-lg-5">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Jobs</p>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2"><?= h(translate_literal('Jobs')) ?></p>
                     <div class="d-flex flex-wrap align-items-center gap-3">
-                        <h1 class="h3 mb-0">Calendar</h1>
-                        <nav class="calendar-view-switcher" aria-label="Calendar view">
+                        <h1 class="h3 mb-0"><?= h(translate_literal('Calendar')) ?></h1>
+                        <nav class="calendar-view-switcher" aria-label="<?= h(translate_literal('Calendar view')) ?>">
                             <a
                                 class="calendar-view-switcher__link<?= $isWeekView ? ' active' : '' ?>"
                                 href="<?= h(app_url('/jobs/calendar?view=week&date=' . $weekSwitchDate)) ?>"
                                 <?= $isWeekView ? 'aria-current="page"' : '' ?>
                             >
-                                Week
+                                <?= h(translate_literal('Week')) ?>
                             </a>
                             <a
                                 class="calendar-view-switcher__link<?= !$isWeekView ? ' active' : '' ?>"
                                 href="<?= h(app_url('/jobs/calendar?view=month&month=' . $monthSwitchMonth)) ?>"
                                 <?= !$isWeekView ? 'aria-current="page"' : '' ?>
                             >
-                                Month
+                                <?= h(translate_literal('Month')) ?>
                             </a>
                         </nav>
                     </div>
                     <p class="text-secondary mb-0 mt-2">
                         <?= h($isWeekView
-                            ? 'Default operational view for today, this week, and assigned workers.'
-                            : 'Broader planning view for the current month.') ?>
+                            ? translate_literal('Default operational view for today, this week, and assigned workers.')
+                            : translate_literal('Broader planning view for the current month.')) ?>
                     </p>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <a class="btn btn-outline-secondary" href="<?= h(app_url($backPath)) ?>"><?= h($isWorker ? 'Back to My Work' : 'Back to Jobs') ?></a>
+                    <a class="btn btn-outline-secondary" href="<?= h(app_url($backPath)) ?>"><?= h(translate_literal($isWorker ? 'Back to My Work' : 'Back to Jobs')) ?></a>
                     <?php if (!$isWorker): ?>
-                        <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>">Create Job</a>
+                        <a class="btn btn-primary" href="<?= h(app_url('/jobs/create')) ?>"><?= h(translate_literal('Create Job')) ?></a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -56,35 +56,35 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
             <?php if ($isWeekView): ?>
                 <div class="calendar-toolbar">
                     <div>
-                        <p class="text-uppercase text-secondary small fw-semibold mb-2">Week</p>
-                        <h2 class="h4 mb-1"><?= h($weekStart->format('j F') . ' – ' . $weekEnd->format('j F Y')) ?></h2>
-                        <p class="text-secondary mb-0">Monday to Friday stay visible. Weekend days appear only when jobs are planned.</p>
+                        <p class="text-uppercase text-secondary small fw-semibold mb-2"><?= h(translate_literal('Week')) ?></p>
+                        <h2 class="h4 mb-1"><?= h(format_calendar_day($weekStart) . ' – ' . format_calendar_day($weekEnd, true)) ?></h2>
+                        <p class="text-secondary mb-0"><?= h(translate_literal('Monday to Friday stay visible. Weekend days appear only when jobs are planned.')) ?></p>
                     </div>
                     <div class="calendar-toolbar__actions">
-                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $previousWeek->format('Y-m-d'))) ?>">Previous week</a>
-                        <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $todayDate->format('Y-m-d'))) ?>">Today</a>
-                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $nextWeek->format('Y-m-d'))) ?>">Next week</a>
+                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $previousWeek->format('Y-m-d'))) ?>"><?= h(translate_literal('Previous week')) ?></a>
+                        <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $todayDate->format('Y-m-d'))) ?>"><?= h(translate_literal('Today')) ?></a>
+                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $nextWeek->format('Y-m-d'))) ?>"><?= h(translate_literal('Next week')) ?></a>
                     </div>
                 </div>
 
-                <div class="calendar-week mt-4" role="table" aria-label="Weekly job calendar" style="--calendar-week-columns: <?= h((string) $weekDayColumnCount) ?>;">
+                <div class="calendar-week mt-4" role="table" aria-label="<?= h(translate_literal('Weekly job calendar')) ?>" style="--calendar-week-columns: <?= h((string) $weekDayColumnCount) ?>;">
                     <?php foreach ($weekDays as $day): ?>
                         <section class="calendar-week__day<?= $day['is_today'] ? ' calendar-week__day--today' : '' ?>" role="cell" aria-label="<?= h($day['date']->format('Y-m-d')) ?>">
                             <div class="calendar-week__header">
                                 <div>
                                     <div class="calendar-week__weekday">
-                                        <?= h($day['date']->format('l')) ?>
+                                        <?= h(localized_weekday_name($day['date']->format('l'))) ?>
                                         <?php if ($day['is_today']): ?>
-                                            <span class="calendar-today-pill">Today</span>
+                                            <span class="calendar-today-pill"><?= h(translate_literal('Today')) ?></span>
                                         <?php endif; ?>
                                     </div>
-                                    <div class="calendar-week__date"><?= h($day['date']->format('j F')) ?></div>
+                                    <div class="calendar-week__date"><?= h(format_calendar_day($day['date'])) ?></div>
                                 </div>
-                                <div class="calendar-week__count"><?= h($day['jobs'] === [] ? 'No jobs' : (count($day['jobs']) === 1 ? '1 job' : count($day['jobs']) . ' jobs')) ?></div>
+                                <div class="calendar-week__count"><?= h($day['jobs'] === [] ? translate_literal('No jobs') : (count($day['jobs']) === 1 ? '1 ' . translate_literal('job') : count($day['jobs']) . ' ' . translate_literal('jobs'))) ?></div>
                             </div>
 
                             <?php if ($day['jobs'] === []): ?>
-                                <p class="calendar-week__empty">No jobs</p>
+                                <p class="calendar-week__empty"><?= h(translate_literal('No jobs')) ?></p>
                             <?php else: ?>
                                 <div class="calendar-week__jobs">
                                     <?php foreach ($day['jobs'] as $job): ?>
@@ -92,9 +92,9 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                                         $jobStatus = (string) ($job['status'] ?? '');
                                         $jobTime = ($job['planned_start_time'] ?? null) !== null
                                             ? format_time((string) $job['planned_start_time'])
-                                            : 'Any time';
-                                        $jobWorker = $job['assigned_worker_name'] ?: 'Unassigned';
-                                        $jobLocation = $job['location_name'] ?: $job['address_line'] ?: 'Location pending';
+                                            : translate_literal('Any time');
+                                        $jobWorker = $job['assigned_worker_name'] ?: translate_literal('Unassigned');
+                                        $jobLocation = $job['location_name'] ?: $job['address_line'] ?: translate_literal('Location pending');
                                         $weekJobClasses = ['calendar-job', 'calendar-job--week'];
 
                                         if ($jobStatus === 'completed') {
@@ -127,21 +127,21 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                     <?php endforeach; ?>
                 </div>
 
-                <div class="calendar-week-mobile mt-4" aria-label="Weekly job agenda">
+                <div class="calendar-week-mobile mt-4" aria-label="<?= h(translate_literal('Weekly job agenda')) ?>">
                     <?php foreach ($weekDays as $day): ?>
                         <section class="calendar-agenda__day<?= $day['is_today'] ? ' calendar-agenda__day--today' : '' ?>">
                             <div class="calendar-agenda__header">
                                 <div>
-                                    <h3 class="calendar-agenda__title"><?= h($day['date']->format('l, j F')) ?></h3>
+                                    <h3 class="calendar-agenda__title"><?= h(localized_weekday_name($day['date']->format('l')) . ', ' . format_calendar_day($day['date'])) ?></h3>
                                     <?php if ($day['is_today']): ?>
-                                        <span class="calendar-today-pill mt-1">Today</span>
+                                        <span class="calendar-today-pill mt-1"><?= h(translate_literal('Today')) ?></span>
                                     <?php endif; ?>
                                 </div>
-                                <span class="calendar-agenda__count"><?= h($day['jobs'] === [] ? 'No jobs' : (count($day['jobs']) === 1 ? '1 job' : count($day['jobs']) . ' jobs')) ?></span>
+                                <span class="calendar-agenda__count"><?= h($day['jobs'] === [] ? translate_literal('No jobs') : (count($day['jobs']) === 1 ? '1 ' . translate_literal('job') : count($day['jobs']) . ' ' . translate_literal('jobs'))) ?></span>
                             </div>
 
                             <?php if ($day['jobs'] === []): ?>
-                                <p class="calendar-agenda__empty">No jobs</p>
+                                <p class="calendar-agenda__empty"><?= h(translate_literal('No jobs')) ?></p>
                             <?php else: ?>
                                 <div class="calendar-agenda__jobs">
                                     <?php foreach ($day['jobs'] as $job): ?>
@@ -149,9 +149,9 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                                         $jobStatus = (string) ($job['status'] ?? '');
                                         $jobTime = ($job['planned_start_time'] ?? null) !== null
                                             ? format_time((string) $job['planned_start_time'])
-                                            : 'Any time';
-                                        $jobWorker = $job['assigned_worker_name'] ?: 'Unassigned';
-                                        $jobLocation = $job['location_name'] ?: $job['address_line'] ?: 'Location pending';
+                                            : translate_literal('Any time');
+                                        $jobWorker = $job['assigned_worker_name'] ?: translate_literal('Unassigned');
+                                        $jobLocation = $job['location_name'] ?: $job['address_line'] ?: translate_literal('Location pending');
                                         $weekAgendaClasses = ['calendar-job', 'calendar-job--agenda'];
 
                                         if ($jobStatus === 'completed') {
@@ -186,19 +186,19 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
             <?php else: ?>
                 <div class="calendar-toolbar">
                     <div>
-                        <p class="text-uppercase text-secondary small fw-semibold mb-2">Month</p>
-                        <h2 class="h4 mb-1"><?= h($selectedMonth->format('F Y')) ?></h2>
-                        <p class="text-secondary mb-0">Broader monthly planning overview.</p>
+                        <p class="text-uppercase text-secondary small fw-semibold mb-2"><?= h(translate_literal('Month')) ?></p>
+                        <h2 class="h4 mb-1"><?= h(localized_month_name((int) $selectedMonth->format('n')) . ' ' . $selectedMonth->format('Y')) ?></h2>
+                        <p class="text-secondary mb-0"><?= h(translate_literal('Broader monthly planning overview.')) ?></p>
                     </div>
                     <div class="calendar-toolbar__actions">
-                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=month&month=' . $previousMonth->format('Y-m'))) ?>">Previous month</a>
-                        <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/jobs/calendar?view=month&month=' . $todayDate->format('Y-m'))) ?>">Today</a>
-                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=month&month=' . $nextMonth->format('Y-m'))) ?>">Next month</a>
+                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=month&month=' . $previousMonth->format('Y-m'))) ?>"><?= h(translate_literal('Previous month')) ?></a>
+                        <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/jobs/calendar?view=month&month=' . $todayDate->format('Y-m'))) ?>"><?= h(translate_literal('Today')) ?></a>
+                        <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url('/jobs/calendar?view=month&month=' . $nextMonth->format('Y-m'))) ?>"><?= h(translate_literal('Next month')) ?></a>
                     </div>
                 </div>
 
                 <div class="calendar-shell mt-4">
-                    <div class="calendar-grid" role="table" aria-label="Monthly job calendar">
+                    <div class="calendar-grid" role="table" aria-label="<?= h(translate_literal('Monthly job calendar')) ?>">
                         <?php foreach ($weekdayLabels as $weekdayLabel): ?>
                             <div class="calendar-grid__weekday" role="columnheader"><?= h($weekdayLabel) ?></div>
                         <?php endforeach; ?>
@@ -214,11 +214,11 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                                         <span class="calendar-day__number">
                                             <?= h($day['date']->format('j')) ?>
                                             <?php if ($day['is_today']): ?>
-                                                <span class="calendar-today-pill calendar-today-pill--inline">Today</span>
+                                                <span class="calendar-today-pill calendar-today-pill--inline"><?= h(translate_literal('Today')) ?></span>
                                             <?php endif; ?>
                                         </span>
                                         <?php if ($day['jobs'] !== []): ?>
-                                            <span class="calendar-day__count"><?= h(count($day['jobs']) === 1 ? '1 job' : count($day['jobs']) . ' jobs') ?></span>
+                                            <span class="calendar-day__count"><?= h(count($day['jobs']) === 1 ? '1 ' . translate_literal('job') : count($day['jobs']) . ' ' . translate_literal('jobs')) ?></span>
                                         <?php endif; ?>
                                     </div>
 
@@ -228,7 +228,7 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                                             $jobStatus = (string) ($job['status'] ?? '');
                                             $jobTime = ($job['planned_start_time'] ?? null) !== null
                                                 ? format_time((string) $job['planned_start_time'])
-                                                : 'Any time';
+                                                : translate_literal('Any time');
                                             $monthJobClasses = ['calendar-job'];
 
                                             if ($jobStatus === 'completed') {
@@ -256,7 +256,7 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
 
                                         <?php if ($hiddenJobsCount > 0): ?>
                                             <a class="calendar-day__more" href="<?= h(app_url('/jobs/calendar?view=week&date=' . $day['date_key'])) ?>">
-                                                <?= h('+' . $hiddenJobsCount . ' more') ?>
+                                                <?= h('+' . $hiddenJobsCount . ' ' . translate_literal('more')) ?>
                                             </a>
                                         <?php endif; ?>
                                     </div>
@@ -266,7 +266,7 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                     </div>
                 </div>
 
-                <div class="calendar-month-mobile mt-4" aria-label="Monthly job agenda">
+                <div class="calendar-month-mobile mt-4" aria-label="<?= h(translate_literal('Monthly job agenda')) ?>">
                     <?php foreach ($calendarWeeks as $week): ?>
                         <?php foreach ($week as $day): ?>
                             <?php if (!$day['is_current_month']) {
@@ -275,16 +275,16 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                             <section class="calendar-agenda__day<?= $day['is_today'] ? ' calendar-agenda__day--today' : '' ?>">
                                 <div class="calendar-agenda__header">
                                     <div>
-                                        <h3 class="calendar-agenda__title"><?= h($day['date']->format('l, j F')) ?></h3>
+                                        <h3 class="calendar-agenda__title"><?= h(localized_weekday_name($day['date']->format('l')) . ', ' . format_calendar_day($day['date'])) ?></h3>
                                         <?php if ($day['is_today']): ?>
-                                            <span class="calendar-today-pill mt-1">Today</span>
+                                            <span class="calendar-today-pill mt-1"><?= h(translate_literal('Today')) ?></span>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="calendar-agenda__count"><?= h($day['jobs'] === [] ? 'No jobs' : (count($day['jobs']) === 1 ? '1 job' : count($day['jobs']) . ' jobs')) ?></span>
+                                    <span class="calendar-agenda__count"><?= h($day['jobs'] === [] ? translate_literal('No jobs') : (count($day['jobs']) === 1 ? '1 ' . translate_literal('job') : count($day['jobs']) . ' ' . translate_literal('jobs'))) ?></span>
                                 </div>
 
                                 <?php if ($day['jobs'] === []): ?>
-                                    <p class="calendar-agenda__empty">No jobs</p>
+                                    <p class="calendar-agenda__empty"><?= h(translate_literal('No jobs')) ?></p>
                                 <?php else: ?>
                                     <div class="calendar-agenda__jobs">
                                         <?php foreach ($day['jobs'] as $job): ?>
@@ -292,7 +292,7 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
                                             $jobStatus = (string) ($job['status'] ?? '');
                                             $jobTime = ($job['planned_start_time'] ?? null) !== null
                                                 ? format_time((string) $job['planned_start_time'])
-                                                : 'Any time';
+                                                : translate_literal('Any time');
                                             $monthAgendaClasses = ['calendar-job', 'calendar-job--agenda'];
 
                                             if ($jobStatus === 'completed') {
@@ -331,17 +331,17 @@ $unscheduledPath = $isWorker ? '/work' : '/jobs?schedule=unscheduled';
         <div class="card-body p-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div>
-                    <p class="text-uppercase text-secondary small fw-semibold mb-2">Planning</p>
-                    <h2 class="h5 mb-1">Unscheduled Active Jobs</h2>
+                    <p class="text-uppercase text-secondary small fw-semibold mb-2"><?= h(translate_literal('Planning')) ?></p>
+                    <h2 class="h5 mb-1"><?= h(translate_literal('Unscheduled Active Jobs')) ?></h2>
                     <p class="text-secondary mb-0">
                         <?= h($isWorker
-                            ? 'Your assigned jobs without a planned date stay out of scheduled views until they are assigned a date.'
-                            : 'Jobs without a planned date stay out of scheduled views until they are assigned a date.') ?>
+                            ? translate_literal('Your assigned jobs without a planned date stay out of scheduled views until they are assigned a date.')
+                            : translate_literal('Jobs without a planned date stay out of scheduled views until they are assigned a date.')) ?>
                     </p>
                 </div>
                 <div class="d-flex flex-wrap align-items-center gap-3">
                     <span class="badge rounded-pill text-bg-light border fs-6"><?= h((string) $unscheduledActiveJobsCount) ?></span>
-                    <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url($unscheduledPath)) ?>"><?= h($isWorker ? 'View My Jobs' : 'View Unscheduled Jobs') ?></a>
+                    <a class="btn btn-outline-secondary btn-sm" href="<?= h(app_url($unscheduledPath)) ?>"><?= h(translate_literal($isWorker ? 'View My Jobs' : 'View Unscheduled Jobs')) ?></a>
                 </div>
             </div>
         </div>
