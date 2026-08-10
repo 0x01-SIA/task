@@ -576,7 +576,10 @@ function job_report_renderer_create(array $payload): array
     $pageHeight = 1754;
     $margin = 86;
     $page = imagecreatetruecolor($pageWidth, $pageHeight);
-    imageantialias($page, true);
+
+    if (function_exists('imageantialias')) {
+        imageantialias($page, true);
+    }
 
     $white = imagecolorallocate($page, 255, 255, 255);
     imagefilledrectangle($page, 0, 0, $pageWidth, $pageHeight, $white);
@@ -612,13 +615,21 @@ function job_report_font_path(): string
     }
 
     $candidates = [
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf',
+        '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
+        '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
         '/Library/Fonts/Arial Unicode.ttf',
         '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
-        '/System/Library/Fonts/HelveticaNeue.ttc',
+        '/System/Library/Fonts/Supplemental/Arial.ttf',
+        '/System/Library/Fonts/Supplemental/Helvetica.ttf',
     ];
 
     foreach ($candidates as $candidate) {
-        if (is_file($candidate) && is_readable($candidate)) {
+        if (is_file($candidate) && is_readable($candidate) && job_report_font_is_usable($candidate)) {
             $fontPath = $candidate;
 
             return $fontPath;
@@ -626,6 +637,17 @@ function job_report_font_path(): string
     }
 
     throw new RuntimeException('No report font is available on this server.');
+}
+
+function job_report_font_is_usable(string $fontPath): bool
+{
+    if (!function_exists('imagettfbbox')) {
+        return false;
+    }
+
+    $box = @imagettfbbox(12, 0, $fontPath, 'Report');
+
+    return is_array($box) && count($box) === 8;
 }
 
 function job_report_renderer_draw_header(array &$renderer, array $payload): void
@@ -1033,7 +1055,10 @@ function job_report_renderer_ensure_space(array &$renderer, int $neededHeight): 
     }
 
     $page = imagecreatetruecolor($renderer['page_width'], $renderer['page_height']);
-    imageantialias($page, true);
+
+    if (function_exists('imageantialias')) {
+        imageantialias($page, true);
+    }
     imagefilledrectangle($page, 0, 0, $renderer['page_width'], $renderer['page_height'], $renderer['colors']['white']);
     $renderer['pages'][] = $page;
     $renderer['current_page'] = count($renderer['pages']) - 1;
