@@ -146,6 +146,197 @@ function h(mixed $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function available_locales(): array
+{
+    return ['en', 'lv'];
+}
+
+function default_locale(): string
+{
+    return 'en';
+}
+
+function normalize_locale(?string $locale): string
+{
+    $locale = strtolower(trim((string) $locale));
+
+    return in_array($locale, available_locales(), true) ? $locale : default_locale();
+}
+
+function language_cookie_name(): string
+{
+    return 'task_locale';
+}
+
+function current_locale(): string
+{
+    static $resolvedLocale = null;
+
+    if ($resolvedLocale !== null) {
+        return $resolvedLocale;
+    }
+
+    start_session();
+
+    $resolvedLocale = normalize_locale(
+        is_string($_SESSION['locale'] ?? null)
+            ? $_SESSION['locale']
+            : (is_string($_COOKIE[language_cookie_name()] ?? null) ? $_COOKIE[language_cookie_name()] : null)
+    );
+
+    $_SESSION['locale'] = $resolvedLocale;
+
+    return $resolvedLocale;
+}
+
+function set_current_locale(?string $locale): string
+{
+    $normalized = normalize_locale($locale);
+
+    start_session();
+    $_SESSION['locale'] = $normalized;
+
+    setcookie(language_cookie_name(), $normalized, [
+        'expires' => time() + (365 * 24 * 60 * 60),
+        'path' => '/',
+        'secure' => app_is_production() ? request_is_https() : false,
+        'httponly' => false,
+        'samesite' => 'Lax',
+    ]);
+
+    return $normalized;
+}
+
+function language_label(string $locale): string
+{
+    return match (normalize_locale($locale)) {
+        'lv' => 'LV',
+        default => 'EN',
+    };
+}
+
+function language_native_name(string $locale): string
+{
+    return match (normalize_locale($locale)) {
+        'lv' => 'Latviesu',
+        default => 'English',
+    };
+}
+
+function translation_catalog(string $locale): array
+{
+    static $catalogs = [];
+    $locale = normalize_locale($locale);
+
+    if (!array_key_exists($locale, $catalogs)) {
+        $file = base_path('app/lang/' . $locale . '.php');
+        $catalogs[$locale] = is_file($file) ? require $file : [];
+    }
+
+    return $catalogs[$locale];
+}
+
+function translation_value(string $key, string $locale): mixed
+{
+    $value = translation_catalog($locale);
+
+    foreach (explode('.', $key) as $segment) {
+        if (!is_array($value) || !array_key_exists($segment, $value)) {
+            return null;
+        }
+
+        $value = $value[$segment];
+    }
+
+    return $value;
+}
+
+function interpolate_translation(string $text, array $replace = []): string
+{
+    if ($replace === []) {
+        return $text;
+    }
+
+    $replacements = [];
+
+    foreach ($replace as $key => $value) {
+        $replacements[':' . $key] = (string) $value;
+    }
+
+    return strtr($text, $replacements);
+}
+
+function __(string $key, array $replace = [], ?string $locale = null): string
+{
+    $locale ??= current_locale();
+    $value = translation_value($key, $locale);
+
+    if (!is_string($value)) {
+        $value = translation_value($key, default_locale());
+    }
+
+    if (!is_string($value)) {
+        return $key;
+    }
+
+    return interpolate_translation($value, $replace);
+}
+
+function translation_phrase_map(?string $locale = null): array
+{
+    $locale ??= current_locale();
+    $phrases = translation_value('phrases', $locale);
+
+    return is_array($phrases) ? $phrases : [];
+}
+
+function translate_literal(string $text, ?string $locale = null): string
+{
+    $locale ??= current_locale();
+
+    if ($locale === default_locale()) {
+        return $text;
+    }
+
+    $translated = translation_phrase_map($locale)[$text] ?? null;
+
+    return is_string($translated) ? $translated : $text;
+}
+
+function localize_output(string $content, ?string $locale = null): string
+{
+    $locale ??= current_locale();
+
+    if ($locale === default_locale()) {
+        return $content;
+    }
+
+    $phrases = translation_phrase_map($locale);
+
+    if ($phrases === []) {
+        return $content;
+    }
+
+    uksort($phrases, static fn (string $left, string $right): int => strlen($right) <=> strlen($left));
+
+    return strtr($content, $phrases);
+}
+
+function locale_month_names(string $locale): array
+{
+    return normalize_locale($locale) === 'lv'
+        ? ['janv.', 'febr.', 'marts', 'apr.', 'maijs', 'jūn.', 'jūl.', 'aug.', 'sept.', 'okt.', 'nov.', 'dec.']
+        : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+}
+
+function localized_short_month(int $month, ?string $locale = null): string
+{
+    $locale ??= current_locale();
+    $months = locale_month_names($locale);
+
+    return $months[max(0, min(11, $month - 1))];
+}
+
 function render(string $view, array $data = [], int $statusCode = 200): void
 {
     http_response_code($statusCode);
@@ -159,14 +350,14 @@ function render(string $view, array $data = [], int $statusCode = 200): void
 
     ob_start();
     require $viewFile;
-    $content = ob_get_clean() ?: '';
+    $content = localize_output(ob_get_clean() ?: '');
 
     require base_path('app/views/layouts/main.php');
 }
 
 function safe_error_message(string $message): string
 {
-    return is_debug() ? $message : 'Something went wrong. Please try again later.';
+    return is_debug() ? $message : __('errors.generic');
 }
 
 function request_is_https(): bool
@@ -289,7 +480,7 @@ function flash(string $key, ?string $message = null): ?string
         unset($_SESSION['_flash'][$key]);
     }
 
-    return is_string($value) ? $value : null;
+    return is_string($value) ? translate_literal($value) : null;
 }
 
 function current_user_id(): ?int
@@ -604,28 +795,28 @@ function auth_navigation_items(?array $user = null): array
 
     if ($role === 'worker') {
         return [
-            ['label' => 'My Work', 'path' => '/work'],
-            ['label' => 'Materials', 'path' => '/materials'],
-            ['label' => 'Calendar', 'path' => '/jobs/calendar'],
+            ['label' => translate_literal('My Work'), 'path' => '/work'],
+            ['label' => translate_literal('Materials'), 'path' => '/materials'],
+            ['label' => translate_literal('Calendar'), 'path' => '/jobs/calendar'],
         ];
     }
 
     $items = [
-        ['label' => 'Dashboard', 'path' => '/dashboard'],
-        ['label' => 'Customers', 'path' => '/customers'],
-        ['label' => 'Locations', 'path' => '/locations'],
-        ['label' => 'Tasks', 'path' => '/tasks'],
-        ['label' => 'Jobs', 'path' => '/jobs'],
-        ['label' => 'Materials', 'path' => '/materials'],
-        ['label' => 'Calendar', 'path' => '/jobs/calendar'],
+        ['label' => translate_literal('Dashboard'), 'path' => '/dashboard'],
+        ['label' => translate_literal('Customers'), 'path' => '/customers'],
+        ['label' => translate_literal('Locations'), 'path' => '/locations'],
+        ['label' => translate_literal('Tasks'), 'path' => '/tasks'],
+        ['label' => translate_literal('Jobs'), 'path' => '/jobs'],
+        ['label' => translate_literal('Materials'), 'path' => '/materials'],
+        ['label' => translate_literal('Calendar'), 'path' => '/jobs/calendar'],
     ];
 
     if ($role === 'admin' || is_super_admin($user)) {
-        $items[] = ['label' => 'Users', 'path' => '/users'];
+        $items[] = ['label' => translate_literal('Users'), 'path' => '/users'];
     }
 
     if (is_super_admin($user)) {
-        $items[] = ['label' => 'Companies', 'path' => '/companies'];
+        $items[] = ['label' => translate_literal('Companies'), 'path' => '/companies'];
     }
 
     return $items;
@@ -633,14 +824,14 @@ function auth_navigation_items(?array $user = null): array
 
 function role_label(string $role): string
 {
-    return match ($role) {
+    return translate_literal(match ($role) {
         'super_admin' => 'Super Admin',
         'admin' => 'Administrator',
         'dispatcher' => 'Dispatcher',
         'worker' => 'Field Worker',
         '' => 'No company selected',
         default => ucfirst($role),
-    };
+    });
 }
 
 function user_initials(?array $user = null): string
@@ -674,19 +865,19 @@ function current_navigation_label(array $navigationItems): string
 {
     foreach ($navigationItems as $item) {
         if (is_current_path((string) ($item['path'] ?? ''))) {
-            return (string) ($item['label'] ?? 'Task');
+            return (string) ($item['label'] ?? translate_literal('Task'));
         }
     }
 
-    return 'Task';
+    return translate_literal('Task');
 }
 
 function user_role_options(): array
 {
     return [
-        'admin' => 'Administrator',
-        'dispatcher' => 'Dispatcher',
-        'worker' => 'Field Worker',
+        'admin' => translate_literal('Administrator'),
+        'dispatcher' => translate_literal('Dispatcher'),
+        'worker' => translate_literal('Field Worker'),
     ];
 }
 
@@ -734,7 +925,7 @@ function company_context_options(?array $user = null): array
     if (is_super_admin($user)) {
         $options[] = [
             'id' => 'all',
-            'name' => 'All companies',
+            'name' => translate_literal('All companies'),
         ];
 
         foreach (list_companies(false) as $company) {
@@ -766,10 +957,10 @@ function current_company_context_label(?array $user = null): string
     }
 
     if (is_super_admin($user) && current_company_context_value() === 'all') {
-        return 'All companies';
+        return translate_literal('All companies');
     }
 
-    return (string) ($user['active_company_name'] ?? 'Select company');
+    return (string) ($user['active_company_name'] ?? translate_literal('Select company'));
 }
 
 function user_can_view_current_company_page(?array $user = null): bool
@@ -819,7 +1010,7 @@ function password_min_length(): int
 function validate_password_strength(string $password): ?string
 {
     if (strlen($password) < password_min_length()) {
-        return sprintf('Password must be at least %d characters.', password_min_length());
+        return translate_literal(sprintf('Password must be at least %d characters.', password_min_length()));
     }
 
     return null;
@@ -925,7 +1116,7 @@ function maps_search_url(string $address): ?string
 function format_datetime(?string $value): string
 {
     if ($value === null || trim($value) === '') {
-        return 'Not available';
+        return __('common.not_available');
     }
 
     $timestamp = strtotime($value);
@@ -960,7 +1151,7 @@ function format_file_size(int|string|null $bytes): string
 function format_display_datetime(?string $value, string $fallback = 'Not set'): string
 {
     if ($value === null || trim($value) === '') {
-        return $fallback;
+        return translate_literal($fallback);
     }
 
     $timestamp = strtotime($value);
@@ -969,13 +1160,13 @@ function format_display_datetime(?string $value, string $fallback = 'Not set'): 
         return $value;
     }
 
-    return date('d M Y, H:i', $timestamp);
+    return date('d', $timestamp) . ' ' . localized_short_month((int) date('n', $timestamp)) . ' ' . date('Y, H:i', $timestamp);
 }
 
 function format_date(?string $value): string
 {
     if ($value === null || trim($value) === '') {
-        return 'Not scheduled';
+        return __('common.not_scheduled');
     }
 
     $timestamp = strtotime($value);
@@ -990,7 +1181,7 @@ function format_date(?string $value): string
 function format_display_date(?string $value, string $fallback = 'Not set'): string
 {
     if ($value === null || trim($value) === '') {
-        return $fallback;
+        return translate_literal($fallback);
     }
 
     $timestamp = strtotime($value);
@@ -999,13 +1190,13 @@ function format_display_date(?string $value, string $fallback = 'Not set'): stri
         return $value;
     }
 
-    return date('d M Y', $timestamp);
+    return date('d', $timestamp) . ' ' . localized_short_month((int) date('n', $timestamp)) . ' ' . date('Y', $timestamp);
 }
 
 function format_time(?string $value): string
 {
     if ($value === null || trim($value) === '') {
-        return 'Not scheduled';
+        return __('common.not_scheduled');
     }
 
     $timestamp = strtotime($value);
@@ -1023,7 +1214,7 @@ function format_job_scheduled_start(array $job): string
     $time = $job['planned_start_time'] ?? null;
 
     if (($date === null || trim((string) $date) === '') && ($time === null || trim((string) $time) === '')) {
-        return 'Not scheduled';
+        return __('common.not_scheduled');
     }
 
     if ($date === null || trim((string) $date) === '') {
@@ -1046,13 +1237,13 @@ function format_job_scheduled_end(array $job): string
     $estimatedDuration = (int) ($job['estimated_duration_minutes'] ?? 0);
 
     if ($plannedDate === '' || $plannedStartTime === '' || $estimatedDuration <= 0) {
-        return 'Not scheduled';
+        return __('common.not_scheduled');
     }
 
     $timestamp = strtotime($plannedDate . ' ' . $plannedStartTime);
 
     if ($timestamp === false) {
-        return 'Not scheduled';
+        return __('common.not_scheduled');
     }
 
     return date('Y-m-d H:i', $timestamp + ($estimatedDuration * 60));
@@ -1061,22 +1252,22 @@ function format_job_scheduled_end(array $job): string
 function job_type_options(): array
 {
     return [
-        'installation' => 'Installation',
-        'maintenance' => 'Maintenance',
-        'repair' => 'Repair',
-        'inspection' => 'Inspection',
-        'delivery' => 'Delivery',
-        'other' => 'Other',
+        'installation' => translate_literal('Installation'),
+        'maintenance' => translate_literal('Maintenance'),
+        'repair' => translate_literal('Repair'),
+        'inspection' => translate_literal('Inspection'),
+        'delivery' => translate_literal('Delivery'),
+        'other' => translate_literal('Other'),
     ];
 }
 
 function job_priority_options(): array
 {
     return [
-        'low' => 'Low',
-        'normal' => 'Normal',
-        'high' => 'High',
-        'urgent' => 'Urgent',
+        'low' => translate_literal('Low'),
+        'normal' => translate_literal('Normal'),
+        'high' => translate_literal('High'),
+        'urgent' => translate_literal('Urgent'),
     ];
 }
 
@@ -1088,32 +1279,32 @@ function task_priority_options(): array
 function task_status_options(): array
 {
     return [
-        'new' => 'New',
-        'planned' => 'Planned',
-        'in_progress' => 'In Progress',
-        'completed' => 'Completed',
-        'cancelled' => 'Cancelled',
+        'new' => translate_literal('New'),
+        'planned' => translate_literal('Planned'),
+        'in_progress' => translate_literal('In Progress'),
+        'completed' => translate_literal('Completed'),
+        'cancelled' => translate_literal('Cancelled'),
     ];
 }
 
 function task_due_state_options(): array
 {
     return [
-        'overdue' => 'Overdue',
-        'due_today' => 'Due Today',
-        'upcoming' => 'Upcoming',
-        'no_due_date' => 'No Due Date',
+        'overdue' => __('tasks.due_state.overdue'),
+        'due_today' => __('tasks.due_state.due_today'),
+        'upcoming' => __('tasks.due_state.upcoming'),
+        'no_due_date' => __('tasks.due_state.no_due_date'),
     ];
 }
 
 function job_status_options(): array
 {
     return [
-        'draft' => 'Draft',
-        'planned' => 'Planned',
-        'in_progress' => 'In Progress',
-        'completed' => 'Completed',
-        'cancelled' => 'Cancelled',
+        'draft' => __('jobs.status.draft'),
+        'planned' => __('jobs.status.planned'),
+        'in_progress' => __('jobs.status.in_progress'),
+        'completed' => __('jobs.status.completed'),
+        'cancelled' => __('jobs.status.cancelled'),
     ];
 }
 

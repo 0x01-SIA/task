@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 $pageTitle = $pageTitle ?? config('app.name', 'Task App');
 $user = current_user();
+$locale = current_locale();
 $navigationItems = auth_navigation_items($user);
 $currentSectionLabel = current_navigation_label($navigationItems);
 $companyLabel = $user !== null ? current_company_context_label($user) : '';
@@ -17,7 +18,7 @@ $accountMenuId = 'account-menu';
 $mobileDrawerId = 'mobile-nav-drawer';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= h($locale) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -25,7 +26,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
+    <title><?= h(translate_literal((string) $pageTitle)) ?></title>
     <script>
         (() => {
             const storageKey = 'task-theme-preference';
@@ -61,7 +62,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
                         data-drawer-toggle
                         aria-expanded="false"
                         aria-controls="<?= h($mobileDrawerId) ?>"
-                        aria-label="Open navigation menu"
+                        aria-label="<?= h(translate_literal('Open navigation menu')) ?>"
                     >
                         <span class="app-menu-toggle__line" aria-hidden="true"></span>
                         <span class="app-menu-toggle__line" aria-hidden="true"></span>
@@ -72,7 +73,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
                 <a
                     class="app-brand"
                     href="<?= h(app_url(home_path_for_user($user))) ?>"
-                    aria-label="Task App dashboard"
+                    aria-label="<?= h(translate_literal('Task App dashboard')) ?>"
                 >
                     <img
                         src="<?= h(asset_url('images/task-app-icon.png')) ?>"
@@ -117,9 +118,9 @@ $mobileDrawerId = 'mobile-nav-drawer';
                             <span class="app-account-chevron" aria-hidden="true">▾</span>
                         </button>
 
-                        <div class="app-account-menu" id="<?= h($accountMenuId) ?>" data-menu-panel role="menu" aria-label="Account menu" hidden>
+                        <div class="app-account-menu" id="<?= h($accountMenuId) ?>" data-menu-panel role="menu" aria-label="<?= h(translate_literal('Account menu')) ?>" hidden>
                             <section class="app-menu-section">
-                                <p class="app-menu-label">Signed in as</p>
+                                <p class="app-menu-label"><?= h(translate_literal('Signed in as')) ?></p>
                                 <div class="app-menu-identity">
                                     <div class="app-menu-identity__name"><?= h((string) $user['name']) ?></div>
                                     <div class="app-menu-identity__meta"><?= h(role_label((string) $user['role'])) ?></div>
@@ -128,14 +129,14 @@ $mobileDrawerId = 'mobile-nav-drawer';
 
                             <section class="app-menu-section">
                                 <div class="app-menu-heading">
-                                    <span class="app-menu-label">Company</span>
+                                    <span class="app-menu-label"><?= h(translate_literal('Company')) ?></span>
                                     <?php if (!$canSwitchCompany && $companyDetailHref !== null): ?>
-                                        <a class="app-menu-link" href="<?= h($companyDetailHref) ?>">Open</a>
+                                        <a class="app-menu-link" href="<?= h($companyDetailHref) ?>"><?= h(translate_literal('Open')) ?></a>
                                     <?php endif; ?>
                                 </div>
 
                                 <?php if ($canSwitchCompany): ?>
-                                    <div class="app-company-list" role="group" aria-label="Switch active company">
+                                    <div class="app-company-list" role="group" aria-label="<?= h(translate_literal('Switch active company')) ?>">
                                         <?php foreach ($companyOptions as $option): ?>
                                             <?php
                                             $selected = ($option['id'] === 'all' && current_company_context_value() === 'all')
@@ -152,7 +153,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
                                                 >
                                                     <span class="app-company-list__name" title="<?= h($option['name']) ?>"><?= h($option['name']) ?></span>
                                                     <?php if ($selected): ?>
-                                                        <span class="app-company-list__status">Current</span>
+                                                        <span class="app-company-list__status"><?= h(translate_literal('Current')) ?></span>
                                                     <?php endif; ?>
                                                 </button>
                                             </form>
@@ -164,7 +165,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
                             </section>
 
                             <section class="app-menu-section">
-                                <span class="app-menu-label">App</span>
+                                <span class="app-menu-label"><?= h(translate_literal('App')) ?></span>
                                 <button
                                     class="app-menu-action"
                                     type="button"
@@ -172,13 +173,13 @@ $mobileDrawerId = 'mobile-nav-drawer';
                                     role="menuitem"
                                     hidden
                                 >
-                                    Install Task App
+                                    <?= h(translate_literal('Install Task App')) ?>
                                 </button>
                             </section>
 
                             <section class="app-menu-section">
-                                <span class="app-menu-label">Theme</span>
-                                <div class="theme-switcher" role="group" aria-label="Select theme">
+                                <span class="app-menu-label"><?= h(translate_literal('Theme')) ?></span>
+                                <div class="theme-switcher" role="group" aria-label="<?= h(translate_literal('Select theme')) ?>">
                                     <?php foreach (['light' => 'Light', 'dark' => 'Dark', 'system' => 'System'] as $themeValue => $themeLabel): ?>
                                         <button
                                             class="theme-switcher__option"
@@ -187,8 +188,29 @@ $mobileDrawerId = 'mobile-nav-drawer';
                                             role="menuitemradio"
                                             aria-checked="false"
                                         >
-                                            <?= h($themeLabel) ?>
+                                            <?= h(translate_literal($themeLabel)) ?>
                                         </button>
+                                    <?php endforeach; ?>
+                                </div>
+                            </section>
+
+                            <section class="app-menu-section">
+                                <span class="app-menu-label"><?= h(translate_literal('Language')) ?></span>
+                                <div class="theme-switcher" role="group" aria-label="<?= h(translate_literal('Select language')) ?>">
+                                    <?php foreach (available_locales() as $languageOption): ?>
+                                        <form method="post" action="<?= h(app_url('/language')) ?>" class="d-inline">
+                                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                            <input type="hidden" name="locale" value="<?= h($languageOption) ?>">
+                                            <input type="hidden" name="redirect_to" value="<?= h($_SERVER['REQUEST_URI'] ?? app_url('/')) ?>">
+                                            <button
+                                                class="theme-switcher__option<?= $locale === $languageOption ? ' is-active' : '' ?>"
+                                                type="submit"
+                                                role="menuitemradio"
+                                                aria-checked="<?= $locale === $languageOption ? 'true' : 'false' ?>"
+                                            >
+                                                <?= h(language_label($languageOption)) ?>
+                                            </button>
+                                        </form>
                                     <?php endforeach; ?>
                                 </div>
                             </section>
@@ -196,14 +218,25 @@ $mobileDrawerId = 'mobile-nav-drawer';
                             <section class="app-menu-section">
                                 <form method="post" action="<?= h(app_url('/logout')) ?>">
                                     <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                                    <button class="app-menu-danger" type="submit" role="menuitem">Log out</button>
+                                    <button class="app-menu-danger" type="submit" role="menuitem"><?= h(translate_literal('Log out')) ?></button>
                                 </form>
                             </section>
                         </div>
                     </div>
                 <?php else: ?>
                     <nav>
-                        <a class="app-login-link" href="<?= h(app_url('/login')) ?>">Login</a>
+                        <div class="d-flex align-items-center gap-2">
+                            <form method="post" action="<?= h(app_url('/language')) ?>" class="d-flex gap-1 align-items-center">
+                                <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                <input type="hidden" name="redirect_to" value="<?= h($_SERVER['REQUEST_URI'] ?? app_url('/')) ?>">
+                                <?php foreach (available_locales() as $languageOption): ?>
+                                    <button class="btn btn-sm <?= $locale === $languageOption ? 'btn-primary' : 'btn-outline-secondary' ?>" type="submit" name="locale" value="<?= h($languageOption) ?>">
+                                        <?= h(language_label($languageOption)) ?>
+                                    </button>
+                                <?php endforeach; ?>
+                            </form>
+                            <a class="app-login-link" href="<?= h(app_url('/login')) ?>"><?= h(translate_literal('Login')) ?></a>
+                        </div>
                     </nav>
                 <?php endif; ?>
             </div>
@@ -221,10 +254,10 @@ $mobileDrawerId = 'mobile-nav-drawer';
         >
             <div class="app-mobile-drawer__header">
                 <div>
-                    <p class="app-menu-label mb-1">Navigation</p>
+                    <p class="app-menu-label mb-1"><?= h(translate_literal('Navigation')) ?></p>
                     <h2 class="h5 mb-0"><?= h($currentSectionLabel) ?></h2>
                 </div>
-                <button class="app-drawer-close" type="button" data-drawer-close aria-label="Close navigation menu">Close</button>
+                <button class="app-drawer-close" type="button" data-drawer-close aria-label="<?= h(translate_literal('Close navigation menu')) ?>"><?= h(translate_literal('Close')) ?></button>
             </div>
 
             <nav class="app-mobile-nav" aria-label="Mobile primary">
@@ -242,9 +275,9 @@ $mobileDrawerId = 'mobile-nav-drawer';
             </nav>
 
             <section class="app-mobile-panel">
-                <p class="app-menu-label">Company</p>
+                <p class="app-menu-label"><?= h(translate_literal('Company')) ?></p>
                 <?php if ($canSwitchCompany): ?>
-                    <div class="app-company-list" role="group" aria-label="Switch active company">
+                    <div class="app-company-list" role="group" aria-label="<?= h(translate_literal('Switch active company')) ?>">
                         <?php foreach ($companyOptions as $option): ?>
                             <?php
                             $selected = ($option['id'] === 'all' && current_company_context_value() === 'all')
@@ -259,7 +292,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
                                 >
                                     <span class="app-company-list__name"><?= h($option['name']) ?></span>
                                     <?php if ($selected): ?>
-                                        <span class="app-company-list__status">Current</span>
+                                        <span class="app-company-list__status"><?= h(translate_literal('Current')) ?></span>
                                     <?php endif; ?>
                                 </button>
                             </form>
@@ -273,19 +306,35 @@ $mobileDrawerId = 'mobile-nav-drawer';
             </section>
 
             <section class="app-mobile-panel">
-                <p class="app-menu-label">App</p>
+                <p class="app-menu-label"><?= h(translate_literal('App')) ?></p>
                 <button class="app-menu-action" type="button" data-install-app-action hidden>
-                    Install Task App
+                    <?= h(translate_literal('Install Task App')) ?>
                 </button>
             </section>
 
             <section class="app-mobile-panel">
-                <p class="app-menu-label">Theme</p>
-                <div class="theme-switcher theme-switcher--stacked" role="group" aria-label="Select theme">
+                <p class="app-menu-label"><?= h(translate_literal('Theme')) ?></p>
+                <div class="theme-switcher theme-switcher--stacked" role="group" aria-label="<?= h(translate_literal('Select theme')) ?>">
                     <?php foreach (['light' => 'Light', 'dark' => 'Dark', 'system' => 'System'] as $themeValue => $themeLabel): ?>
                         <button class="theme-switcher__option" type="button" data-theme-option="<?= h($themeValue) ?>">
-                            <?= h($themeLabel) ?>
+                            <?= h(translate_literal($themeLabel)) ?>
                         </button>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+
+            <section class="app-mobile-panel">
+                <p class="app-menu-label"><?= h(translate_literal('Language')) ?></p>
+                <div class="theme-switcher theme-switcher--stacked" role="group" aria-label="<?= h(translate_literal('Select language')) ?>">
+                    <?php foreach (available_locales() as $languageOption): ?>
+                        <form method="post" action="<?= h(app_url('/language')) ?>">
+                            <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                            <input type="hidden" name="locale" value="<?= h($languageOption) ?>">
+                            <input type="hidden" name="redirect_to" value="<?= h($_SERVER['REQUEST_URI'] ?? app_url('/')) ?>">
+                            <button class="theme-switcher__option<?= $locale === $languageOption ? ' is-active' : '' ?>" type="submit">
+                                <?= h(language_native_name($languageOption)) ?>
+                            </button>
+                        </form>
                     <?php endforeach; ?>
                 </div>
             </section>
@@ -293,7 +342,7 @@ $mobileDrawerId = 'mobile-nav-drawer';
             <section class="app-mobile-panel app-mobile-panel--danger">
                 <form method="post" action="<?= h(app_url('/logout')) ?>">
                     <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
-                    <button class="app-menu-danger" type="submit">Log out</button>
+                    <button class="app-menu-danger" type="submit"><?= h(translate_literal('Log out')) ?></button>
                 </form>
             </section>
         </aside>

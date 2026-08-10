@@ -18,7 +18,7 @@ require base_path('app/repositories/users.php');
 
 function not_found(string $resourceName): never
 {
-    abort(404, 'Page not found', $resourceName . ' could not be found.');
+    abort(404, translate_literal('Page not found'), translate_literal($resourceName . ' could not be found.'));
 }
 
 function log_route_exception(string $context, Throwable $exception, array $details = []): void
@@ -1654,6 +1654,33 @@ try {
             logout_user();
             redirect('/login');
             break;
+
+        case $path === '/language':
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $locale = is_string($_POST['locale'] ?? null) ? $_POST['locale'] : default_locale();
+            set_current_locale($locale);
+
+            $redirectTarget = is_string($_POST['redirect_to'] ?? null) ? trim($_POST['redirect_to']) : '';
+            $basePath = parse_url(app_url('/'), PHP_URL_PATH) ?: '/';
+            $targetPath = parse_url($redirectTarget, PHP_URL_PATH) ?: '/';
+            $targetQuery = parse_url($redirectTarget, PHP_URL_QUERY);
+
+            if (!str_starts_with($targetPath, $basePath)) {
+                redirect('/');
+            }
+
+            $normalizedTarget = $targetPath . ($targetQuery !== null && $targetQuery !== '' ? '?' . $targetQuery : '');
+            header('Location: ' . $normalizedTarget);
+            exit;
 
         case $path === '/company-context':
             require_auth();
