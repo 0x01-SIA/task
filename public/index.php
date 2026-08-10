@@ -10,6 +10,7 @@ require base_path('app/repositories/dashboard.php');
 require base_path('app/repositories/job_assets.php');
 require base_path('app/repositories/job_customer_confirmations.php');
 require base_path('app/repositories/jobs.php');
+require base_path('app/repositories/job_reports.php');
 require base_path('app/repositories/locations.php');
 require base_path('app/repositories/materials.php');
 require base_path('app/repositories/material_stock.php');
@@ -4100,6 +4101,47 @@ try {
 
             flash('success', 'Customer confirmation removed successfully.');
             redirect('/jobs/' . $job['id']);
+            break;
+
+        case preg_match('#^/jobs/([1-9][0-9]*)/report$#', $path, $matches) === 1:
+            require_role(['admin', 'dispatcher']);
+            require_active_company_context();
+
+            if ($method !== 'POST') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $csrfToken = $_POST['_token'] ?? null;
+
+            if (!verify_csrf_token(is_string($csrfToken) ? $csrfToken : null)) {
+                abort(419, 'Session expired', 'The form token is invalid or has expired.');
+            }
+
+            $viewer = current_user();
+            $job = find_job_by_id((int) $matches[1], $viewer);
+
+            if ($job === null) {
+                not_found('Job');
+            }
+
+            if (!user_can_generate_job_report($viewer, $job)) {
+                abort(403, 'Access denied', 'You do not have permission to generate reports for this job.');
+            }
+
+            if (!job_can_generate_report($job)) {
+                flash('error', 'Only completed jobs can be reported.');
+                redirect('/jobs/' . $job['id']);
+            }
+
+            $language = trim((string) ($_POST['language'] ?? ''));
+            $languageError = validate_job_report_language($language);
+
+            if ($languageError !== null) {
+                flash('error', $languageError);
+                redirect('/jobs/' . $job['id']);
+            }
+
+            stream_generated_job_report($job, $language);
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)$#', $path, $matches) === 1:

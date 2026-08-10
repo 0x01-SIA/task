@@ -6,6 +6,7 @@ $viewer = current_user();
 $canManageJobs = in_array((string) ($viewer['role'] ?? ''), ['admin', 'dispatcher'], true);
 $canRecordMaterials = user_can_record_job_material($viewer, $job);
 $canModifyMaterials = user_can_modify_job_material($viewer, $job);
+$canGenerateReport = user_can_generate_job_report($viewer, $job) && job_can_generate_report($job);
 $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
 ?>
 <div class="d-grid gap-4">
@@ -19,6 +20,21 @@ $materialRouteBase = '/jobs/' . $job['id'] . '/materials';
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     <a class="btn btn-outline-secondary" href="<?= h(app_url('/jobs')) ?>">Back to Jobs</a>
+                    <?php if ($canGenerateReport): ?>
+                        <details class="job-report-action">
+                            <summary class="btn btn-outline-primary">Generate report</summary>
+                            <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/report')) ?>" class="card card-body shadow-sm mt-2 border-0">
+                                <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">
+                                <label class="form-label" for="report-language">Report language</label>
+                                <select class="form-select" id="report-language" name="language" required>
+                                    <?php foreach (job_report_language_options() as $languageCode => $languageLabel): ?>
+                                        <option value="<?= h($languageCode) ?>"><?= h($languageLabel) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn btn-primary mt-3" type="submit">Download PDF</button>
+                            </form>
+                        </details>
+                    <?php endif; ?>
                     <?php if ($canManageJobs): ?>
                         <a class="btn btn-primary" href="<?= h(app_url('/jobs/' . $job['id'] . '/edit')) ?>">Edit Job</a>
                         <form method="post" action="<?= h(app_url('/jobs/' . $job['id'] . '/delete')) ?>" onsubmit="return confirm('Delete this job? This cannot be undone.');">
