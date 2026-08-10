@@ -4141,7 +4141,19 @@ try {
                 redirect('/jobs/' . $job['id']);
             }
 
-            stream_generated_job_report($job, $language);
+            try {
+                stream_generated_job_report($job, $language, isset($viewer['id']) ? (int) $viewer['id'] : null);
+            } catch (Throwable $exception) {
+                log_route_exception('jobs.report.generate', $exception, [
+                    'job_id' => (int) $job['id'],
+                    'company_id' => (int) ($job['company_id'] ?? 0),
+                    'user_id' => $viewer['id'] ?? null,
+                    'language' => $language,
+                    'route' => '/jobs/{id}/report',
+                ]);
+                flash('error', 'The report could not be generated. Please try again.');
+                redirect('/jobs/' . $job['id']);
+            }
             break;
 
         case preg_match('#^/jobs/([1-9][0-9]*)$#', $path, $matches) === 1:

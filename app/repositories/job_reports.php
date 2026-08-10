@@ -10,6 +10,31 @@ function job_report_language_options(): array
     ];
 }
 
+function job_reports_connection(): PDO
+{
+    $connection = database_connection();
+
+    if ($connection === null) {
+        throw new RuntimeException('Database connection is unavailable.');
+    }
+
+    return $connection;
+}
+
+function job_reports_table_exists(string $table): bool
+{
+    $statement = job_reports_connection()->prepare(
+        'SELECT 1
+         FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = :table_name
+         LIMIT 1'
+    );
+    $statement->execute(['table_name' => $table]);
+
+    return $statement->fetchColumn() !== false;
+}
+
 function job_report_language_label(string $language): string
 {
     return match ($language) {
@@ -66,6 +91,7 @@ function build_job_report_payload(array $job, string $language): array
     $deviceInstallations = list_job_device_installations((int) $job['id']);
     $confirmation = find_job_customer_confirmation((int) $job['id']);
     $labels = job_report_labels($language);
+    $snapshotData = build_job_report_snapshot_data($job, $task, $notes, $materials, $deviceInstallations, $confirmation, $company);
 
     return [
         'language' => $language,
@@ -81,6 +107,7 @@ function build_job_report_payload(array $job, string $language): array
         'materials' => job_report_material_rows($materials, $deviceInstallations, $labels),
         'comments' => job_report_comment_rows($notes, $labels),
         'confirmation' => $confirmation,
+        'snapshot' => $snapshotData,
         'worker' => [
             'name' => trim((string) ($job['assigned_worker_name'] ?? '')),
             'company_name' => (string) ($company['name'] ?? ''),
@@ -88,9 +115,10 @@ function build_job_report_payload(array $job, string $language): array
     ];
 }
 
-function stream_generated_job_report(array $job, string $language): never
+function stream_generated_job_report(array $job, string $language, ?int $createdByUserId = null): never
 {
     $payload = build_job_report_payload($job, $language);
+    persist_job_report_snapshot((int) $job['id'], (int) $job['company_id'], $payload['snapshot'], $createdByUserId);
     $pdfBinary = render_job_report_pdf($payload);
     $downloadName = job_report_download_name($job, $language);
 
@@ -101,6 +129,142 @@ function stream_generated_job_report(array $job, string $language): never
 
     echo $pdfBinary;
     exit;
+}
+
+function find_job_report_snapshot(int $jobId): ?array
+{
+    if (!job_reports_table_exists('job_report_snapshots')) {
+        return null;
+    }
+
+    $statement = job_reports_connection()->prepare(
+        'SELECT id, company_id, job_id, snapshot_json, report_version, created_by_user_id, created_at
+         FROM job_report_snapshots
+         WHERE job_id = :job_id
+         LIMIT 1'
+    );
+    $statement->execute(['job_id' => $jobId]);
+    $snapshot = $statement->fetch(PDO::FETCH_ASSOC);
+
+    return is_array($snapshot) ? $snapshot : null;
+}
+
+function persist_job_report_snapshot(int $jobId, int $companyId, array $snapshot, ?int $createdByUserId): void
+{
+    if (!job_reports_table_exists('job_report_snapshots')) {
+        return;
+    }
+
+    if (find_job_report_snapshot($jobId) !== null) {
+        return;
+    }
+
+    $encodedSnapshot = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $statement = job_reports_connection()->prepare(
+        'INSERT INTO job_report_snapshots (
+            company_id,
+            job_id,
+            snapshot_json,
+            report_version,
+            created_by_user_id
+        ) VALUES (
+            :company_id,
+            :job_id,
+            :snapshot_json,
+            :report_version,
+            :created_by_user_id
+        )'
+    );
+
+    try {
+        $statement->execute([
+            'company_id' => $companyId,
+            'job_id' => $jobId,
+            'snapshot_json' => $encodedSnapshot,
+            'report_version' => 1,
+            'created_by_user_id' => $createdByUserId,
+        ]);
+    } catch (PDOException $exception) {
+        $errorInfo = $exception->errorInfo;
+        $duplicateKey = ($exception->getCode() === '23000' || ($errorInfo[0] ?? null) === '23000');
+
+        if (!$duplicateKey) {
+            throw $exception;
+        }
+    }
+}
+
+function build_job_report_snapshot_data(
+    array $job,
+    ?array $task,
+    array $notes,
+    array $materials,
+    array $deviceInstallations,
+    ?array $confirmation,
+    array $company
+): array {
+    $customer = [
+        'name' => (string) ($job['customer_name'] ?? ''),
+        'location_name' => (string) ($job['location_name'] ?? ''),
+        'full_address' => (string) (location_address($job) ?? ''),
+        'contact_person' => trim((string) ($job['location_contact_name'] ?? '')) !== ''
+            ? (string) $job['location_contact_name']
+            : (string) ($job['customer_contact_name'] ?? ''),
+        'contact_phone' => trim((string) ($job['location_contact_phone'] ?? '')) !== ''
+            ? (string) $job['location_contact_phone']
+            : (string) ($job['customer_contact_phone'] ?? ''),
+        'contact_email' => (string) ($job['customer_contact_email'] ?? ''),
+    ];
+
+    return [
+        'company' => [
+            'name' => (string) ($company['name'] ?? ''),
+            'registration_number' => (string) ($company['registration_number'] ?? ''),
+            'address' => (string) ($company['address'] ?? ''),
+            'email' => (string) ($company['email'] ?? ''),
+        ],
+        'job' => [
+            'id' => (int) ($job['id'] ?? 0),
+            'company_id' => (int) ($job['company_id'] ?? 0),
+            'job_number' => (string) ($job['job_number'] ?? ''),
+            'title' => (string) ($job['title'] ?? ''),
+            'description' => (string) ($job['description'] ?? ''),
+            'planned_date' => (string) ($job['planned_date'] ?? ''),
+            'planned_start_time' => (string) ($job['planned_start_time'] ?? ''),
+            'actual_completed_at' => (string) ($job['actual_completed_at'] ?? ''),
+            'assigned_worker_name' => (string) ($job['assigned_worker_name'] ?? ''),
+            'job_type' => (string) ($job['job_type'] ?? ''),
+            'status' => (string) ($job['status'] ?? ''),
+        ],
+        'task' => $task === null ? null : [
+            'id' => (int) ($task['id'] ?? 0),
+            'task_number' => (string) ($task['task_number'] ?? ''),
+            'title' => (string) ($task['title'] ?? ''),
+            'description' => (string) ($task['description'] ?? ''),
+            'status' => (string) ($task['status'] ?? ''),
+        ],
+        'customer' => $customer,
+        'notes' => array_map(
+            static fn (array $note): array => [
+                'author_name' => (string) ($note['author_name'] ?? ''),
+                'note' => (string) ($note['note'] ?? ''),
+                'created_at' => (string) ($note['created_at'] ?? ''),
+            ],
+            $notes
+        ),
+        'materials' => job_report_material_rows($materials, $deviceInstallations, job_report_labels('en')),
+        'confirmation' => $confirmation === null ? null : [
+            'customer_name' => (string) ($confirmation['customer_name'] ?? ''),
+            'customer_email' => (string) ($confirmation['customer_email'] ?? ''),
+            'signature_path' => (string) ($confirmation['signature_path'] ?? ''),
+            'signature_mime_type' => (string) ($confirmation['signature_mime_type'] ?? ''),
+            'confirmed_at' => (string) ($confirmation['confirmed_at'] ?? ''),
+        ],
+        'worker' => [
+            'name' => trim((string) ($job['assigned_worker_name'] ?? '')),
+            'company_name' => (string) ($company['name'] ?? ''),
+        ],
+    ];
 }
 
 function job_report_labels(string $language): array

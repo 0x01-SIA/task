@@ -43,6 +43,7 @@ try {
     ensure_materials_company_scope($connection);
     ensure_material_stock_tables($connection);
     ensure_job_materials_company_scope($connection);
+    ensure_job_report_snapshots_table($connection);
     ensure_device_tracking_schema($connection);
     ensure_company_scoped_relationship_integrity($connection);
     migrate_job_asset_storage_paths($connection);
@@ -327,6 +328,45 @@ function ensure_job_materials_company_scope(PDO $connection): void
     ensure_index($connection, 'job_materials', 'idx_job_materials_movement_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_movement_id (movement_id)');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_company', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_movement', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_movement FOREIGN KEY (movement_id) REFERENCES material_movements (id) ON DELETE SET NULL ON UPDATE CASCADE');
+    ensure_foreign_key_absent($connection, 'job_materials', 'fk_job_materials_movement_company', 'ALTER TABLE job_materials DROP FOREIGN KEY fk_job_materials_movement_company');
+}
+
+function ensure_job_report_snapshots_table(PDO $connection): void
+{
+    $connection->exec(
+        "CREATE TABLE IF NOT EXISTS job_report_snapshots (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            company_id BIGINT UNSIGNED NOT NULL,
+            job_id BIGINT UNSIGNED NOT NULL,
+            snapshot_json LONGTEXT NOT NULL,
+            report_version INT UNSIGNED NOT NULL DEFAULT 1,
+            created_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_job_report_snapshots_job_id (job_id),
+            UNIQUE KEY uq_job_report_snapshots_id_company_id (id, company_id),
+            KEY idx_job_report_snapshots_company_id (company_id),
+            KEY idx_job_report_snapshots_created_by_user_id (created_by_user_id),
+            CONSTRAINT fk_job_report_snapshots_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_job_report_snapshots_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT fk_job_report_snapshots_created_by_user FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    ensure_column($connection, 'job_report_snapshots', 'company_id', 'ALTER TABLE job_report_snapshots ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensure_column($connection, 'job_report_snapshots', 'job_id', 'ALTER TABLE job_report_snapshots ADD COLUMN job_id BIGINT UNSIGNED NOT NULL AFTER company_id');
+    ensure_column($connection, 'job_report_snapshots', 'snapshot_json', 'ALTER TABLE job_report_snapshots ADD COLUMN snapshot_json LONGTEXT NOT NULL AFTER job_id');
+    ensure_column($connection, 'job_report_snapshots', 'report_version', 'ALTER TABLE job_report_snapshots ADD COLUMN report_version INT UNSIGNED NOT NULL DEFAULT 1 AFTER snapshot_json');
+    ensure_column($connection, 'job_report_snapshots', 'created_by_user_id', 'ALTER TABLE job_report_snapshots ADD COLUMN created_by_user_id BIGINT UNSIGNED DEFAULT NULL AFTER report_version');
+    ensure_column($connection, 'job_report_snapshots', 'created_at', 'ALTER TABLE job_report_snapshots ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER created_by_user_id');
+
+    ensure_index($connection, 'job_report_snapshots', 'uq_job_report_snapshots_job_id', 'ALTER TABLE job_report_snapshots ADD UNIQUE KEY uq_job_report_snapshots_job_id (job_id)');
+    ensure_index($connection, 'job_report_snapshots', 'uq_job_report_snapshots_id_company_id', 'ALTER TABLE job_report_snapshots ADD UNIQUE KEY uq_job_report_snapshots_id_company_id (id, company_id)');
+    ensure_index($connection, 'job_report_snapshots', 'idx_job_report_snapshots_company_id', 'ALTER TABLE job_report_snapshots ADD KEY idx_job_report_snapshots_company_id (company_id)');
+    ensure_index($connection, 'job_report_snapshots', 'idx_job_report_snapshots_created_by_user_id', 'ALTER TABLE job_report_snapshots ADD KEY idx_job_report_snapshots_created_by_user_id (created_by_user_id)');
+    ensure_foreign_key($connection, 'job_report_snapshots', 'fk_job_report_snapshots_company', 'ALTER TABLE job_report_snapshots ADD CONSTRAINT fk_job_report_snapshots_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'job_report_snapshots', 'fk_job_report_snapshots_job', 'ALTER TABLE job_report_snapshots ADD CONSTRAINT fk_job_report_snapshots_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+    ensure_foreign_key($connection, 'job_report_snapshots', 'fk_job_report_snapshots_created_by_user', 'ALTER TABLE job_report_snapshots ADD CONSTRAINT fk_job_report_snapshots_created_by_user FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE');
 }
 
 function ensure_company_scoped_relationship_integrity(PDO $connection): void
@@ -348,7 +388,7 @@ function ensure_company_scoped_relationship_integrity(PDO $connection): void
         ['material_inventory_lines', 'material_id', 'materials', 'fk_material_inventory_lines_material_company', 'idx_material_inventory_lines_material_company_id', 'RESTRICT', 'CASCADE'],
         ['job_materials', 'job_id', 'jobs', 'fk_job_materials_job_company', 'idx_job_materials_job_company_id', 'RESTRICT', 'CASCADE'],
         ['job_materials', 'material_id', 'materials', 'fk_job_materials_material_company', 'idx_job_materials_material_company_id', 'RESTRICT', 'CASCADE'],
-        ['job_materials', 'movement_id', 'material_movements', 'fk_job_materials_movement_company', 'idx_job_materials_movement_company_id', 'SET NULL', 'CASCADE'],
+        ['job_report_snapshots', 'job_id', 'jobs', 'fk_job_report_snapshots_job_company', 'idx_job_report_snapshots_job_company_id', 'RESTRICT', 'CASCADE'],
         ['device_installations', 'job_id', 'jobs', 'fk_device_installations_job_company', 'idx_device_installations_job_company_id', 'RESTRICT', 'CASCADE'],
         ['device_installations', 'device_material_usage_id', 'job_materials', 'fk_device_installations_usage_company', 'idx_device_installations_usage_company_id', 'CASCADE', 'CASCADE'],
         ['device_installations', 'device_material_id', 'materials', 'fk_device_installations_material_company', 'idx_device_installations_material_company_id', 'RESTRICT', 'CASCADE'],
@@ -1162,6 +1202,27 @@ function ensure_foreign_key(PDO $connection, string $table, string $constraint, 
     ]);
 
     if ($statement->fetchColumn() === false) {
+        $connection->exec($sql);
+    }
+}
+
+function ensure_foreign_key_absent(PDO $connection, string $table, string $constraint, string $sql): void
+{
+    $statement = $connection->prepare(
+        'SELECT 1
+         FROM information_schema.TABLE_CONSTRAINTS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = :table_name
+           AND CONSTRAINT_NAME = :constraint_name
+           AND CONSTRAINT_TYPE = \'FOREIGN KEY\'
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => $table,
+        'constraint_name' => $constraint,
+    ]);
+
+    if ($statement->fetchColumn() !== false) {
         $connection->exec($sql);
     }
 }

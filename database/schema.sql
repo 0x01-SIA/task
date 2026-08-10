@@ -554,12 +554,40 @@ CREATE TABLE job_materials (
         FOREIGN KEY (movement_id) REFERENCES material_movements (id)
         ON DELETE SET NULL
         ON UPDATE CASCADE,
-    CONSTRAINT fk_job_materials_movement_company
-        FOREIGN KEY (movement_id, company_id) REFERENCES material_movements (id, company_id)
-        ON DELETE SET NULL
-        ON UPDATE CASCADE,
     CONSTRAINT fk_job_materials_recorded_by_user
         FOREIGN KEY (recorded_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE job_report_snapshots (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    job_id BIGINT UNSIGNED NOT NULL,
+    snapshot_json LONGTEXT NOT NULL,
+    report_version INT UNSIGNED NOT NULL DEFAULT 1,
+    created_by_user_id BIGINT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_job_report_snapshots_job_id (job_id),
+    UNIQUE KEY uq_job_report_snapshots_id_company_id (id, company_id),
+    KEY idx_job_report_snapshots_company_id (company_id),
+    KEY idx_job_report_snapshots_created_by_user_id (created_by_user_id),
+    KEY idx_job_report_snapshots_job_company_id (job_id, company_id),
+    CONSTRAINT fk_job_report_snapshots_company
+        FOREIGN KEY (company_id) REFERENCES companies (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_report_snapshots_job
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_report_snapshots_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_report_snapshots_created_by_user
+        FOREIGN KEY (created_by_user_id) REFERENCES users (id)
         ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
