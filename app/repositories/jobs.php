@@ -716,36 +716,40 @@ function recent_jobs_for_location(int $locationId, int $limit = 5): array
     return is_array($jobs) ? $jobs : [];
 }
 
-function job_deletion_dependencies(int $jobId, ?array $viewer = null): array
+function job_deletion_dependencies(int $jobId, ?array $viewer = null, ?PDO $connection = null, ?int $companyId = null): array
 {
-    $connection = jobs_connection();
+    $connection ??= jobs_connection();
     $definitions = [
         'notes' => [
             'label' => 'job notes',
-            'sql' => 'SELECT COUNT(*) FROM job_notes WHERE job_id = :job_id',
+            'sql' => 'SELECT COUNT(*) FROM job_notes WHERE job_id = :job_id AND company_id = :company_id',
         ],
         'materials' => [
             'label' => 'material usage',
-            'sql' => 'SELECT COUNT(*) FROM job_materials WHERE job_id = :job_id',
+            'sql' => 'SELECT COUNT(*) FROM job_materials WHERE job_id = :job_id AND company_id = :company_id',
         ],
         'attachments' => [
             'label' => 'attachments',
-            'sql' => 'SELECT COUNT(*) FROM job_attachments WHERE job_id = :job_id',
+            'sql' => 'SELECT COUNT(*) FROM job_attachments WHERE job_id = :job_id AND company_id = :company_id',
         ],
         'photos' => [
             'label' => 'photos',
-            'sql' => 'SELECT COUNT(*) FROM job_photos WHERE job_id = :job_id',
+            'sql' => 'SELECT COUNT(*) FROM job_photos WHERE job_id = :job_id AND company_id = :company_id',
         ],
         'customer_confirmation' => [
             'label' => 'customer confirmation',
-            'sql' => 'SELECT COUNT(*) FROM job_customer_confirmations WHERE job_id = :job_id',
+            'sql' => 'SELECT COUNT(*) FROM job_customer_confirmations WHERE job_id = :job_id AND company_id = :company_id',
         ],
     ];
     $dependencies = [];
+    $companyId ??= (int) (find_job_by_id($jobId, $viewer)['company_id'] ?? 0);
 
     foreach ($definitions as $key => $definition) {
         $statement = $connection->prepare($definition['sql']);
-        $statement->execute(['job_id' => $jobId]);
+        $statement->execute([
+            'job_id' => $jobId,
+            'company_id' => $companyId,
+        ]);
         $count = (int) $statement->fetchColumn();
 
         if ($count > 0) {
@@ -793,13 +797,56 @@ function can_delete_job(int $jobId, ?array $viewer = null): array
 
 function delete_job_record(int $jobId, ?array $viewer = null): bool
 {
-    $params = ['id' => $jobId];
-    $sql = 'DELETE FROM jobs WHERE id = :id';
-    $sql .= scoped_company_sql('company_id', $params, $viewer, false);
-    $statement = jobs_connection()->prepare($sql);
-    $statement->execute($params);
+    $connection = jobs_connection();
+    $connection->beginTransaction();
 
-    return $statement->rowCount() > 0;
+    try {
+        $params = ['id' => $jobId];
+        $sql = 'SELECT id, company_id
+                FROM jobs
+                WHERE id = :id';
+        $sql .= scoped_company_sql('company_id', $params, $viewer, false);
+        $sql .= ' LIMIT 1 FOR UPDATE';
+        $statement = $connection->prepare($sql);
+        $statement->execute($params);
+        $job = $statement->fetch();
+
+        if (!is_array($job)) {
+            $connection->rollBack();
+
+            return false;
+        }
+
+        $dependencies = job_deletion_dependencies($jobId, $viewer, $connection, (int) $job['company_id']);
+
+        if ($dependencies !== []) {
+            throw new RuntimeException(blocked_job_deletion_message($dependencies));
+        }
+
+        $deleteStatement = $connection->prepare(
+            'DELETE FROM jobs
+             WHERE id = :id
+               AND company_id = :company_id'
+        );
+        $deleteStatement->execute([
+            'id' => $jobId,
+            'company_id' => (int) $job['company_id'],
+        ]);
+
+        $connection->commit();
+
+        return $deleteStatement->rowCount() > 0;
+    } catch (Throwable $exception) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+
+        if ($exception instanceof PDOException && $exception->getCode() === '23000') {
+            throw new RuntimeException('This job cannot be deleted because related records were added at the same time.');
+        }
+
+        throw $exception;
+    }
 }
 
 function blocked_job_deletion_message(array $dependencies): string

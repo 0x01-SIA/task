@@ -65,7 +65,7 @@ $jobPathBase = (($viewer['role'] ?? '') === 'worker') ? '/work/jobs/' : '/jobs/'
                 </div>
                 <?php if ($latestApprovedInventory !== null): ?>
                     <div class="text-secondary small">
-                        Baseline from approved inventory at <?= h(format_datetime((string) $latestApprovedInventory['approved_at'])) ?>
+                        Baseline from inventory effective at <?= h(format_datetime((string) $latestApprovedInventory['effective_at'])) ?>
                     </div>
                 <?php endif; ?>
             </div>

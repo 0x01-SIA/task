@@ -97,6 +97,16 @@ function is_debug(): bool
     return (bool) config('app.debug', false);
 }
 
+function app_environment(): string
+{
+    return strtolower((string) config('app.env', 'development'));
+}
+
+function app_is_production(): bool
+{
+    return app_environment() === 'production';
+}
+
 function request_path(): string
 {
     $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -159,17 +169,41 @@ function safe_error_message(string $message): string
     return is_debug() ? $message : 'Something went wrong. Please try again later.';
 }
 
+function request_is_https(): bool
+{
+    if (PHP_SAPI === 'cli') {
+        return false;
+    }
+
+    if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+
+    if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
+        return true;
+    }
+
+    return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+}
+
+function session_cookie_options(): array
+{
+    return [
+        'cookie_httponly' => true,
+        'cookie_samesite' => 'Lax',
+        'cookie_secure' => app_is_production() ? request_is_https() : false,
+        'use_strict_mode' => true,
+        'use_only_cookies' => true,
+    ];
+}
+
 function start_session(): void
 {
     if (PHP_SAPI === 'cli' || session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
 
-    session_start([
-        'cookie_httponly' => true,
-        'cookie_samesite' => 'Lax',
-        'use_strict_mode' => true,
-    ]);
+    session_start(session_cookie_options());
 }
 
 function request_method(): string
@@ -505,12 +539,18 @@ function logout_user(): void
     }
 
     session_destroy();
-    session_start([
-        'cookie_httponly' => true,
-        'cookie_samesite' => 'Lax',
-        'use_strict_mode' => true,
-    ]);
+    session_start(session_cookie_options());
     session_regenerate_id(true);
+}
+
+function utc_now(): DateTimeImmutable
+{
+    return new DateTimeImmutable('now', new DateTimeZone('UTC'));
+}
+
+function utc_timestamp(): string
+{
+    return utc_now()->format('Y-m-d H:i:s');
 }
 
 function require_auth(): void

@@ -270,7 +270,7 @@ function add_job_material_entry(
     $connection->beginTransaction();
 
     try {
-        $occurredAt = (new DateTimeImmutable('now'))->format('Y-m-d H:i:s');
+        $occurredAt = utc_timestamp();
         $jobMaterialId = create_basic_job_material_entry(
             $connection,
             $companyId,
@@ -811,7 +811,7 @@ function sync_device_installation_accessories(
             continue;
         }
 
-        $occurredAt = (new DateTimeImmutable('now'))->format('Y-m-d H:i:s');
+        $occurredAt = utc_timestamp();
         $accessoryJobMaterialId = create_basic_job_material_entry(
             $connection,
             $companyId,
@@ -922,7 +922,7 @@ function create_job_material_removal_reversal(
             (int) $jobMaterial['id'],
             (int) $movement['id']
         ),
-        'occurred_at' => (new DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
+        'occurred_at' => utc_timestamp(),
     ]);
 }
 

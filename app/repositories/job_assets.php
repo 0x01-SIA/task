@@ -25,22 +25,28 @@ function job_asset_table(string $type): string
 function job_asset_base_directory(): string
 {
     $configured = trim((string) config('uploads.base_dir', ''));
-
-    $candidates = [];
+    $fallback = base_path('storage/uploads');
 
     if ($configured !== '') {
-        $candidates[] = $configured;
-    }
-
-    $candidates[] = base_path('storage/uploads');
-    $candidates[] = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'task-app-uploads';
-
-    foreach ($candidates as $candidate) {
-        if (job_asset_directory_is_available($candidate)) {
-            return $candidate;
+        if (job_asset_directory_is_available($configured)) {
+            return $configured;
         }
+
+        error_log(sprintf('[job_assets.storage] Configured upload directory is not writable: %s', $configured));
+
+        throw new RuntimeException('The upload directory is not available. Check UPLOAD_BASE_DIR for this environment.');
     }
 
+    if (app_is_production()) {
+        error_log('[job_assets.storage] UPLOAD_BASE_DIR is required in production.');
+        throw new RuntimeException('The upload directory is not configured for this environment.');
+    }
+
+    if (job_asset_directory_is_available($fallback)) {
+        return $fallback;
+    }
+
+    error_log(sprintf('[job_assets.storage] Development upload fallback is not writable: %s', $fallback));
     throw new RuntimeException('No writable upload directory is available. Configure UPLOAD_BASE_DIR for the PHP runtime.');
 }
 
@@ -71,12 +77,18 @@ function job_asset_directory_is_available(string $directory): bool
 
 function job_asset_directory(int $jobId, string $type): string
 {
+    return job_asset_base_directory() . DIRECTORY_SEPARATOR . job_asset_relative_directory($jobId, $type);
+}
+
+function job_asset_relative_directory(int $jobId, string $type): string
+{
     $segment = $type === 'attachment' ? 'attachments' : 'photos';
 
-    return job_asset_base_directory()
-        . DIRECTORY_SEPARATOR . 'jobs'
-        . DIRECTORY_SEPARATOR . $jobId
-        . DIRECTORY_SEPARATOR . $segment;
+    return 'jobs'
+        . DIRECTORY_SEPARATOR
+        . $jobId
+        . DIRECTORY_SEPARATOR
+        . $segment;
 }
 
 function ensure_job_asset_directory(int $jobId, string $type): string
@@ -88,6 +100,97 @@ function ensure_job_asset_directory(int $jobId, string $type): string
     }
 
     return $directory;
+}
+
+function job_asset_relative_path(int $jobId, string $type, string $storedName): string
+{
+    return str_replace(DIRECTORY_SEPARATOR, '/', job_asset_relative_directory($jobId, $type))
+        . '/'
+        . ltrim($storedName, '/');
+}
+
+function job_asset_is_absolute_path(string $path): bool
+{
+    return $path !== '' && (
+        str_starts_with($path, DIRECTORY_SEPARATOR)
+        || preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) === 1
+    );
+}
+
+function resolve_job_asset_path(string $storedPath): ?string
+{
+    $trimmedPath = trim($storedPath);
+
+    if ($trimmedPath === '') {
+        return null;
+    }
+
+    if (job_asset_is_absolute_path($trimmedPath)) {
+        return resolve_legacy_job_asset_path($trimmedPath);
+    }
+
+    if (preg_match('#(^|[\\\\/])\.\.([\\\\/]|$)#', $trimmedPath) === 1) {
+        throw new RuntimeException('Invalid stored asset path.');
+    }
+
+    $baseDirectory = job_asset_base_directory();
+    $candidate = $baseDirectory . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($trimmedPath, '/\\'));
+
+    return assert_job_asset_path_within_base($candidate, false);
+}
+
+function resolve_legacy_job_asset_path(string $absolutePath): ?string
+{
+    $baseDirectory = job_asset_base_directory();
+    $resolvedBase = realpath($baseDirectory);
+    $resolvedPath = realpath($absolutePath);
+
+    if ($resolvedBase === false || $resolvedPath === false || !is_file($resolvedPath)) {
+        return null;
+    }
+
+    $normalizedBase = rtrim($resolvedBase, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+    if (!str_starts_with($resolvedPath, $normalizedBase)) {
+        throw new RuntimeException('Stored asset path is outside the upload directory.');
+    }
+
+    return $resolvedPath;
+}
+
+function assert_job_asset_path_within_base(string $path, bool $mustExist): ?string
+{
+    $baseDirectory = job_asset_base_directory();
+    $resolvedBase = realpath($baseDirectory);
+
+    if ($resolvedBase === false) {
+        throw new RuntimeException('The upload directory is not available.');
+    }
+
+    if ($mustExist) {
+        $resolvedPath = realpath($path);
+
+        if ($resolvedPath === false || !is_file($resolvedPath)) {
+            return null;
+        }
+    } else {
+        $parentDirectory = dirname($path);
+        $resolvedParent = realpath($parentDirectory);
+
+        if ($resolvedParent === false) {
+            return null;
+        }
+
+        $resolvedPath = $resolvedParent . DIRECTORY_SEPARATOR . basename($path);
+    }
+
+    $normalizedBase = rtrim($resolvedBase, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+    if (!str_starts_with($resolvedPath, $normalizedBase)) {
+        throw new RuntimeException('Stored asset path is outside the upload directory.');
+    }
+
+    return $resolvedPath;
 }
 
 function job_attachment_rules(): array
@@ -449,7 +552,14 @@ function store_uploaded_job_photo_batch(int $jobId, array $files, int $userId, ?
         try {
             store_uploaded_job_photo($jobId, $file, $userId, $caption);
             $result['uploaded']++;
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            error_log(sprintf(
+                '[job_photos.upload] company_id=%d job_id=%d user_id=%d: %s',
+                (int) (current_company_id() ?? 0),
+                $jobId,
+                $userId,
+                $exception->getMessage()
+            ));
             $result['failures'][] = [
                 'category' => 'failed',
                 'message' => 'The photo could not be uploaded.',
@@ -484,6 +594,7 @@ function store_uploaded_job_attachment(int $jobId, array $file, int $userId): vo
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $storedName = bin2hex(random_bytes(16)) . ($extension !== '' ? '.' . $extension : '');
     $storedPath = $directory . DIRECTORY_SEPARATOR . $storedName;
+    $relativePath = job_asset_relative_path($jobId, 'attachment', $storedName);
 
     if (!move_uploaded_file((string) $file['tmp_name'], $storedPath)) {
         throw new RuntimeException('The attachment could not be stored.');
@@ -495,7 +606,7 @@ function store_uploaded_job_attachment(int $jobId, array $file, int $userId): vo
             'job_id' => $jobId,
             'original_filename' => basename($originalName),
             'stored_filename' => $storedName,
-            'storage_path' => $storedPath,
+            'storage_path' => $relativePath,
             'mime_type' => detect_uploaded_file_mime($storedPath),
             'file_size' => filesize($storedPath) ?: (int) $file['size'],
             'uploaded_by_user_id' => $userId,
@@ -504,6 +615,14 @@ function store_uploaded_job_attachment(int $jobId, array $file, int $userId): vo
         if (is_file($storedPath)) {
             @unlink($storedPath);
         }
+
+        error_log(sprintf(
+            '[job_attachments.upload] company_id=%d job_id=%d user_id=%d: %s',
+            (int) (current_company_id() ?? 0),
+            $jobId,
+            $userId,
+            $exception->getMessage()
+        ));
 
         throw $exception;
     }
@@ -516,6 +635,7 @@ function store_uploaded_job_photo(int $jobId, array $file, int $userId, ?string 
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $storedName = bin2hex(random_bytes(16)) . ($extension !== '' ? '.' . $extension : '');
     $storedPath = $directory . DIRECTORY_SEPARATOR . $storedName;
+    $relativePath = job_asset_relative_path($jobId, 'photo', $storedName);
 
     if (!move_uploaded_file((string) $file['tmp_name'], $storedPath)) {
         throw new RuntimeException('The photo could not be stored.');
@@ -527,7 +647,7 @@ function store_uploaded_job_photo(int $jobId, array $file, int $userId, ?string 
             'job_id' => $jobId,
             'original_filename' => basename($originalName),
             'stored_filename' => $storedName,
-            'storage_path' => $storedPath,
+            'storage_path' => $relativePath,
             'mime_type' => detect_uploaded_file_mime($storedPath),
             'file_size' => filesize($storedPath) ?: (int) $file['size'],
             'uploaded_by_user_id' => $userId,
@@ -537,6 +657,14 @@ function store_uploaded_job_photo(int $jobId, array $file, int $userId, ?string 
         if (is_file($storedPath)) {
             @unlink($storedPath);
         }
+
+        error_log(sprintf(
+            '[job_photos.upload] company_id=%d job_id=%d user_id=%d: %s',
+            (int) (current_company_id() ?? 0),
+            $jobId,
+            $userId,
+            $exception->getMessage()
+        ));
 
         throw $exception;
     }
@@ -710,9 +838,9 @@ function delete_job_asset(int $jobId, int $assetId, string $type): bool
         return false;
     }
 
-    $path = (string) ($asset['storage_path'] ?? '');
+    $path = resolve_job_asset_path((string) ($asset['storage_path'] ?? ''));
 
-    if ($path !== '' && is_file($path)) {
+    if ($path !== null && is_file($path)) {
         @unlink($path);
     }
 

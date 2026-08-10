@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 const MATERIAL_STOCK_DECIMAL_SCALE = 3;
+const MATERIAL_STOCK_DECIMAL_PRECISION = 14;
 
 function material_stock_connection(): PDO
 {
@@ -23,22 +24,52 @@ function normalize_material_quantity(string $value): ?string
         return null;
     }
 
-    if ((float) $normalized < 0) {
+    [$integerPart, $fractionPart] = array_pad(explode('.', $normalized, 2), 2, '');
+    $trimmedIntegerPart = ltrim($integerPart, '0');
+    $integerDigits = $trimmedIntegerPart === '' ? 1 : strlen($trimmedIntegerPart);
+
+    if ($integerDigits > (MATERIAL_STOCK_DECIMAL_PRECISION - MATERIAL_STOCK_DECIMAL_SCALE)) {
         return null;
     }
 
-    return number_format((float) $normalized, MATERIAL_STOCK_DECIMAL_SCALE, '.', '');
+    return ($trimmedIntegerPart === '' ? '0' : $trimmedIntegerPart)
+        . '.'
+        . str_pad($fractionPart, MATERIAL_STOCK_DECIMAL_SCALE, '0');
 }
 
 function normalize_positive_material_quantity(string $value): ?string
 {
     $normalized = normalize_material_quantity($value);
 
-    if ($normalized === null || (float) $normalized <= 0) {
+    if ($normalized === null || decimal_quantity_compare($normalized, '0.000') <= 0) {
         return null;
     }
 
     return $normalized;
+}
+
+function decimal_quantity_compare(string $left, string $right): int
+{
+    [$leftInteger, $leftFraction] = explode('.', $left, 2);
+    [$rightInteger, $rightFraction] = explode('.', $right, 2);
+
+    $leftInteger = ltrim($leftInteger, '0');
+    $rightInteger = ltrim($rightInteger, '0');
+
+    $leftInteger = $leftInteger === '' ? '0' : $leftInteger;
+    $rightInteger = $rightInteger === '' ? '0' : $rightInteger;
+
+    if (strlen($leftInteger) !== strlen($rightInteger)) {
+        return strlen($leftInteger) <=> strlen($rightInteger);
+    }
+
+    $integerComparison = strcmp($leftInteger, $rightInteger);
+
+    if ($integerComparison !== 0) {
+        return $integerComparison <=> 0;
+    }
+
+    return strcmp($leftFraction, $rightFraction) <=> 0;
 }
 
 function user_can_manage_material_inventory(array $user): bool
@@ -112,6 +143,7 @@ function latest_approved_inventory_line(int $companyId, int $materialId): ?array
             il.material_id,
             il.counted_quantity,
             il.system_quantity_at_start,
+            inv.effective_at,
             inv.approved_at,
             inv.approved_by_user_id
          FROM material_inventory_lines il
@@ -119,7 +151,7 @@ function latest_approved_inventory_line(int $companyId, int $materialId): ?array
          WHERE il.company_id = :company_id
            AND il.material_id = :material_id
            AND inv.status = 'approved'
-         ORDER BY inv.approved_at DESC, inv.id DESC
+         ORDER BY inv.effective_at DESC, inv.id DESC
          LIMIT 1"
     );
     $statement->execute([
@@ -144,7 +176,7 @@ function material_current_stock(int $companyId, int $materialId): string
                     FROM material_movements
                     WHERE company_id = :company_id
                       AND material_id = :material_id
-                      AND occurred_at > :approved_at
+                      AND occurred_at > :effective_at
                 ), 0)
                 AS DECIMAL(14,3)
             )"
@@ -153,7 +185,7 @@ function material_current_stock(int $companyId, int $materialId): string
             'baseline' => (string) $inventoryLine['counted_quantity'],
             'company_id' => $companyId,
             'material_id' => $materialId,
-            'approved_at' => (string) $inventoryLine['approved_at'],
+            'effective_at' => (string) $inventoryLine['effective_at'],
         ]);
     } else {
         $statement = $connection->prepare(
@@ -197,7 +229,7 @@ function company_material_stock_list(int $companyId, array $filters = []): array
                             FROM material_movements mm
                             WHERE mm.company_id = m.company_id
                               AND mm.material_id = m.id
-                              AND mm.occurred_at > inv.approved_at
+                              AND mm.occurred_at > inv.effective_at
                         ), 0)
                         AS DECIMAL(14,3)
                     )
@@ -206,7 +238,7 @@ function company_material_stock_list(int $companyId, array $filters = []): array
                     WHERE il.company_id = m.company_id
                       AND il.material_id = m.id
                       AND inv.status = 'approved'
-                    ORDER BY inv.approved_at DESC, inv.id DESC
+                    ORDER BY inv.effective_at DESC, inv.id DESC
                     LIMIT 1
                 ), (
                     SELECT CAST(
@@ -430,11 +462,13 @@ function create_material_inventory(int $companyId, int $startedByUserId, ?string
                 company_id,
                 status,
                 started_by_user_id,
+                effective_at,
                 note
              ) VALUES (
                 :company_id,
                 :status,
                 :started_by_user_id,
+                :effective_at,
                 :note
              )'
         );
@@ -442,6 +476,7 @@ function create_material_inventory(int $companyId, int $startedByUserId, ?string
             'company_id' => $companyId,
             'status' => 'draft',
             'started_by_user_id' => $startedByUserId,
+            'effective_at' => utc_timestamp(),
             'note' => $note !== null && trim($note) !== '' ? trim($note) : null,
         ]);
 
@@ -511,6 +546,7 @@ function list_material_inventories(int $companyId, array $filters = []): array
                 inv.approved_by_user_id,
                 inv.started_at,
                 inv.submitted_at,
+                inv.effective_at,
                 inv.approved_at,
                 inv.note,
                 inv.created_at,
@@ -622,20 +658,32 @@ function list_material_inventory_lines(int $companyId, int $inventoryId): array
 
 function save_material_inventory_counts(int $companyId, int $inventoryId, array $counts): void
 {
-    $inventory = find_material_inventory_by_id($companyId, $inventoryId);
-
-    if ($inventory === null) {
-        throw new RuntimeException('Inventory was not found.');
-    }
-
-    if (in_array((string) $inventory['status'], ['approved', 'cancelled'], true)) {
-        throw new RuntimeException('This inventory can no longer be edited.');
-    }
-
     $connection = material_stock_connection();
     $connection->beginTransaction();
 
     try {
+        $inventoryStatement = $connection->prepare(
+            'SELECT id, status
+             FROM material_inventories
+             WHERE id = :inventory_id
+               AND company_id = :company_id
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $inventoryStatement->execute([
+            'inventory_id' => $inventoryId,
+            'company_id' => $companyId,
+        ]);
+        $inventory = $inventoryStatement->fetch();
+
+        if (!is_array($inventory)) {
+            throw new RuntimeException('Inventory was not found.');
+        }
+
+        if ((string) $inventory['status'] !== 'draft') {
+            throw new RuntimeException('This inventory can no longer be edited.');
+        }
+
         $statement = $connection->prepare(
             'UPDATE material_inventory_lines
              SET counted_quantity = :counted_quantity,
@@ -688,7 +736,11 @@ function submit_material_inventory(int $companyId, int $inventoryId, int $submit
             throw new RuntimeException('Inventory was not found.');
         }
 
-        if (in_array($status, ['approved', 'cancelled'], true)) {
+        if ($status === 'pending_approval') {
+            throw new RuntimeException('This inventory has already been submitted.');
+        }
+
+        if ($status !== 'draft') {
             throw new RuntimeException('This inventory can no longer be submitted.');
         }
 
@@ -821,7 +873,7 @@ function material_movement_is_protected(int $companyId, int $materialId, string 
            AND inv.company_id = :company_id_inventory
            AND mil.material_id = :material_id
            AND inv.status = 'approved'
-           AND inv.approved_at > :occurred_at
+           AND inv.effective_at > :occurred_at
          LIMIT 1"
     );
     $statement->execute([

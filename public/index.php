@@ -1128,9 +1128,9 @@ function render_job_show_page(
 
 function send_stored_job_asset(array $asset, string $disposition = 'attachment'): never
 {
-    $storagePath = (string) ($asset['storage_path'] ?? '');
+    $storagePath = resolve_job_asset_path((string) ($asset['storage_path'] ?? ''));
 
-    if ($storagePath === '' || !is_file($storagePath) || !is_readable($storagePath)) {
+    if ($storagePath === null || !is_file($storagePath) || !is_readable($storagePath)) {
         abort(404, 'File not found', 'The requested file is unavailable.');
     }
 

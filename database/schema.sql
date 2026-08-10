@@ -64,6 +64,7 @@ CREATE TABLE customers (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_customers_id_company_id (id, company_id),
     KEY idx_customers_company_id (company_id),
     KEY idx_customers_name (name),
     CONSTRAINT fk_customers_company
@@ -88,6 +89,7 @@ CREATE TABLE locations (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_locations_id_company_id (id, company_id),
     KEY idx_locations_company_id (company_id),
     KEY idx_locations_customer_id (customer_id),
     CONSTRAINT fk_locations_company
@@ -96,6 +98,10 @@ CREATE TABLE locations (
         ON UPDATE CASCADE,
     CONSTRAINT fk_locations_customer
         FOREIGN KEY (customer_id) REFERENCES customers (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_locations_customer_company
+        FOREIGN KEY (customer_id, company_id) REFERENCES customers (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -117,6 +123,7 @@ CREATE TABLE tasks (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_tasks_task_number (task_number),
+    UNIQUE KEY uq_tasks_id_company_id (id, company_id),
     KEY idx_tasks_company_id (company_id),
     KEY idx_tasks_customer_id (customer_id),
     KEY idx_tasks_location_id (location_id),
@@ -132,8 +139,16 @@ CREATE TABLE tasks (
         FOREIGN KEY (customer_id) REFERENCES customers (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_tasks_customer_company
+        FOREIGN KEY (customer_id, company_id) REFERENCES customers (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_tasks_location
         FOREIGN KEY (location_id) REFERENCES locations (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_tasks_location_company
+        FOREIGN KEY (location_id, company_id) REFERENCES locations (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_tasks_created_by_user
@@ -166,6 +181,7 @@ CREATE TABLE jobs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_jobs_job_number (job_number),
+    UNIQUE KEY uq_jobs_id_company_id (id, company_id),
     KEY idx_jobs_company_id (company_id),
     KEY idx_jobs_task_id (task_id),
     KEY idx_jobs_customer_id (customer_id),
@@ -183,12 +199,24 @@ CREATE TABLE jobs (
         FOREIGN KEY (task_id) REFERENCES tasks (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_jobs_task_company
+        FOREIGN KEY (task_id, company_id) REFERENCES tasks (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_jobs_customer
         FOREIGN KEY (customer_id) REFERENCES customers (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_jobs_customer_company
+        FOREIGN KEY (customer_id, company_id) REFERENCES customers (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_jobs_location
         FOREIGN KEY (location_id) REFERENCES locations (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_jobs_location_company
+        FOREIGN KEY (location_id, company_id) REFERENCES locations (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_jobs_assigned_user
@@ -209,6 +237,7 @@ CREATE TABLE job_notes (
     note TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_job_notes_id_company_id (id, company_id),
     KEY idx_job_notes_company_id (company_id),
     KEY idx_job_notes_job_id (job_id),
     KEY idx_job_notes_user_id (user_id),
@@ -218,6 +247,10 @@ CREATE TABLE job_notes (
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_notes_job
         FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_notes_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_notes_user
@@ -238,6 +271,7 @@ CREATE TABLE job_attachments (
     uploaded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
     uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_job_attachments_id_company_id (id, company_id),
     KEY idx_job_attachments_company_id (company_id),
     KEY idx_job_attachments_job_id (job_id),
     KEY idx_job_attachments_uploaded_by_user_id (uploaded_by_user_id),
@@ -247,6 +281,10 @@ CREATE TABLE job_attachments (
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_attachments_job
         FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_attachments_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_attachments_uploaded_by_user
@@ -268,6 +306,7 @@ CREATE TABLE job_photos (
     uploaded_by_user_id BIGINT UNSIGNED DEFAULT NULL,
     uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_job_photos_id_company_id (id, company_id),
     KEY idx_job_photos_company_id (company_id),
     KEY idx_job_photos_job_id (job_id),
     KEY idx_job_photos_uploaded_by_user_id (uploaded_by_user_id),
@@ -277,6 +316,10 @@ CREATE TABLE job_photos (
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_photos_job
         FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_photos_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_photos_uploaded_by_user
@@ -300,6 +343,7 @@ CREATE TABLE job_customer_confirmations (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_job_customer_confirmations_job_id (job_id),
+    UNIQUE KEY uq_job_customer_confirmations_id_company_id (id, company_id),
     KEY idx_job_customer_confirmations_company_id (company_id),
     KEY idx_job_customer_confirmations_confirmed_by_user_id (confirmed_by_user_id),
     KEY idx_job_customer_confirmations_confirmed_at (confirmed_at),
@@ -309,6 +353,10 @@ CREATE TABLE job_customer_confirmations (
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_customer_confirmations_job
         FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_customer_confirmations_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_customer_confirmations_confirmed_by_user
@@ -330,6 +378,7 @@ CREATE TABLE materials (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_materials_id_company_id (id, company_id),
     KEY idx_materials_company_id (company_id),
     KEY idx_materials_name (name),
     KEY idx_materials_sku (sku),
@@ -356,6 +405,7 @@ CREATE TABLE material_movements (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_material_movements_job_material_id (job_material_id),
+    UNIQUE KEY uq_material_movements_id_company_id (id, company_id),
     KEY idx_material_movements_company_material_occurred_at (company_id, material_id, occurred_at),
     KEY idx_material_movements_company_job_id (company_id, job_id),
     KEY idx_material_movements_company_occurred_at (company_id, occurred_at),
@@ -368,8 +418,16 @@ CREATE TABLE material_movements (
         FOREIGN KEY (material_id) REFERENCES materials (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_material_movements_material_company
+        FOREIGN KEY (material_id, company_id) REFERENCES materials (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_material_movements_job
         FOREIGN KEY (job_id) REFERENCES jobs (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_movements_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_material_movements_created_by_user
@@ -387,11 +445,13 @@ CREATE TABLE material_inventories (
     approved_by_user_id BIGINT UNSIGNED DEFAULT NULL,
     started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     submitted_at TIMESTAMP NULL DEFAULT NULL,
+    effective_at TIMESTAMP NULL DEFAULT NULL,
     approved_at TIMESTAMP NULL DEFAULT NULL,
     note TEXT DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_material_inventories_id_company_id (id, company_id),
     KEY idx_material_inventories_company_status (company_id, status),
     KEY idx_material_inventories_started_by_user_id (started_by_user_id),
     KEY idx_material_inventories_submitted_by_user_id (submitted_by_user_id),
@@ -425,10 +485,15 @@ CREATE TABLE material_inventory_lines (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_material_inventory_lines_inventory_material (inventory_id, material_id),
+    UNIQUE KEY uq_material_inventory_lines_id_company_id (id, company_id),
     KEY idx_material_inventory_lines_company_inventory (company_id, inventory_id),
     KEY idx_material_inventory_lines_company_material (company_id, material_id),
     CONSTRAINT fk_material_inventory_lines_inventory
         FOREIGN KEY (inventory_id) REFERENCES material_inventories (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventory_lines_inventory_company
+        FOREIGN KEY (inventory_id, company_id) REFERENCES material_inventories (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_material_inventory_lines_company
@@ -437,6 +502,10 @@ CREATE TABLE material_inventory_lines (
         ON UPDATE CASCADE,
     CONSTRAINT fk_material_inventory_lines_material
         FOREIGN KEY (material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_material_inventory_lines_material_company
+        FOREIGN KEY (material_id, company_id) REFERENCES materials (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -455,6 +524,7 @@ CREATE TABLE job_materials (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_job_materials_id_company_id (id, company_id),
     KEY idx_job_materials_company_id (company_id),
     KEY idx_job_materials_job_id (job_id),
     KEY idx_job_materials_material_id (material_id),
@@ -468,12 +538,24 @@ CREATE TABLE job_materials (
         FOREIGN KEY (job_id) REFERENCES jobs (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_job_materials_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_job_materials_material
         FOREIGN KEY (material_id) REFERENCES materials (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_job_materials_material_company
+        FOREIGN KEY (material_id, company_id) REFERENCES materials (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_job_materials_movement
         FOREIGN KEY (movement_id) REFERENCES material_movements (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_job_materials_movement_company
+        FOREIGN KEY (movement_id, company_id) REFERENCES material_movements (id, company_id)
         ON DELETE SET NULL
         ON UPDATE CASCADE,
     CONSTRAINT fk_job_materials_recorded_by_user
@@ -495,6 +577,7 @@ CREATE TABLE device_installations (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_device_installations_usage_id (device_material_usage_id),
+    UNIQUE KEY uq_device_installations_id_company_id (id, company_id),
     KEY idx_device_installations_company_job (company_id, job_id),
     KEY idx_device_installations_company_material (company_id, device_material_id),
     CONSTRAINT fk_device_installations_company
@@ -505,12 +588,24 @@ CREATE TABLE device_installations (
         FOREIGN KEY (job_id) REFERENCES jobs (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_job_company
+        FOREIGN KEY (job_id, company_id) REFERENCES jobs (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_device_installations_usage
         FOREIGN KEY (device_material_usage_id) REFERENCES job_materials (id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_usage_company
+        FOREIGN KEY (device_material_usage_id, company_id) REFERENCES job_materials (id, company_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
     CONSTRAINT fk_device_installations_material
         FOREIGN KEY (device_material_id) REFERENCES materials (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installations_material_company
+        FOREIGN KEY (device_material_id, company_id) REFERENCES materials (id, company_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CONSTRAINT fk_device_installations_created_by
@@ -531,6 +626,7 @@ CREATE TABLE device_installation_accessories (
     PRIMARY KEY (id),
     UNIQUE KEY uq_device_installation_accessories_installation_material (device_installation_id, accessory_material_id),
     UNIQUE KEY uq_device_installation_accessories_usage_id (accessory_material_usage_id),
+    UNIQUE KEY uq_device_installation_accessories_id_company_id (id, company_id),
     KEY idx_device_installation_accessories_company_installation (company_id, device_installation_id),
     KEY idx_device_installation_accessories_company_material (company_id, accessory_material_id),
     CONSTRAINT fk_device_installation_accessories_company
@@ -541,12 +637,24 @@ CREATE TABLE device_installation_accessories (
         FOREIGN KEY (device_installation_id) REFERENCES device_installations (id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installation_accessories_installation_company
+        FOREIGN KEY (device_installation_id, company_id) REFERENCES device_installations (id, company_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
     CONSTRAINT fk_device_installation_accessories_material
         FOREIGN KEY (accessory_material_id) REFERENCES materials (id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installation_accessories_material_company
+        FOREIGN KEY (accessory_material_id, company_id) REFERENCES materials (id, company_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
     CONSTRAINT fk_device_installation_accessories_usage
         FOREIGN KEY (accessory_material_usage_id) REFERENCES job_materials (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_device_installation_accessories_usage_company
+        FOREIGN KEY (accessory_material_usage_id, company_id) REFERENCES job_materials (id, company_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

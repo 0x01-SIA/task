@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-$isReadOnly = in_array((string) $inventory['status'], ['approved', 'cancelled'], true) || !user_can_manage_material_inventory($viewer);
+$isReadOnly = (string) $inventory['status'] !== 'draft' || !user_can_manage_material_inventory($viewer);
 ?>
 <div class="d-grid gap-4">
     <nav class="nav nav-pills gap-2">
@@ -46,6 +46,10 @@ $isReadOnly = in_array((string) $inventory['status'], ['approved', 'cancelled'],
                 <div>
                     <p class="info-label">Submitted At</p>
                     <p class="mb-0"><?= h(format_datetime($inventory['submitted_at'] ?? null)) ?></p>
+                </div>
+                <div>
+                    <p class="info-label">Effective At</p>
+                    <p class="mb-0"><?= h(format_datetime($inventory['effective_at'] ?? null)) ?></p>
                 </div>
                 <div>
                     <p class="info-label">Approved At</p>
@@ -166,7 +170,7 @@ $isReadOnly = in_array((string) $inventory['status'], ['approved', 'cancelled'],
                     <div>
                         <p class="text-uppercase text-secondary small fw-semibold mb-2">Approval</p>
                         <h2 class="h5 mb-1">Approve Inventory</h2>
-                        <p class="text-secondary mb-0">Approval sets a new stock baseline at the approval timestamp and locks the inventory.</p>
+                        <p class="text-secondary mb-0">Approval confirms the counted baseline from the effective timestamp and locks the inventory.</p>
                     </div>
                     <form method="post" action="<?= h(app_url('/materials/inventories/' . $inventory['id'] . '/approve')) ?>" onsubmit="return confirm('Approve this inventory? This will create a new stock baseline and cannot be undone.');">
                         <input type="hidden" name="_token" value="<?= h(csrf_token()) ?>">

@@ -44,6 +44,8 @@ try {
     ensure_material_stock_tables($connection);
     ensure_job_materials_company_scope($connection);
     ensure_device_tracking_schema($connection);
+    ensure_company_scoped_relationship_integrity($connection);
+    migrate_job_asset_storage_paths($connection);
     migrate_existing_job_material_movements($connection);
     ensure_default_company_exists($connection);
 
@@ -194,6 +196,7 @@ function ensure_company_users_table(PDO $connection): void
 function ensure_customers_company_scope(PDO $connection): void
 {
     ensure_column($connection, 'customers', 'company_id', 'ALTER TABLE customers ADD COLUMN company_id BIGINT UNSIGNED NOT NULL FIRST');
+    ensure_index($connection, 'customers', 'uq_customers_id_company_id', 'ALTER TABLE customers ADD UNIQUE KEY uq_customers_id_company_id (id, company_id)');
     ensure_index($connection, 'customers', 'idx_customers_company_id', 'ALTER TABLE customers ADD KEY idx_customers_company_id (company_id)');
     ensure_foreign_key($connection, 'customers', 'fk_customers_company', 'ALTER TABLE customers ADD CONSTRAINT fk_customers_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
@@ -201,6 +204,7 @@ function ensure_customers_company_scope(PDO $connection): void
 function ensure_locations_company_scope(PDO $connection): void
 {
     ensure_column($connection, 'locations', 'company_id', 'ALTER TABLE locations ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensure_index($connection, 'locations', 'uq_locations_id_company_id', 'ALTER TABLE locations ADD UNIQUE KEY uq_locations_id_company_id (id, company_id)');
     ensure_index($connection, 'locations', 'idx_locations_company_id', 'ALTER TABLE locations ADD KEY idx_locations_company_id (company_id)');
     ensure_foreign_key($connection, 'locations', 'fk_locations_company', 'ALTER TABLE locations ADD CONSTRAINT fk_locations_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
@@ -209,6 +213,7 @@ function ensure_tasks_company_scope(PDO $connection): void
 {
     ensure_tasks_table($connection);
     ensure_column($connection, 'tasks', 'company_id', 'ALTER TABLE tasks ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensure_index($connection, 'tasks', 'uq_tasks_id_company_id', 'ALTER TABLE tasks ADD UNIQUE KEY uq_tasks_id_company_id (id, company_id)');
     ensure_index($connection, 'tasks', 'idx_tasks_company_id', 'ALTER TABLE tasks ADD KEY idx_tasks_company_id (company_id)');
     ensure_foreign_key($connection, 'tasks', 'fk_tasks_company', 'ALTER TABLE tasks ADD CONSTRAINT fk_tasks_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
@@ -217,6 +222,7 @@ function ensure_jobs_company_scope(PDO $connection): void
 {
     ensure_jobs_task_link($connection);
     ensure_column($connection, 'jobs', 'company_id', 'ALTER TABLE jobs ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensure_index($connection, 'jobs', 'uq_jobs_id_company_id', 'ALTER TABLE jobs ADD UNIQUE KEY uq_jobs_id_company_id (id, company_id)');
     ensure_index($connection, 'jobs', 'idx_jobs_company_id', 'ALTER TABLE jobs ADD KEY idx_jobs_company_id (company_id)');
     ensure_foreign_key($connection, 'jobs', 'fk_jobs_company', 'ALTER TABLE jobs ADD CONSTRAINT fk_jobs_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
@@ -278,6 +284,7 @@ function ensure_materials_company_scope(PDO $connection): void
 {
     ensure_materials_table($connection);
     ensure_column($connection, 'materials', 'company_id', 'ALTER TABLE materials ADD COLUMN company_id BIGINT UNSIGNED NOT NULL AFTER id');
+    ensure_index($connection, 'materials', 'uq_materials_id_company_id', 'ALTER TABLE materials ADD UNIQUE KEY uq_materials_id_company_id (id, company_id)');
     ensure_index($connection, 'materials', 'idx_materials_company_id', 'ALTER TABLE materials ADD KEY idx_materials_company_id (company_id)');
     ensure_foreign_key($connection, 'materials', 'fk_materials_company', 'ALTER TABLE materials ADD CONSTRAINT fk_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
 }
@@ -320,6 +327,148 @@ function ensure_job_materials_company_scope(PDO $connection): void
     ensure_index($connection, 'job_materials', 'idx_job_materials_movement_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_movement_id (movement_id)');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_company', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE RESTRICT ON UPDATE CASCADE');
     ensure_foreign_key($connection, 'job_materials', 'fk_job_materials_movement', 'ALTER TABLE job_materials ADD CONSTRAINT fk_job_materials_movement FOREIGN KEY (movement_id) REFERENCES material_movements (id) ON DELETE SET NULL ON UPDATE CASCADE');
+}
+
+function ensure_company_scoped_relationship_integrity(PDO $connection): void
+{
+    $relationships = [
+        ['locations', 'customer_id', 'customers', 'fk_locations_customer_company', 'idx_locations_customer_company_id', 'RESTRICT', 'CASCADE'],
+        ['tasks', 'customer_id', 'customers', 'fk_tasks_customer_company', 'idx_tasks_customer_company_id', 'RESTRICT', 'CASCADE'],
+        ['tasks', 'location_id', 'locations', 'fk_tasks_location_company', 'idx_tasks_location_company_id', 'RESTRICT', 'CASCADE'],
+        ['jobs', 'task_id', 'tasks', 'fk_jobs_task_company', 'idx_jobs_task_company_id', 'RESTRICT', 'CASCADE'],
+        ['jobs', 'customer_id', 'customers', 'fk_jobs_customer_company', 'idx_jobs_customer_company_id', 'RESTRICT', 'CASCADE'],
+        ['jobs', 'location_id', 'locations', 'fk_jobs_location_company', 'idx_jobs_location_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_notes', 'job_id', 'jobs', 'fk_job_notes_job_company', 'idx_job_notes_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_attachments', 'job_id', 'jobs', 'fk_job_attachments_job_company', 'idx_job_attachments_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_photos', 'job_id', 'jobs', 'fk_job_photos_job_company', 'idx_job_photos_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_customer_confirmations', 'job_id', 'jobs', 'fk_job_customer_confirmations_job_company', 'idx_job_customer_confirmations_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['material_movements', 'material_id', 'materials', 'fk_material_movements_material_company', 'idx_material_movements_material_company_id', 'RESTRICT', 'CASCADE'],
+        ['material_movements', 'job_id', 'jobs', 'fk_material_movements_job_company', 'idx_material_movements_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['material_inventory_lines', 'inventory_id', 'material_inventories', 'fk_material_inventory_lines_inventory_company', 'idx_material_inventory_lines_inventory_company_id', 'RESTRICT', 'CASCADE'],
+        ['material_inventory_lines', 'material_id', 'materials', 'fk_material_inventory_lines_material_company', 'idx_material_inventory_lines_material_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_materials', 'job_id', 'jobs', 'fk_job_materials_job_company', 'idx_job_materials_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_materials', 'material_id', 'materials', 'fk_job_materials_material_company', 'idx_job_materials_material_company_id', 'RESTRICT', 'CASCADE'],
+        ['job_materials', 'movement_id', 'material_movements', 'fk_job_materials_movement_company', 'idx_job_materials_movement_company_id', 'SET NULL', 'CASCADE'],
+        ['device_installations', 'job_id', 'jobs', 'fk_device_installations_job_company', 'idx_device_installations_job_company_id', 'RESTRICT', 'CASCADE'],
+        ['device_installations', 'device_material_usage_id', 'job_materials', 'fk_device_installations_usage_company', 'idx_device_installations_usage_company_id', 'CASCADE', 'CASCADE'],
+        ['device_installations', 'device_material_id', 'materials', 'fk_device_installations_material_company', 'idx_device_installations_material_company_id', 'RESTRICT', 'CASCADE'],
+        ['device_installation_accessories', 'device_installation_id', 'device_installations', 'fk_device_installation_accessories_installation_company', 'idx_device_installation_accessories_installation_company_id', 'CASCADE', 'CASCADE'],
+        ['device_installation_accessories', 'accessory_material_id', 'materials', 'fk_device_installation_accessories_material_company', 'idx_device_installation_accessories_material_company_id', 'RESTRICT', 'CASCADE'],
+        ['device_installation_accessories', 'accessory_material_usage_id', 'job_materials', 'fk_device_installation_accessories_usage_company', 'idx_device_installation_accessories_usage_company_id', 'CASCADE', 'CASCADE'],
+    ];
+
+    foreach ($relationships as [$childTable, $childColumn, $parentTable, $constraintName, $indexName, $deleteRule, $updateRule]) {
+        assert_company_scoped_relationship_consistency($connection, $childTable, $childColumn, $parentTable);
+        ensure_index(
+            $connection,
+            $childTable,
+            $indexName,
+            sprintf('ALTER TABLE %s ADD KEY %s (%s, company_id)', $childTable, $indexName, $childColumn)
+        );
+        ensure_foreign_key(
+            $connection,
+            $childTable,
+            $constraintName,
+            sprintf(
+                'ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s, company_id) REFERENCES %s (id, company_id) ON DELETE %s ON UPDATE %s',
+                $childTable,
+                $constraintName,
+                $childColumn,
+                $parentTable,
+                $deleteRule,
+                $updateRule
+            )
+        );
+    }
+}
+
+function assert_company_scoped_relationship_consistency(PDO $connection, string $childTable, string $childColumn, string $parentTable): void
+{
+    $statement = $connection->prepare(
+        sprintf(
+            'SELECT child.id, child.company_id AS child_company_id, child.%1$s AS parent_id, parent.company_id AS parent_company_id
+             FROM %2$s child
+             INNER JOIN %3$s parent ON parent.id = child.%1$s
+             WHERE child.%1$s IS NOT NULL
+               AND child.company_id <> parent.company_id
+             LIMIT 1',
+            $childColumn,
+            $childTable,
+            $parentTable
+        )
+    );
+    $statement->execute();
+    $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+    if (!is_array($row)) {
+        return;
+    }
+
+    throw new RuntimeException(sprintf(
+        'Cross-company relationship detected: %s.id=%s has company_id=%s but %s.id=%s belongs to company_id=%s. Fix this data before rerunning upgrade.',
+        $childTable,
+        (string) ($row['id'] ?? '?'),
+        (string) ($row['child_company_id'] ?? '?'),
+        $parentTable,
+        (string) ($row['parent_id'] ?? '?'),
+        (string) ($row['parent_company_id'] ?? '?')
+    ));
+}
+
+function migrate_job_asset_storage_paths(PDO $connection): void
+{
+    $baseDirectory = trim((string) config('uploads.base_dir', ''));
+    $baseDirectory = $baseDirectory !== '' ? $baseDirectory : base_path('storage/uploads');
+    $normalizedBase = str_replace('\\', '/', rtrim($baseDirectory, DIRECTORY_SEPARATOR));
+
+    foreach (['job_attachments', 'job_photos'] as $table) {
+        if (!table_exists($connection, $table)) {
+            continue;
+        }
+
+        $statement = $connection->query(sprintf('SELECT id, storage_path FROM %s', $table));
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!is_array($rows) || $rows === []) {
+            continue;
+        }
+
+        $update = $connection->prepare(sprintf('UPDATE %s SET storage_path = :storage_path WHERE id = :id', $table));
+
+        foreach ($rows as $row) {
+            $storagePath = trim((string) ($row['storage_path'] ?? ''));
+
+            if ($storagePath === '' || !job_asset_path_is_absolute($storagePath)) {
+                continue;
+            }
+
+            $normalizedPath = str_replace('\\', '/', $storagePath);
+            $normalizedPrefix = $normalizedBase . '/';
+
+            if (!str_starts_with($normalizedPath, $normalizedPrefix)) {
+                throw new RuntimeException(sprintf(
+                    'Cannot migrate %s.id=%s because storage_path is outside UPLOAD_BASE_DIR: %s',
+                    $table,
+                    (string) ($row['id'] ?? '?'),
+                    $storagePath
+                ));
+            }
+
+            $relativePath = ltrim(substr($normalizedPath, strlen($normalizedBase)), '/');
+            $update->execute([
+                'id' => (int) $row['id'],
+                'storage_path' => $relativePath,
+            ]);
+        }
+    }
+}
+
+function job_asset_path_is_absolute(string $path): bool
+{
+    return $path !== '' && (
+        str_starts_with($path, DIRECTORY_SEPARATOR)
+        || preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) === 1
+    );
 }
 
 function ensure_default_company_exists(PDO $connection): void
@@ -591,6 +740,7 @@ function ensure_material_movements_table(PDO $connection): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
+    ensure_index($connection, 'material_movements', 'uq_material_movements_id_company_id', 'ALTER TABLE material_movements ADD UNIQUE KEY uq_material_movements_id_company_id (id, company_id)');
     ensure_index($connection, 'material_movements', 'uq_material_movements_job_material_id', 'ALTER TABLE material_movements ADD UNIQUE KEY uq_material_movements_job_material_id (job_material_id)');
     ensure_index($connection, 'material_movements', 'idx_material_movements_company_material_occurred_at', 'ALTER TABLE material_movements ADD KEY idx_material_movements_company_material_occurred_at (company_id, material_id, occurred_at)');
     ensure_index($connection, 'material_movements', 'idx_material_movements_company_job_id', 'ALTER TABLE material_movements ADD KEY idx_material_movements_company_job_id (company_id, job_id)');
@@ -614,11 +764,13 @@ function ensure_material_inventories_table(PDO $connection): void
             approved_by_user_id BIGINT UNSIGNED DEFAULT NULL,
             started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             submitted_at TIMESTAMP NULL DEFAULT NULL,
+            effective_at TIMESTAMP NULL DEFAULT NULL,
             approved_at TIMESTAMP NULL DEFAULT NULL,
             note TEXT DEFAULT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
+            UNIQUE KEY uq_material_inventories_id_company_id (id, company_id),
             KEY idx_material_inventories_company_status (company_id, status),
             KEY idx_material_inventories_started_by_user_id (started_by_user_id),
             KEY idx_material_inventories_submitted_by_user_id (submitted_by_user_id),
@@ -630,6 +782,9 @@ function ensure_material_inventories_table(PDO $connection): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
+    ensure_column($connection, 'material_inventories', 'effective_at', 'ALTER TABLE material_inventories ADD COLUMN effective_at TIMESTAMP NULL DEFAULT NULL AFTER submitted_at');
+    $connection->exec('UPDATE material_inventories SET effective_at = COALESCE(effective_at, approved_at, started_at, created_at) WHERE effective_at IS NULL');
+    ensure_index($connection, 'material_inventories', 'uq_material_inventories_id_company_id', 'ALTER TABLE material_inventories ADD UNIQUE KEY uq_material_inventories_id_company_id (id, company_id)');
     ensure_index($connection, 'material_inventories', 'idx_material_inventories_company_status', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_company_status (company_id, status)');
     ensure_index($connection, 'material_inventories', 'idx_material_inventories_started_by_user_id', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_started_by_user_id (started_by_user_id)');
     ensure_index($connection, 'material_inventories', 'idx_material_inventories_submitted_by_user_id', 'ALTER TABLE material_inventories ADD KEY idx_material_inventories_submitted_by_user_id (submitted_by_user_id)');
@@ -662,6 +817,7 @@ function ensure_material_inventory_lines_table(PDO $connection): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
+    ensure_index($connection, 'material_inventory_lines', 'uq_material_inventory_lines_id_company_id', 'ALTER TABLE material_inventory_lines ADD UNIQUE KEY uq_material_inventory_lines_id_company_id (id, company_id)');
     ensure_index($connection, 'material_inventory_lines', 'uq_material_inventory_lines_inventory_material', 'ALTER TABLE material_inventory_lines ADD UNIQUE KEY uq_material_inventory_lines_inventory_material (inventory_id, material_id)');
     ensure_index($connection, 'material_inventory_lines', 'idx_material_inventory_lines_company_inventory', 'ALTER TABLE material_inventory_lines ADD KEY idx_material_inventory_lines_company_inventory (company_id, inventory_id)');
     ensure_index($connection, 'material_inventory_lines', 'idx_material_inventory_lines_company_material', 'ALTER TABLE material_inventory_lines ADD KEY idx_material_inventory_lines_company_material (company_id, material_id)');
@@ -711,6 +867,7 @@ function ensure_job_materials_table(PDO $connection): void
     ensure_column($connection, 'job_materials', 'created_at', 'ALTER TABLE job_materials ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER occurred_at');
     ensure_column($connection, 'job_materials', 'updated_at', 'ALTER TABLE job_materials ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
 
+    ensure_index($connection, 'job_materials', 'uq_job_materials_id_company_id', 'ALTER TABLE job_materials ADD UNIQUE KEY uq_job_materials_id_company_id (id, company_id)');
     ensure_index($connection, 'job_materials', 'idx_job_materials_job_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_job_id (job_id)');
     ensure_index($connection, 'job_materials', 'idx_job_materials_material_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_material_id (material_id)');
     ensure_index($connection, 'job_materials', 'idx_job_materials_movement_id', 'ALTER TABLE job_materials ADD KEY idx_job_materials_movement_id (movement_id)');
@@ -747,6 +904,7 @@ function ensure_device_installations_table(PDO $connection): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
+    ensure_index($connection, 'device_installations', 'uq_device_installations_id_company_id', 'ALTER TABLE device_installations ADD UNIQUE KEY uq_device_installations_id_company_id (id, company_id)');
     ensure_index($connection, 'device_installations', 'uq_device_installations_usage_id', 'ALTER TABLE device_installations ADD UNIQUE KEY uq_device_installations_usage_id (device_material_usage_id)');
     ensure_index($connection, 'device_installations', 'idx_device_installations_company_job', 'ALTER TABLE device_installations ADD KEY idx_device_installations_company_job (company_id, job_id)');
     ensure_index($connection, 'device_installations', 'idx_device_installations_company_material', 'ALTER TABLE device_installations ADD KEY idx_device_installations_company_material (company_id, device_material_id)');

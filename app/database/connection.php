@@ -46,6 +46,8 @@ function database_connection(): ?PDO
         ]
     );
 
+    $connection->exec("SET time_zone = '+00:00'");
+
     return $connection;
 }
 
