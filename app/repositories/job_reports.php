@@ -97,13 +97,14 @@ function build_job_report_payload(array $job, string $language): array
         'language' => $language,
         'labels' => $labels,
         'title' => $labels['report_title'],
-        'generated_at' => date('Y-m-d H:i:s'),
+        'generated_at' => gmdate('Y-m-d H:i:s'),
         'job' => $job,
         'task' => $task,
         'company' => $company,
         'customer_rows' => job_report_customer_rows($job, $labels),
         'job_rows' => job_report_job_rows($job, $task, $labels, $language),
         'performed_work' => job_report_performed_work($job, $task, $notes),
+        'work_notes' => job_report_work_notes($job, $notes, $language),
         'materials' => job_report_material_rows($materials, $deviceInstallations, $labels),
         'comments' => job_report_comment_rows($notes, $labels),
         'confirmation' => $confirmation,
@@ -273,10 +274,11 @@ function job_report_labels(string $language): array
         return [
             'report_title' => 'Darbu izpildes atskaite',
             'report_identification' => 'Atskaites informācija',
-            'company_section' => 'Izpildītājs',
+            'company_section' => 'Pakalpojuma sniedzējs',
             'customer_section' => 'Klienta informācija',
             'job_section' => 'Darba informācija',
             'work_section' => 'Izpildītie darbi',
+            'work_notes_section' => 'Darba piezīmes',
             'materials_section' => 'Materiāli un ierīces',
             'comments_section' => 'Komentāri',
             'confirmation_section' => 'Apstiprinājums',
@@ -289,7 +291,6 @@ function job_report_labels(string $language): array
             'report_number' => 'Darba numurs',
             'completion_datetime' => 'Pabeigts',
             'generated_datetime' => 'Atskaite sagatavota',
-            'report_language' => 'Valoda',
             'customer_name' => 'Klients',
             'location_name' => 'Objekts',
             'full_address' => 'Adrese',
@@ -300,12 +301,11 @@ function job_report_labels(string $language): array
             'job_description' => 'Apraksts',
             'scheduled_datetime' => 'Plānotais laiks',
             'task_reference' => 'Saistītais uzdevums',
-            'task_status' => 'Uzdevuma statuss',
             'assigned_workers' => 'Atbildīgais darbinieks',
-            'material_name' => 'Materials',
+            'material_name' => 'Materiāls',
             'sku' => 'SKU',
             'quantity' => 'Daudzums',
-            'movement_type' => 'Veids',
+            'movement_type' => 'Darbība',
             'device_identifier' => 'Ierīces ID',
             'accessories' => 'Piederumi',
             'used' => 'Izlietots / Uzstādīts',
@@ -313,16 +313,18 @@ function job_report_labels(string $language): array
             'none_recorded' => 'Nav ierakstu.',
             'not_captured' => 'Nav fiksēts',
             'signature' => 'Paraksts',
+            'signed_at' => 'Apstiprināts',
         ];
     }
 
     return [
         'report_title' => 'Work Completion Report',
         'report_identification' => 'Report Identification',
-        'company_section' => 'Contractor',
+        'company_section' => 'Service provider',
         'customer_section' => 'Customer Information',
         'job_section' => 'Job Information',
         'work_section' => 'Performed Work',
+        'work_notes_section' => 'Work notes',
         'materials_section' => 'Materials and Devices',
         'comments_section' => 'Comments',
         'confirmation_section' => 'Confirmation',
@@ -335,7 +337,6 @@ function job_report_labels(string $language): array
         'report_number' => 'Job Number',
         'completion_datetime' => 'Completed At',
         'generated_datetime' => 'Generated At',
-        'report_language' => 'Language',
         'customer_name' => 'Customer',
         'location_name' => 'Location',
         'full_address' => 'Address',
@@ -346,7 +347,6 @@ function job_report_labels(string $language): array
         'job_description' => 'Description',
         'scheduled_datetime' => 'Scheduled Time',
         'task_reference' => 'Linked Task',
-        'task_status' => 'Task Status',
         'assigned_workers' => 'Assigned Worker',
         'material_name' => 'Material',
         'sku' => 'SKU',
@@ -359,6 +359,7 @@ function job_report_labels(string $language): array
         'none_recorded' => 'No records.',
         'not_captured' => 'Not captured',
         'signature' => 'Signature',
+        'signed_at' => 'Signed at',
     ];
 }
 
@@ -388,17 +389,15 @@ function job_report_job_rows(array $job, ?array $task, array $labels, string $la
 
     job_report_add_row($rows, $labels['job_title'], (string) ($job['title'] ?? ''));
     job_report_add_row($rows, $labels['job_description'], trim((string) ($job['description'] ?? '')));
-    job_report_add_row($rows, $labels['scheduled_datetime'], job_report_scheduled_datetime($job));
-    job_report_add_row($rows, $labels['completion_datetime'], job_report_format_datetime((string) ($job['actual_completed_at'] ?? ''), $language));
+    job_report_add_row($rows, $labels['scheduled_datetime'], job_report_scheduled_datetime($job, $language));
     job_report_add_row($rows, $labels['assigned_workers'], (string) ($job['assigned_worker_name'] ?? ''));
 
     if ($task !== null) {
         job_report_add_row(
             $rows,
             $labels['task_reference'],
-            trim((string) ($task['task_number'] ?? '')) . ' ' . trim((string) ($task['title'] ?? ''))
+            trim((string) ($task['task_number'] ?? ''))
         );
-        job_report_add_row($rows, $labels['task_status'], task_status_label((string) ($task['status'] ?? '')));
     }
 
     return $rows;
@@ -414,20 +413,13 @@ function job_report_performed_work(array $job, ?array $task, array $notes): arra
         $items[] = $description;
     }
 
-    if ($task !== null) {
-        $taskSummary = trim((string) ($task['task_number'] ?? ''));
-        $taskTitle = trim((string) ($task['title'] ?? ''));
-        $taskDescription = trim((string) ($task['description'] ?? ''));
-        $text = trim($taskSummary . ($taskTitle !== '' ? ' - ' . $taskTitle : ''));
+    return $items;
+}
 
-        if ($taskDescription !== '') {
-            $text = trim($text . ': ' . $taskDescription);
-        }
-
-        if ($text !== '') {
-            $items[] = $text;
-        }
-    }
+function job_report_work_notes(array $job, array $notes, string $language): array
+{
+    $items = [];
+    $showAuthor = job_report_should_show_note_author($job, $notes);
 
     foreach ($notes as $note) {
         $noteText = trim((string) ($note['note'] ?? ''));
@@ -436,10 +428,14 @@ function job_report_performed_work(array $job, ?array $task, array $notes): arra
             continue;
         }
 
-        $prefix = trim((string) ($note['author_name'] ?? ''));
-        $timestamp = trim((string) ($note['created_at'] ?? ''));
-        $meta = trim($prefix . ($timestamp !== '' ? ' · ' . job_report_format_datetime($timestamp, 'en') : ''));
-        $items[] = $meta !== '' ? $meta . ': ' . $noteText : $noteText;
+        $timestamp = job_report_format_datetime((string) ($note['created_at'] ?? ''), $language, true);
+        $author = $showAuthor ? job_report_author_short_label((string) ($note['author_name'] ?? '')) : '';
+        $meta = trim(implode('  ', array_filter([$timestamp, $author], static fn (string $value): bool => $value !== '')));
+
+        $items[] = [
+            'meta' => $meta,
+            'text' => $noteText,
+        ];
     }
 
     return $items;
@@ -499,7 +495,7 @@ function job_report_add_row(array &$rows, string $label, string $value): void
     ];
 }
 
-function job_report_scheduled_datetime(array $job): string
+function job_report_scheduled_datetime(array $job, string $language = 'lv'): string
 {
     $date = trim((string) ($job['planned_date'] ?? ''));
     $time = trim((string) ($job['planned_start_time'] ?? ''));
@@ -508,10 +504,10 @@ function job_report_scheduled_datetime(array $job): string
         return '';
     }
 
-    return trim($date . ($time !== '' ? ' ' . job_report_format_time($time) : ''));
+    return trim(job_report_format_local_datetime($date, $time, $language));
 }
 
-function job_report_format_datetime(string $value, string $language): string
+function job_report_format_datetime(string $value, string $language, bool $timeOnly = false): string
 {
     $normalized = trim($value);
 
@@ -519,15 +515,22 @@ function job_report_format_datetime(string $value, string $language): string
         return '';
     }
 
-    $timestamp = strtotime($normalized);
-
-    if ($timestamp === false) {
+    try {
+        $utc = new DateTimeZone('UTC');
+        $riga = new DateTimeZone('Europe/Riga');
+        $datetime = new DateTimeImmutable($normalized, $utc);
+        $datetime = $datetime->setTimezone($riga);
+    } catch (Exception) {
         return $normalized;
     }
 
+    if ($timeOnly) {
+        return $datetime->format('H:i');
+    }
+
     return $language === 'lv'
-        ? date('d.m.Y H:i', $timestamp)
-        : date('Y-m-d H:i', $timestamp);
+        ? $datetime->format('d.m.Y H:i')
+        : $datetime->format('d M Y H:i');
 }
 
 function job_report_format_time(string $value): string
@@ -537,27 +540,102 @@ function job_report_format_time(string $value): string
     return $timestamp === false ? trim($value) : date('H:i', $timestamp);
 }
 
+function job_report_format_local_datetime(string $date, string $time, string $language = 'lv'): string
+{
+    $date = trim($date);
+    $time = trim($time);
+
+    if ($date === '' && $time === '') {
+        return '';
+    }
+
+    if ($date === '') {
+        return job_report_format_time($time);
+    }
+
+    if ($time === '') {
+        $timestamp = strtotime($date);
+
+        if ($timestamp === false) {
+            return $date;
+        }
+
+        return $language === 'lv' ? date('d.m.Y', $timestamp) : date('d M Y', $timestamp);
+    }
+
+    $timestamp = strtotime($date . ' ' . $time);
+
+    if ($timestamp === false) {
+        return trim($date . ' ' . job_report_format_time($time));
+    }
+
+    return $language === 'lv'
+        ? date('d.m.Y H:i', $timestamp)
+        : date('d M Y H:i', $timestamp);
+}
+
+function job_report_should_show_note_author(array $job, array $notes): bool
+{
+    $workerName = mb_strtolower(trim((string) ($job['assigned_worker_name'] ?? '')));
+    $authors = [];
+
+    foreach ($notes as $note) {
+        $author = trim((string) ($note['author_name'] ?? ''));
+
+        if ($author === '') {
+            continue;
+        }
+
+        $authors[mb_strtolower($author)] = true;
+    }
+
+    if (count($authors) > 1) {
+        return true;
+    }
+
+    if ($authors === []) {
+        return false;
+    }
+
+    $authorName = array_key_first($authors);
+
+    return $workerName === '' || $authorName !== $workerName;
+}
+
+function job_report_author_short_label(string $name): string
+{
+    $parts = preg_split('/\s+/u', trim($name)) ?: [];
+    $initials = '';
+
+    foreach ($parts as $part) {
+        $initials .= mb_strtoupper(mb_substr($part, 0, 1));
+    }
+
+    return $initials !== '' ? $initials : trim($name);
+}
+
 function render_job_report_pdf(array $payload): string
 {
     $renderer = job_report_renderer_create($payload);
 
     job_report_renderer_draw_header($renderer, $payload);
+    job_report_renderer_draw_compact_metadata($renderer, [
+        ['label' => $payload['labels']['generated_datetime'], 'value' => job_report_format_datetime((string) $payload['generated_at'], (string) $payload['language'])],
+    ]);
     job_report_renderer_draw_key_value_section($renderer, $payload['labels']['company_section'], [
         ['label' => $payload['labels']['company_name'], 'value' => (string) ($payload['company']['name'] ?? '')],
         ['label' => $payload['labels']['registration_number'], 'value' => (string) ($payload['company']['registration_number'] ?? '')],
         ['label' => $payload['labels']['legal_address'], 'value' => (string) ($payload['company']['address'] ?? '')],
         ['label' => $payload['labels']['email'], 'value' => (string) ($payload['company']['email'] ?? '')],
-    ]);
-    job_report_renderer_draw_key_value_section($renderer, $payload['labels']['report_identification'], [
-        ['label' => $payload['labels']['report_number'], 'value' => (string) ($payload['job']['job_number'] ?? '')],
-        ['label' => $payload['labels']['completion_datetime'], 'value' => job_report_format_datetime((string) ($payload['job']['actual_completed_at'] ?? ''), (string) $payload['language'])],
-        ['label' => $payload['labels']['generated_datetime'], 'value' => job_report_format_datetime((string) $payload['generated_at'], (string) $payload['language'])],
-        ['label' => $payload['labels']['report_language'], 'value' => job_report_language_label((string) $payload['language'])],
-    ]);
+    ], ['label_width' => 240, 'value_width' => 800]);
     job_report_renderer_draw_key_value_section($renderer, $payload['labels']['customer_section'], $payload['customer_rows']);
     job_report_renderer_draw_key_value_section($renderer, $payload['labels']['job_section'], $payload['job_rows']);
     job_report_renderer_draw_bullet_section($renderer, $payload['labels']['work_section'], $payload['performed_work'], $payload['labels']['none_recorded']);
-    job_report_renderer_draw_material_section($renderer, $payload['labels']['materials_section'], $payload['materials'], $payload['labels']);
+    job_report_renderer_draw_work_notes_section($renderer, $payload['labels']['work_notes_section'], $payload['work_notes']);
+
+    if ($payload['materials'] !== []) {
+        job_report_renderer_draw_material_section($renderer, $payload['labels']['materials_section'], $payload['materials'], $payload['labels']);
+    }
 
     if ($payload['comments'] !== []) {
         job_report_renderer_draw_bullet_section($renderer, $payload['labels']['comments_section'], $payload['comments'], $payload['labels']['none_recorded']);
@@ -657,13 +735,26 @@ function job_report_renderer_draw_header(array &$renderer, array $payload): void
     $width = $renderer['page_width'] - ($margin * 2);
     $accent = $renderer['colors']['accent'];
 
-    imagefilledrectangle($page, $margin, $renderer['y'], $margin + $width, $renderer['y'] + 8, $accent);
-    $renderer['y'] += 42;
+    imagefilledrectangle($page, $margin, $renderer['y'], $margin + $width, $renderer['y'] + 6, $accent);
+    $renderer['y'] += 28;
 
-    job_report_renderer_text($renderer, (string) $payload['title'], $margin, $renderer['y'], 28, true);
-    $renderer['y'] += 46;
-    job_report_renderer_text($renderer, (string) ($payload['job']['job_number'] ?? ''), $margin, $renderer['y'], 15, false, $renderer['colors']['muted']);
-    $renderer['y'] += 34;
+    job_report_renderer_text($renderer, (string) $payload['title'], $margin, $renderer['y'], 26, true);
+    job_report_renderer_text($renderer, (string) ($payload['job']['job_number'] ?? ''), $margin, $renderer['y'] + 40, 14, false, $renderer['colors']['muted']);
+
+    $metaX = $renderer['page_width'] - $margin - 320;
+    $metaY = $renderer['y'] + 4;
+    job_report_renderer_text_block(
+        $renderer,
+        $payload['labels']['completion_datetime'] . ': ' . job_report_format_datetime((string) ($payload['job']['actual_completed_at'] ?? ''), (string) $payload['language']),
+        $metaX,
+        $metaY,
+        12,
+        320,
+        false,
+        $renderer['colors']['text']
+    );
+
+    $renderer['y'] += 74;
 }
 
 function job_report_renderer_draw_page_heading(array &$renderer): void
@@ -679,7 +770,7 @@ function job_report_renderer_draw_page_heading(array &$renderer): void
     $renderer['y'] = $margin + 40;
 }
 
-function job_report_renderer_draw_key_value_section(array &$renderer, string $title, array $rows): void
+function job_report_renderer_draw_compact_metadata(array &$renderer, array $rows): void
 {
     $filteredRows = array_values(array_filter(
         $rows,
@@ -690,13 +781,48 @@ function job_report_renderer_draw_key_value_section(array &$renderer, string $ti
         return;
     }
 
-    $needed = 44;
+    $height = 0;
+
+    foreach ($filteredRows as $row) {
+        $height += max(
+            job_report_renderer_wrapped_height($renderer, (string) $row['label'], 11, 220),
+            job_report_renderer_wrapped_height($renderer, (string) $row['value'], 11, 420)
+        ) + 6;
+    }
+
+    job_report_renderer_ensure_space($renderer, $height + 16);
+
+    foreach ($filteredRows as $row) {
+        $startY = $renderer['y'];
+        job_report_renderer_text_block($renderer, (string) $row['label'], $renderer['margin'], $startY, 11, 220, true, $renderer['colors']['muted']);
+        $textHeight = job_report_renderer_text_block($renderer, (string) $row['value'], $renderer['margin'] + 228, $startY, 11, 420, false, $renderer['colors']['muted']);
+        $renderer['y'] = $startY + max(18, $textHeight) + 4;
+    }
+
+    $renderer['y'] += 10;
+}
+
+function job_report_renderer_draw_key_value_section(array &$renderer, string $title, array $rows, array $options = []): void
+{
+    $filteredRows = array_values(array_filter(
+        $rows,
+        static fn (array $row): bool => trim((string) ($row['value'] ?? '')) !== ''
+    ));
+
+    if ($filteredRows === []) {
+        return;
+    }
+
+    $labelWidth = (int) ($options['label_width'] ?? 220);
+    $valueWidth = (int) ($options['value_width'] ?? 790);
+    $valueX = $renderer['margin'] + $labelWidth + 24;
+    $needed = 34;
 
     foreach ($filteredRows as $row) {
         $needed += max(
-            job_report_renderer_wrapped_height($renderer, (string) $row['label'], 11, 250),
-            job_report_renderer_wrapped_height($renderer, (string) $row['value'], 12, 770)
-        ) + 14;
+            job_report_renderer_wrapped_height($renderer, (string) $row['label'], 10, $labelWidth),
+            job_report_renderer_wrapped_height($renderer, (string) $row['value'], 12, $valueWidth)
+        ) + 8;
     }
 
     job_report_renderer_ensure_space($renderer, $needed);
@@ -704,28 +830,21 @@ function job_report_renderer_draw_key_value_section(array &$renderer, string $ti
 
     foreach ($filteredRows as $row) {
         $startY = $renderer['y'];
-        job_report_renderer_text_block($renderer, (string) $row['label'], $renderer['margin'], $startY, 11, 250, true, $renderer['colors']['muted']);
-        $textHeight = job_report_renderer_text_block($renderer, (string) $row['value'], $renderer['margin'] + 280, $startY, 12, 770);
-        $renderer['y'] = $startY + max(26, $textHeight) + 10;
-        imageline(
-            job_report_renderer_current_page($renderer),
-            $renderer['margin'],
-            $renderer['y'] - 2,
-            $renderer['page_width'] - $renderer['margin'],
-            $renderer['y'] - 2,
-            $renderer['colors']['line']
-        );
-        $renderer['y'] += 14;
+        job_report_renderer_text_block($renderer, (string) $row['label'], $renderer['margin'], $startY + 1, 10, $labelWidth, true, $renderer['colors']['muted']);
+        $textHeight = job_report_renderer_text_block($renderer, (string) $row['value'], $valueX, $startY, 12, $valueWidth);
+        $renderer['y'] = $startY + max(20, $textHeight) + 8;
     }
+
+    $renderer['y'] += 6;
 }
 
 function job_report_renderer_draw_bullet_section(array &$renderer, string $title, array $items, string $emptyLabel): void
 {
     $content = $items === [] ? [$emptyLabel] : $items;
-    $needed = 44;
+    $needed = 34;
 
     foreach ($content as $item) {
-        $needed += job_report_renderer_wrapped_height($renderer, (string) $item, 12, 990) + 12;
+        $needed += job_report_renderer_wrapped_height($renderer, (string) $item, 12, 990) + 8;
     }
 
     job_report_renderer_ensure_space($renderer, $needed);
@@ -736,152 +855,85 @@ function job_report_renderer_draw_bullet_section(array &$renderer, string $title
         imagefilledellipse(
             job_report_renderer_current_page($renderer),
             $renderer['margin'] + 8,
-            $startY + 10,
-            7,
-            7,
+            $startY + 9,
+            6,
+            6,
             $renderer['colors']['accent']
         );
         $textHeight = job_report_renderer_text_block($renderer, (string) $item, $renderer['margin'] + 24, $startY, 12, 990);
-        $renderer['y'] = $startY + max(24, $textHeight) + 8;
+        $renderer['y'] = $startY + max(20, $textHeight) + 4;
     }
+
+    $renderer['y'] += 6;
 }
 
-function job_report_renderer_draw_material_section(array &$renderer, string $title, array $rows, array $labels): void
+function job_report_renderer_draw_work_notes_section(array &$renderer, string $title, array $items): void
 {
-    $needed = 60;
-
-    foreach ($rows as $row) {
-        $deviceLine = trim((string) ($row['device_identifier'] ?? ''));
-        $accessoryLine = implode(', ', $row['accessories'] ?? []);
-        $cellText = implode(' | ', array_filter([
-            (string) ($row['material'] ?? ''),
-            (string) ($row['sku'] ?? ''),
-            (string) ($row['quantity'] ?? ''),
-            (string) ($row['movement'] ?? ''),
-            $deviceLine !== '' ? $labels['device_identifier'] . ': ' . $deviceLine : '',
-            $accessoryLine !== '' ? $labels['accessories'] . ': ' . $accessoryLine : '',
-        ]));
-        $needed += job_report_renderer_wrapped_height($renderer, $cellText, 12, 1010) + 14;
+    if ($items === []) {
+        return;
     }
 
-    if ($rows === []) {
-        $needed += 30;
+    $needed = 34;
+
+    foreach ($items as $item) {
+        $needed += max(
+            job_report_renderer_wrapped_height($renderer, (string) ($item['meta'] ?? ''), 10, 180),
+            job_report_renderer_wrapped_height($renderer, (string) ($item['text'] ?? ''), 11, 820)
+        ) + 8;
     }
 
     job_report_renderer_ensure_space($renderer, $needed);
     job_report_renderer_section_title($renderer, $title);
 
-    if ($rows === []) {
-        job_report_renderer_text($renderer, $labels['none_recorded'], $renderer['margin'], $renderer['y'], 12, false, $renderer['colors']['muted']);
-        $renderer['y'] += 28;
-
-        return;
+    foreach ($items as $item) {
+        $startY = $renderer['y'];
+        job_report_renderer_text_block($renderer, (string) ($item['meta'] ?? ''), $renderer['margin'], $startY + 1, 10, 180, true, $renderer['colors']['muted']);
+        $textHeight = job_report_renderer_text_block($renderer, (string) ($item['text'] ?? ''), $renderer['margin'] + 190, $startY, 11, 820);
+        $renderer['y'] = $startY + max(18, $textHeight) + 4;
     }
 
+    $renderer['y'] += 6;
+}
+
+function job_report_renderer_draw_material_section(array &$renderer, string $title, array $rows, array $labels): void
+{
+    $needed = 64;
+
     foreach ($rows as $row) {
-        $parts = [
-            (string) ($row['material'] ?? ''),
-            (string) ($row['sku'] ?? ''),
-            (string) ($row['quantity'] ?? ''),
-            (string) ($row['movement'] ?? ''),
-        ];
+        $needed += job_report_renderer_wrapped_height($renderer, (string) ($row['material'] ?? ''), 11, 280);
+        $needed += job_report_renderer_wrapped_height($renderer, (string) ($row['sku'] ?? ''), 10, 150);
+        $needed += job_report_renderer_wrapped_height($renderer, (string) ($row['movement'] ?? ''), 10, 180);
+        $needed += job_report_renderer_wrapped_height($renderer, (string) ($row['quantity'] ?? ''), 11, 140);
+        $secondary = 0;
 
         if (trim((string) ($row['device_identifier'] ?? '')) !== '') {
-            $parts[] = $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']);
+            $secondary += job_report_renderer_wrapped_height($renderer, $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), 10, 960) + 2;
         }
 
         if (($row['accessories'] ?? []) !== []) {
-            $parts[] = $labels['accessories'] . ': ' . implode(', ', $row['accessories']);
+            foreach ($row['accessories'] as $accessory) {
+                $secondary += job_report_renderer_wrapped_height($renderer, '- ' . (string) $accessory, 10, 940) + 2;
+            }
         }
 
-        $startY = $renderer['y'];
-        $page = &job_report_renderer_current_page($renderer);
-        imagefilledrectangle(
-            $page,
-            $renderer['margin'],
-            $startY - 4,
-            $renderer['page_width'] - $renderer['margin'],
-            $startY + 8 + job_report_renderer_wrapped_height($renderer, implode(' | ', $parts), 12, 1010),
-            $renderer['colors']['soft']
-        );
-        $textHeight = job_report_renderer_text_block($renderer, implode(' | ', $parts), $renderer['margin'] + 14, $startY + 16, 12, 1010);
-        $renderer['y'] = $startY + $textHeight + 26;
+        $needed += max(26, $secondary) + 20;
     }
-}
 
-function job_report_renderer_draw_confirmation_section(array &$renderer, array $payload): void
-{
-    $needed = 320;
     job_report_renderer_ensure_space($renderer, $needed);
-    job_report_renderer_section_title($renderer, $payload['labels']['confirmation_section']);
+    job_report_renderer_section_title($renderer, $title);
+    $headerY = $renderer['y'];
+    $columns = [
+        ['title' => $labels['material_name'], 'x' => $renderer['margin'], 'width' => 280],
+        ['title' => $labels['sku'], 'x' => $renderer['margin'] + 300, 'width' => 150],
+        ['title' => $labels['movement_type'], 'x' => $renderer['margin'] + 470, 'width' => 180],
+        ['title' => $labels['quantity'], 'x' => $renderer['page_width'] - $renderer['margin'] - 140, 'width' => 140],
+    ];
 
-    $page = &job_report_renderer_current_page($renderer);
-    $margin = $renderer['margin'];
-    $gap = 32;
-    $columnWidth = (int) floor(($renderer['page_width'] - ($margin * 2) - $gap) / 2);
-    $leftX = $margin;
-    $rightX = $margin + $columnWidth + $gap;
-    $boxTop = $renderer['y'];
-    $boxHeight = 235;
-
-    imagefilledrectangle($page, $leftX, $boxTop, $leftX + $columnWidth, $boxTop + $boxHeight, $renderer['colors']['soft']);
-    imagefilledrectangle($page, $rightX, $boxTop, $rightX + $columnWidth, $boxTop + $boxHeight, $renderer['colors']['soft']);
-
-    job_report_renderer_text($renderer, $payload['labels']['worker_column'], $leftX + 18, $boxTop + 28, 14, true);
-    job_report_renderer_text($renderer, $payload['labels']['customer_column'], $rightX + 18, $boxTop + 28, 14, true);
-
-    $workerName = trim((string) ($payload['worker']['name'] ?? '')) !== ''
-        ? trim((string) $payload['worker']['name'])
-        : $payload['labels']['not_captured'];
-    job_report_renderer_text_block($renderer, $workerName, $leftX + 18, $boxTop + 58, 13, $columnWidth - 36);
-    job_report_renderer_text_block($renderer, (string) ($payload['worker']['company_name'] ?? ''), $leftX + 18, $boxTop + 90, 12, $columnWidth - 36, false, $renderer['colors']['muted']);
-
-    $confirmation = $payload['confirmation'];
-    $customerName = trim((string) ($confirmation['customer_name'] ?? '')) !== ''
-        ? trim((string) $confirmation['customer_name'])
-        : $payload['labels']['not_captured'];
-    job_report_renderer_text_block($renderer, $customerName, $rightX + 18, $boxTop + 58, 13, $columnWidth - 36);
-
-    $signatureTop = $boxTop + 110;
-    imageline($page, $leftX + 18, $boxTop + 190, $leftX + $columnWidth - 18, $boxTop + 190, $renderer['colors']['line']);
-    imageline($page, $rightX + 18, $boxTop + 190, $rightX + $columnWidth - 18, $boxTop + 190, $renderer['colors']['line']);
-    job_report_renderer_text($renderer, $payload['labels']['signature'], $leftX + 18, $boxTop + 214, 10, false, $renderer['colors']['muted']);
-    job_report_renderer_text($renderer, $payload['labels']['signature'], $rightX + 18, $boxTop + 214, 10, false, $renderer['colors']['muted']);
-
-    if (is_array($confirmation) && trim((string) ($confirmation['signature_path'] ?? '')) !== '' && is_file((string) $confirmation['signature_path'])) {
-        $signature = @imagecreatefrompng((string) $confirmation['signature_path']);
-
-        if ($signature !== false) {
-            $srcWidth = imagesx($signature);
-            $srcHeight = imagesy($signature);
-            $targetWidth = $columnWidth - 36;
-            $targetHeight = 64;
-            $scale = min($targetWidth / max(1, $srcWidth), $targetHeight / max(1, $srcHeight));
-            $drawWidth = max(1, (int) floor($srcWidth * $scale));
-            $drawHeight = max(1, (int) floor($srcHeight * $scale));
-            imagecopyresampled(
-                $page,
-                $signature,
-                $rightX + 18,
-                $signatureTop,
-                0,
-                0,
-                $drawWidth,
-                $drawHeight,
-                $srcWidth,
-                $srcHeight
-            );
-            imagedestroy($signature);
-        }
+    foreach ($columns as $column) {
+        job_report_renderer_text_block($renderer, $column['title'], $column['x'], $headerY, 10, $column['width'], true, $renderer['colors']['muted']);
     }
 
-    $renderer['y'] = $boxTop + $boxHeight + 24;
-}
-
-function job_report_renderer_section_title(array &$renderer, string $title): void
-{
-    job_report_renderer_text($renderer, $title, $renderer['margin'], $renderer['y'], 16, true);
-    $renderer['y'] += 24;
+    $renderer['y'] = $headerY + 22;
     imageline(
         job_report_renderer_current_page($renderer),
         $renderer['margin'],
@@ -890,7 +942,149 @@ function job_report_renderer_section_title(array &$renderer, string $title): voi
         $renderer['y'],
         $renderer['colors']['line']
     );
-    $renderer['y'] += 20;
+    $renderer['y'] += 10;
+
+    foreach ($rows as $row) {
+        $startY = $renderer['y'];
+        $maxPrimaryHeight = 0;
+
+        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['material'] ?? ''), $renderer['margin'], $startY, 11, 280));
+        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['sku'] ?? ''), $renderer['margin'] + 300, $startY + 1, 10, 150, false, $renderer['colors']['muted']));
+        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['movement'] ?? ''), $renderer['margin'] + 470, $startY + 1, 10, 180, false, $renderer['colors']['text']));
+        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['quantity'] ?? ''), $renderer['page_width'] - $renderer['margin'] - 140, $startY, 11, 140));
+
+        $currentY = $startY + $maxPrimaryHeight + 2;
+
+        if (trim((string) ($row['device_identifier'] ?? '')) !== '') {
+            $lineHeight = job_report_renderer_text_block($renderer, $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), $renderer['margin'], $currentY, 10, 960, false, $renderer['colors']['muted']);
+            $currentY += $lineHeight;
+        }
+
+        if (($row['accessories'] ?? []) !== []) {
+            foreach ($row['accessories'] as $accessory) {
+                $lineHeight = job_report_renderer_text_block($renderer, '- ' . (string) $accessory, $renderer['margin'] + 18, $currentY, 10, 940, false, $renderer['colors']['muted']);
+                $currentY += $lineHeight;
+            }
+        }
+
+        $renderer['y'] = $currentY + 4;
+        imageline(
+            job_report_renderer_current_page($renderer),
+            $renderer['margin'],
+            $renderer['y'],
+            $renderer['page_width'] - $renderer['margin'],
+            $renderer['y'],
+            $renderer['colors']['line']
+        );
+        $renderer['y'] += 8;
+    }
+}
+
+function job_report_renderer_draw_confirmation_section(array &$renderer, array $payload): void
+{
+    $confirmation = is_array($payload['confirmation']) ? $payload['confirmation'] : [];
+    $margin = $renderer['margin'];
+    $gap = 28;
+    $columnWidth = (int) floor(($renderer['page_width'] - ($margin * 2) - $gap) / 2);
+    $leftX = $margin;
+    $rightX = $margin + $columnWidth + $gap;
+
+    $workerName = trim((string) ($payload['worker']['name'] ?? '')) !== ''
+        ? trim((string) $payload['worker']['name'])
+        : $payload['labels']['not_captured'];
+    $workerCompany = trim((string) ($payload['worker']['company_name'] ?? ''));
+    $customerName = trim((string) ($confirmation['customer_name'] ?? '')) !== ''
+        ? trim((string) $confirmation['customer_name'])
+        : $payload['labels']['not_captured'];
+    $confirmedAt = job_report_format_datetime((string) ($confirmation['confirmed_at'] ?? ''), (string) $payload['language']);
+
+    $workerHeight = 34
+        + job_report_renderer_wrapped_height($renderer, $workerName, 12, $columnWidth - 24)
+        + ($workerCompany !== '' ? job_report_renderer_wrapped_height($renderer, $workerCompany, 10, $columnWidth - 24) : 0);
+    $customerHeight = 34
+        + job_report_renderer_wrapped_height($renderer, $customerName, 12, $columnWidth - 24)
+        + job_report_renderer_confirmation_signature_height($confirmation)
+        + ($confirmedAt !== '' ? job_report_renderer_wrapped_height($renderer, $confirmedAt, 10, $columnWidth - 24) : 0);
+    $needed = 40 + max($workerHeight, $customerHeight) + 28;
+
+    job_report_renderer_ensure_space($renderer, $needed);
+    job_report_renderer_section_title($renderer, $payload['labels']['confirmation_section']);
+    $boxTop = $renderer['y'];
+    $page = &job_report_renderer_current_page($renderer);
+    imageline($page, $leftX + $columnWidth + (int) floor($gap / 2), $boxTop, $leftX + $columnWidth + (int) floor($gap / 2), $boxTop + max($workerHeight, $customerHeight), $renderer['colors']['line']);
+
+    job_report_renderer_text($renderer, $payload['labels']['worker_column'], $leftX, $boxTop, 12, true);
+    job_report_renderer_text($renderer, $payload['labels']['customer_column'], $rightX, $boxTop, 12, true);
+
+    $leftY = $boxTop + 28;
+    $leftY += job_report_renderer_text_block($renderer, $workerName, $leftX, $leftY, 12, $columnWidth - 8);
+
+    if ($workerCompany !== '') {
+        $leftY += job_report_renderer_text_block($renderer, $workerCompany, $leftX, $leftY, 10, $columnWidth - 8, false, $renderer['colors']['muted']);
+    }
+
+    $rightY = $boxTop + 28;
+    $rightY += job_report_renderer_text_block($renderer, $customerName, $rightX, $rightY, 12, $columnWidth - 8);
+
+    if (trim((string) ($confirmation['signature_path'] ?? '')) !== '' && is_file((string) $confirmation['signature_path'])) {
+        $signature = @imagecreatefrompng((string) $confirmation['signature_path']);
+
+        if ($signature !== false) {
+            $srcWidth = imagesx($signature);
+            $srcHeight = imagesy($signature);
+            $targetWidth = $columnWidth - 8;
+            $targetHeight = 58;
+            $scale = min($targetWidth / max(1, $srcWidth), $targetHeight / max(1, $srcHeight));
+            $drawWidth = max(1, (int) floor($srcWidth * $scale));
+            $drawHeight = max(1, (int) floor($srcHeight * $scale));
+            imagecopyresampled(
+                $page,
+                $signature,
+                $rightX,
+                $rightY + 6,
+                0,
+                0,
+                $drawWidth,
+                $drawHeight,
+                $srcWidth,
+                $srcHeight
+            );
+            imagedestroy($signature);
+            $rightY += $drawHeight + 10;
+        }
+    }
+
+    if ($confirmedAt !== '') {
+        $rightY += job_report_renderer_text_block($renderer, $confirmedAt, $rightX, $rightY, 10, $columnWidth - 8, false, $renderer['colors']['muted']);
+    }
+
+    $renderer['y'] = max($leftY, $rightY, $boxTop + max($workerHeight, $customerHeight)) + 16;
+}
+
+function job_report_renderer_confirmation_signature_height(array $confirmation): int
+{
+    $path = trim((string) ($confirmation['signature_path'] ?? ''));
+
+    if ($path === '' || !is_file($path)) {
+        return 0;
+    }
+
+    return 68;
+}
+
+function job_report_renderer_section_title(array &$renderer, string $title): void
+{
+    job_report_renderer_text($renderer, $title, $renderer['margin'], $renderer['y'], 15, true);
+    $renderer['y'] += 14;
+    imagefilledrectangle(
+        job_report_renderer_current_page($renderer),
+        $renderer['margin'],
+        $renderer['y'],
+        $renderer['margin'] + 72,
+        $renderer['y'] + 3,
+        $renderer['colors']['accent']
+    );
+    $renderer['y'] += 16;
 }
 
 function &job_report_renderer_current_page(array &$renderer)
