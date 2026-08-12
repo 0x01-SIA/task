@@ -32,6 +32,7 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
                 j.estimated_duration_minutes,
                 j.updated_at,
                 c.name AS customer_name,
+                c.registration_number AS customer_registration_number,
                 c.contact_name AS customer_contact_name,
                 c.contact_email AS customer_contact_email,
                 c.contact_phone AS customer_contact_phone,
@@ -43,6 +44,7 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
                 l.contact_name AS location_contact_name,
                 l.contact_phone AS location_contact_phone,
                 u.name AS assigned_worker_name,
+                u.email AS assigned_worker_email,
                 t.task_number AS linked_task_number,
                 t.title AS linked_task_title
             FROM jobs j
@@ -152,6 +154,7 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
                 j.created_at,
                 j.updated_at,
                 c.name AS customer_name,
+                c.registration_number AS customer_registration_number,
                 c.contact_name AS customer_contact_name,
                 c.contact_email AS customer_contact_email,
                 c.contact_phone AS customer_contact_phone,
@@ -163,6 +166,7 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
                 l.contact_name AS location_contact_name,
                 l.contact_phone AS location_contact_phone,
                 u.name AS assigned_worker_name,
+                u.email AS assigned_worker_email,
                 t.task_number AS linked_task_number,
                 t.title AS linked_task_title
             FROM jobs j

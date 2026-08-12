@@ -102,7 +102,6 @@ function build_job_report_payload(array $job, string $language): array
         'task' => $task,
         'company' => $company,
         'customer_rows' => job_report_customer_rows($job, $labels),
-        'job_rows' => job_report_job_rows($job, $task, $labels, $language),
         'performed_work' => job_report_performed_work($job, $task, $notes),
         'work_notes' => job_report_work_notes($job, $notes, $language),
         'materials' => job_report_material_rows($materials, $deviceInstallations, $labels),
@@ -110,7 +109,9 @@ function build_job_report_payload(array $job, string $language): array
         'confirmation' => $confirmation,
         'snapshot' => $snapshotData,
         'worker' => [
+            'id' => (int) ($job['assigned_user_id'] ?? 0),
             'name' => trim((string) ($job['assigned_worker_name'] ?? '')),
+            'email' => trim((string) ($job['assigned_worker_email'] ?? '')),
             'company_name' => (string) ($company['name'] ?? ''),
         ],
     ];
@@ -206,6 +207,7 @@ function build_job_report_snapshot_data(
 ): array {
     $customer = [
         'name' => (string) ($job['customer_name'] ?? ''),
+        'registration_number' => (string) ($job['customer_registration_number'] ?? ''),
         'location_name' => (string) ($job['location_name'] ?? ''),
         'full_address' => (string) (location_address($job) ?? ''),
         'contact_person' => trim((string) ($job['location_contact_name'] ?? '')) !== ''
@@ -233,7 +235,9 @@ function build_job_report_snapshot_data(
             'planned_date' => (string) ($job['planned_date'] ?? ''),
             'planned_start_time' => (string) ($job['planned_start_time'] ?? ''),
             'actual_completed_at' => (string) ($job['actual_completed_at'] ?? ''),
+            'assigned_user_id' => (int) ($job['assigned_user_id'] ?? 0),
             'assigned_worker_name' => (string) ($job['assigned_worker_name'] ?? ''),
+            'assigned_worker_email' => (string) ($job['assigned_worker_email'] ?? ''),
             'job_type' => (string) ($job['job_type'] ?? ''),
             'status' => (string) ($job['status'] ?? ''),
         ],
@@ -262,7 +266,9 @@ function build_job_report_snapshot_data(
             'confirmed_at' => (string) ($confirmation['confirmed_at'] ?? ''),
         ],
         'worker' => [
+            'id' => (int) ($job['assigned_user_id'] ?? 0),
             'name' => trim((string) ($job['assigned_worker_name'] ?? '')),
+            'email' => trim((string) ($job['assigned_worker_email'] ?? '')),
             'company_name' => (string) ($company['name'] ?? ''),
         ],
     ];
@@ -272,12 +278,12 @@ function job_report_labels(string $language): array
 {
     if ($language === 'lv') {
         return [
-            'report_title' => 'Darbu izpildes atskaite',
+            'report_title' => 'Darbu izpildes un pieņemšanas–nodošanas akts',
             'report_identification' => 'Atskaites informācija',
             'company_section' => 'Pakalpojuma sniedzējs',
             'customer_section' => 'Klienta informācija',
             'job_section' => 'Darba informācija',
-            'work_section' => 'Izpildītie darbi',
+            'work_section' => 'Darba uzdevums',
             'work_notes_section' => 'Darba piezīmes',
             'time_column' => 'Laiks',
             'note_column' => 'Piezīme',
@@ -292,10 +298,10 @@ function job_report_labels(string $language): array
             'email' => 'E-pasts',
             'report_number' => 'Darba numurs',
             'completion_datetime' => 'Pabeigts',
-            'generated_datetime' => 'Atskaite sagatavota',
             'customer_name' => 'Klients',
+            'customer_registration_number' => 'Reģistrācijas numurs',
             'location_name' => 'Objekts',
-            'full_address' => 'Adrese',
+            'full_address' => 'Objekta adrese',
             'contact_person' => 'Kontaktpersona',
             'contact_phone' => 'Tālrunis',
             'contact_email' => 'Kontaktpersonas e-pasts',
@@ -316,6 +322,7 @@ function job_report_labels(string $language): array
             'not_captured' => 'Nav fiksēts',
             'signature' => 'Paraksts',
             'signed_at' => 'Apstiprināts',
+            'legal_note' => 'Dokuments parakstīts elektroniski Izpildītāja darbu vadības sistēmā. Puses atzīst šādā veidā sagatavotu un parakstītu aktu par juridiski saistošu un spēkā esošu.',
         ];
     }
 
@@ -340,10 +347,10 @@ function job_report_labels(string $language): array
         'email' => 'Email',
         'report_number' => 'Job Number',
         'completion_datetime' => 'Completed At',
-        'generated_datetime' => 'Generated At',
         'customer_name' => 'Customer',
+        'customer_registration_number' => 'Registration Number',
         'location_name' => 'Location',
-        'full_address' => 'Address',
+        'full_address' => 'Site Address',
         'contact_person' => 'Contact Person',
         'contact_phone' => 'Contact Phone',
         'contact_email' => 'Contact Email',
@@ -364,6 +371,7 @@ function job_report_labels(string $language): array
         'not_captured' => 'Not captured',
         'signature' => 'Signature',
         'signed_at' => 'Signed at',
+        'legal_note' => 'This document was electronically signed in the Contractor work management system. The parties acknowledge this prepared and signed acceptance act as legally binding and in force.',
     ];
 }
 
@@ -378,6 +386,7 @@ function job_report_customer_rows(array $job, array $labels): array
         : (string) ($job['customer_contact_phone'] ?? '');
 
     job_report_add_row($rows, $labels['customer_name'], (string) ($job['customer_name'] ?? ''));
+    job_report_add_row($rows, $labels['customer_registration_number'], (string) ($job['customer_registration_number'] ?? ''));
     job_report_add_row($rows, $labels['location_name'], (string) ($job['location_name'] ?? ''));
     job_report_add_row($rows, $labels['full_address'], (string) (location_address($job) ?? ''));
     job_report_add_row($rows, $labels['contact_person'], $contactName);
@@ -639,7 +648,6 @@ function render_job_report_pdf(array $payload): string
             'rows' => $payload['customer_rows'],
         ]
     );
-    job_report_renderer_draw_job_section($renderer, $payload['labels']['job_section'], $payload['job_rows']);
     job_report_renderer_draw_work_section($renderer, $payload['labels']['work_section'], $payload['performed_work'], $payload['labels']['none_recorded']);
     job_report_renderer_draw_work_notes_section($renderer, $payload['labels']['work_notes_section'], $payload['work_notes'], $payload['labels']);
 
@@ -652,6 +660,7 @@ function render_job_report_pdf(array $payload): string
     }
 
     job_report_renderer_draw_confirmation_section($renderer, $payload);
+    job_report_renderer_draw_legal_note($renderer, (string) ($payload['labels']['legal_note'] ?? ''));
 
     return job_report_images_to_pdf(job_report_renderer_export_pages($renderer));
 }
@@ -742,38 +751,28 @@ function job_report_font_is_usable(string $fontPath): bool
 
 function job_report_renderer_draw_header(array &$renderer, array $payload): void
 {
-    $page = &job_report_renderer_current_page($renderer);
     $margin = $renderer['margin'];
     $width = $renderer['page_width'] - ($margin * 2);
-    $metaWidth = 260;
+    $metaWidth = 230;
     $metaX = $renderer['page_width'] - $margin - $metaWidth;
     $titleWidth = $width - $metaWidth - 40;
     $jobNumber = (string) ($payload['job']['job_number'] ?? '');
     $completedAt = job_report_format_datetime((string) ($payload['job']['actual_completed_at'] ?? ''), (string) $payload['language']);
-    $generatedAt = job_report_format_datetime((string) $payload['generated_at'], (string) $payload['language']);
+    $page = &job_report_renderer_current_page($renderer);
 
     imagefilledrectangle($page, $margin, $renderer['y'], $margin + $width, $renderer['y'] + 7, $renderer['colors']['accent']);
     $renderer['y'] += 30;
 
-    job_report_renderer_text_block($renderer, (string) $payload['title'], $margin, $renderer['y'], 27, $titleWidth, true);
-    job_report_renderer_text($renderer, $jobNumber, $margin, $renderer['y'] + 42, 13, false, $renderer['colors']['muted']);
-    job_report_renderer_text($renderer, $payload['labels']['completion_datetime'], $metaX, $renderer['y'] + 2, 10, true, $renderer['colors']['accent']);
-    job_report_renderer_text_block($renderer, $completedAt, $metaX, $renderer['y'] + 20, 17, $metaWidth, true);
+    $titleHeight = job_report_renderer_text_block($renderer, (string) $payload['title'], $margin, $renderer['y'], 27, $titleWidth, true);
+    $jobNumberY = $renderer['y'] + $titleHeight + 8;
+    $jobNumberHeight = $jobNumber !== ''
+        ? job_report_renderer_text_block($renderer, $jobNumber, $margin, $jobNumberY, 13, $titleWidth, false, $renderer['colors']['muted'])
+        : 0;
+    $metaHeight = $completedAt !== ''
+        ? job_report_renderer_text_block($renderer, $completedAt, $metaX, $renderer['y'] + 6, 17, $metaWidth, true)
+        : 0;
 
-    if ($generatedAt !== '') {
-        job_report_renderer_text_block(
-            $renderer,
-            $payload['labels']['generated_datetime'] . ': ' . $generatedAt,
-            $metaX,
-            $renderer['y'] + 49,
-            10,
-            $metaWidth,
-            false,
-            $renderer['colors']['muted']
-        );
-    }
-
-    $renderer['y'] += 102;
+    $renderer['y'] += max($titleHeight + $jobNumberHeight + 16, $metaHeight + 10) + 26;
 }
 
 function job_report_renderer_draw_page_heading(array &$renderer): void
@@ -1074,16 +1073,18 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
         ? trim((string) $payload['worker']['name'])
         : $payload['labels']['not_captured'];
     $workerCompany = trim((string) ($payload['worker']['company_name'] ?? ''));
+    $workerSignaturePath = job_report_worker_signature_path($payload['worker']);
     $customerName = trim((string) ($confirmation['customer_name'] ?? '')) !== ''
         ? trim((string) $confirmation['customer_name'])
         : $payload['labels']['not_captured'];
     $confirmedAt = job_report_format_datetime((string) ($confirmation['confirmed_at'] ?? ''), (string) $payload['language']);
     $workerHeight = 86
         + job_report_renderer_wrapped_height($renderer, $workerName, 13, $columnWidth - 40)
-        + ($workerCompany !== '' ? job_report_renderer_wrapped_height($renderer, $workerCompany, 11, $columnWidth - 40) : 0);
+        + ($workerCompany !== '' ? job_report_renderer_wrapped_height($renderer, $workerCompany, 11, $columnWidth - 40) : 0)
+        + job_report_renderer_signature_height($workerSignaturePath);
     $customerHeight = 86
         + job_report_renderer_wrapped_height($renderer, $customerName, 13, $columnWidth - 40)
-        + job_report_renderer_confirmation_signature_height($confirmation)
+        + job_report_renderer_signature_height(trim((string) ($confirmation['signature_path'] ?? '')))
         + ($confirmedAt !== '' ? job_report_renderer_wrapped_height($renderer, $confirmedAt, 10, $columnWidth - 40) : 0);
     $blockHeight = max($workerHeight, $customerHeight);
 
@@ -1100,7 +1101,7 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
         $boxTop,
         $columnWidth,
         $blockHeight,
-        null,
+        $workerSignaturePath,
         ''
     );
     job_report_renderer_draw_confirmation_block(
@@ -1112,22 +1113,29 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
         $boxTop,
         $columnWidth,
         $blockHeight,
-        $confirmation,
+        trim((string) ($confirmation['signature_path'] ?? '')),
         $confirmedAt
     );
 
     $renderer['y'] = $boxTop + $blockHeight + 22;
 }
 
-function job_report_renderer_confirmation_signature_height(array $confirmation): int
+function job_report_worker_signature_path(array $worker): string
 {
-    $path = trim((string) ($confirmation['signature_path'] ?? ''));
+    $email = mb_strtolower(trim((string) ($worker['email'] ?? '')));
 
-    if ($path === '' || !is_file($path)) {
-        return 0;
+    if ($email !== 'maris@advangrid.com') {
+        return '';
     }
 
-    return 88;
+    $path = base_path('app/assets/report-signatures/maris-g-signature.png');
+
+    return is_file($path) ? $path : '';
+}
+
+function job_report_renderer_signature_height(string $path): int
+{
+    return $path !== '' && is_file($path) ? 88 : 0;
 }
 
 function job_report_renderer_draw_confirmation_block(
@@ -1139,7 +1147,7 @@ function job_report_renderer_draw_confirmation_block(
     int $y,
     int $width,
     int $height,
-    ?array $confirmation,
+    string $signaturePath,
     string $confirmedAt
 ): void {
     $page = &job_report_renderer_current_page($renderer);
@@ -1155,8 +1163,8 @@ function job_report_renderer_draw_confirmation_block(
         $currentY += job_report_renderer_text_block($renderer, $secondary, $x + 18, $currentY + 2, 11, $width - 36, false, $renderer['colors']['muted']);
     }
 
-    if ($confirmation !== null && trim((string) ($confirmation['signature_path'] ?? '')) !== '' && is_file((string) ($confirmation['signature_path'] ?? ''))) {
-        $signature = @imagecreatefrompng((string) $confirmation['signature_path']);
+    if ($signaturePath !== '' && is_file($signaturePath)) {
+        $signature = @imagecreatefrompng($signaturePath);
 
         if ($signature !== false) {
             $srcWidth = imagesx($signature);
@@ -1175,6 +1183,30 @@ function job_report_renderer_draw_confirmation_block(
     if ($confirmedAt !== '') {
         job_report_renderer_text_block($renderer, $confirmedAt, $x + 18, $currentY + 2, 10, $width - 36, false, $renderer['colors']['muted']);
     }
+}
+
+function job_report_renderer_draw_legal_note(array &$renderer, string $text): void
+{
+    $text = trim($text);
+
+    if ($text === '') {
+        return;
+    }
+
+    $width = $renderer['page_width'] - ($renderer['margin'] * 2);
+    $needed = job_report_renderer_wrapped_height($renderer, $text, 9, $width) + 16;
+    job_report_renderer_ensure_space($renderer, $needed);
+    $renderer['y'] += 8;
+    $renderer['y'] += job_report_renderer_text_block(
+        $renderer,
+        $text,
+        $renderer['margin'],
+        $renderer['y'],
+        9,
+        $width,
+        false,
+        $renderer['colors']['muted']
+    );
 }
 
 function job_report_renderer_section_title(array &$renderer, string $title): void
