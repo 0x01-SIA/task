@@ -284,7 +284,7 @@ function job_report_labels(string $language): array
 {
     if ($language === 'lv') {
         return [
-            'report_title' => 'Darbu izpildes un pieņemšanas–nodošanas akts',
+            'report_title' => 'Darbu pieņemšanas-nodošanas akts',
             'report_identification' => 'Atskaites informācija',
             'company_section' => 'Pakalpojuma sniedzējs',
             'customer_section' => 'Klienta informācija',
@@ -320,6 +320,7 @@ function job_report_labels(string $language): array
             'sku' => 'SKU',
             'quantity' => 'Daudzums',
             'movement_type' => 'Darbība',
+            'object_name' => 'Objekta nosaukums',
             'device_identifier' => 'Ierīces ID',
             'accessories' => 'Piederumi',
             'used' => 'Izlietots / Uzstādīts',
@@ -369,6 +370,7 @@ function job_report_labels(string $language): array
         'sku' => 'SKU',
         'quantity' => 'Quantity',
         'movement_type' => 'Movement',
+        'object_name' => 'Object Name',
         'device_identifier' => 'Device ID',
         'accessories' => 'Accessories',
         'used' => 'Used / Installed',
@@ -491,6 +493,7 @@ function job_report_material_rows(array $materials, array $deviceInstallations, 
             'sku' => (string) ($material['material_sku'] ?? ''),
             'quantity' => format_decimal_quantity($material['quantity'] ?? '0') . ' ' . (string) ($material['material_unit'] ?? ''),
             'movement' => (string) ($material['entry_type'] ?? '') === 'returned' ? $labels['returned'] : $labels['used'],
+            'object_name' => $installation['object_name'] ?? '',
             'device_identifier' => $installation['device_identifier']
                 ?? (string) ($material['device_identifier'] ?? ''),
             'accessories' => $accessories,
@@ -997,6 +1000,10 @@ function job_report_renderer_draw_material_section(array &$renderer, string $tit
     foreach ($rows as $row) {
         $secondary = 0;
 
+        if (trim((string) ($row['object_name'] ?? '')) !== '') {
+            $secondary += job_report_renderer_wrapped_height($renderer, $labels['object_name'] . ': ' . trim((string) $row['object_name']), 10, 960) + 2;
+        }
+
         if (trim((string) ($row['device_identifier'] ?? '')) !== '') {
             $secondary += job_report_renderer_wrapped_height($renderer, $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), 10, 960) + 2;
         }
@@ -1047,6 +1054,10 @@ function job_report_renderer_draw_material_section(array &$renderer, string $tit
         $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['quantity'] ?? ''), $renderer['page_width'] - $renderer['margin'] - 158, $startY, 11, 140));
 
         $currentY = $startY + $maxPrimaryHeight + 2;
+
+        if (trim((string) ($row['object_name'] ?? '')) !== '') {
+            $currentY += job_report_renderer_text_block($renderer, $labels['object_name'] . ': ' . trim((string) $row['object_name']), $renderer['margin'] + 18, $currentY, 10, 960, false, $renderer['colors']['muted']);
+        }
 
         if (trim((string) ($row['device_identifier'] ?? '')) !== '') {
             $currentY += job_report_renderer_text_block($renderer, $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), $renderer['margin'] + 18, $currentY, 10, 960, false, $renderer['colors']['muted']);
