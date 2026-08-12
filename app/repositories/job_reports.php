@@ -1128,7 +1128,7 @@ function job_report_worker_signature_path(array $worker): string
         return '';
     }
 
-    $path = base_path('app/assets/report-signatures/maris-g-signature.png');
+    $path = trim((string) config('reports.maris_signature_path', ''));
 
     return is_file($path) ? $path : '';
 }

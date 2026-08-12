@@ -27,4 +27,12 @@ return [
             'max_files' => (int) env_value('JOB_PHOTO_MAX_FILES', 10),
         ],
     ],
+    'reports' => [
+        'maris_signature_path' => (string) env_value(
+            'MARIS_SIGNATURE_PATH',
+            rtrim((string) env_value('UPLOAD_BASE_DIR', base_path('storage/uploads')), DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . 'report-signatures'
+            . DIRECTORY_SEPARATOR . 'maris-g-signature.png'
+        ),
+    ],
 ];
