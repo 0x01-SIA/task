@@ -1085,6 +1085,9 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
     $confirmation = is_array($payload['confirmation']) ? $payload['confirmation'] : [];
     $margin = $renderer['margin'];
     $gap = 32;
+    $sectionGap = 30;
+    $headingHeight = 20;
+    $sectionBottomSpacing = 22;
     $columnWidth = (int) floor(($renderer['page_width'] - ($margin * 2) - $gap) / 2);
     $workerName = trim((string) ($payload['worker']['name'] ?? '')) !== ''
         ? trim((string) $payload['worker']['name'])
@@ -1104,8 +1107,10 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
         + job_report_renderer_signature_height(trim((string) ($confirmation['signature_path'] ?? '')))
         + ($confirmedAt !== '' ? job_report_renderer_wrapped_height($renderer, $confirmedAt, 10, $columnWidth - 40) : 0);
     $blockHeight = max($workerHeight, $customerHeight);
+    $requiredHeight = $sectionGap + $headingHeight + $blockHeight + $sectionBottomSpacing;
 
-    job_report_renderer_ensure_space($renderer, $blockHeight + 70);
+    job_report_renderer_ensure_space($renderer, $requiredHeight);
+    $renderer['y'] += $sectionGap;
     job_report_renderer_section_title($renderer, $payload['labels']['confirmation_section']);
 
     $boxTop = $renderer['y'];
@@ -1134,7 +1139,7 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
         $confirmedAt
     );
 
-    $renderer['y'] = $boxTop + $blockHeight + 22;
+    $renderer['y'] = $boxTop + $blockHeight + $sectionBottomSpacing;
 }
 
 function job_report_worker_signature_path(array $worker): string
