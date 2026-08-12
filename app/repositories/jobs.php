@@ -45,6 +45,9 @@ function list_jobs(array $filters = [], ?array $viewer = null): array
                 l.contact_phone AS location_contact_phone,
                 u.name AS assigned_worker_name,
                 u.email AS assigned_worker_email,
+                u.signature_path AS assigned_worker_signature_path,
+                u.signature_mime_type AS assigned_worker_signature_mime_type,
+                u.signature_file_size AS assigned_worker_signature_file_size,
                 t.task_number AS linked_task_number,
                 t.title AS linked_task_title
             FROM jobs j
@@ -167,6 +170,9 @@ function find_job_by_id(int $id, ?array $viewer = null): ?array
                 l.contact_phone AS location_contact_phone,
                 u.name AS assigned_worker_name,
                 u.email AS assigned_worker_email,
+                u.signature_path AS assigned_worker_signature_path,
+                u.signature_mime_type AS assigned_worker_signature_mime_type,
+                u.signature_file_size AS assigned_worker_signature_file_size,
                 t.task_number AS linked_task_number,
                 t.title AS linked_task_title
             FROM jobs j

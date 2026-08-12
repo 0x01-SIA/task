@@ -112,6 +112,9 @@ function build_job_report_payload(array $job, string $language): array
             'id' => (int) ($job['assigned_user_id'] ?? 0),
             'name' => trim((string) ($job['assigned_worker_name'] ?? '')),
             'email' => trim((string) ($job['assigned_worker_email'] ?? '')),
+            'signature_path' => (string) ($job['assigned_worker_signature_path'] ?? ''),
+            'signature_mime_type' => (string) ($job['assigned_worker_signature_mime_type'] ?? ''),
+            'signature_file_size' => (int) ($job['assigned_worker_signature_file_size'] ?? 0),
             'company_name' => (string) ($company['name'] ?? ''),
         ],
     ];
@@ -269,6 +272,9 @@ function build_job_report_snapshot_data(
             'id' => (int) ($job['assigned_user_id'] ?? 0),
             'name' => trim((string) ($job['assigned_worker_name'] ?? '')),
             'email' => trim((string) ($job['assigned_worker_email'] ?? '')),
+            'signature_path' => (string) ($job['assigned_worker_signature_path'] ?? ''),
+            'signature_mime_type' => (string) ($job['assigned_worker_signature_mime_type'] ?? ''),
+            'signature_file_size' => (int) ($job['assigned_worker_signature_file_size'] ?? 0),
             'company_name' => (string) ($company['name'] ?? ''),
         ],
     ];
@@ -1122,15 +1128,7 @@ function job_report_renderer_draw_confirmation_section(array &$renderer, array $
 
 function job_report_worker_signature_path(array $worker): string
 {
-    $email = mb_strtolower(trim((string) ($worker['email'] ?? '')));
-
-    if ($email !== 'maris@advangrid.com') {
-        return '';
-    }
-
-    $path = trim((string) config('reports.maris_signature_path', ''));
-
-    return is_file($path) ? $path : '';
+    return resolved_user_signature_path($worker);
 }
 
 function job_report_renderer_signature_height(string $path): int

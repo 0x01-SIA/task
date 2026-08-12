@@ -28,6 +28,7 @@ $roleFieldLabel = $roleFieldLabel ?? 'Role';
             <form
                 method="post"
                 action="<?= h(app_url($formAction)) ?>"
+                enctype="multipart/form-data"
                 class="d-grid gap-4"
                 onsubmit="return this.is_active.value !== '0' || confirm('Deactivate this user? They will no longer be able to sign in or appear as an assignable worker.');"
             >
@@ -89,6 +90,31 @@ $roleFieldLabel = $roleFieldLabel ?? 'Role';
                             <?php if (isset($errors['password_confirmation'])): ?>
                                 <div class="invalid-feedback"><?= h($errors['password_confirmation']) ?></div>
                             <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($userRecord !== null): ?>
+                        <div class="col-12">
+                            <div class="border rounded-3 p-3 bg-light">
+                                <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                                    <div>
+                                        <label class="form-label mb-2" for="signature">Worker Signature</label>
+                                        <input class="form-control<?= isset($errors['signature']) ? ' is-invalid' : '' ?>" id="signature" name="signature" type="file" accept=".png,image/png">
+                                        <?php if (isset($errors['signature'])): ?>
+                                            <div class="invalid-feedback"><?= h($errors['signature']) ?></div>
+                                        <?php endif; ?>
+                                        <div class="form-text">Optional. Upload a PNG signature image for completed-job PDFs. Re-uploading replaces the current signature.</div>
+                                    </div>
+                                    <div class="text-md-end">
+                                        <?php if (trim((string) ($userRecord['signature_path'] ?? '')) !== ''): ?>
+                                            <div class="small text-secondary mb-2">Current signature on file</div>
+                                            <a class="btn btn-outline-primary btn-sm" href="<?= h(app_url('/users/' . $userRecord['id'] . '/signature')) ?>" target="_blank" rel="noreferrer">Preview Signature</a>
+                                        <?php else: ?>
+                                            <div class="small text-secondary">No signature uploaded yet.</div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>

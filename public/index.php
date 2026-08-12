@@ -4468,6 +4468,30 @@ try {
             ]);
             break;
 
+        case preg_match('#^/users/([1-9][0-9]*)/signature$#', $path, $matches) === 1:
+            require_role(['admin']);
+
+            if ($method !== 'GET') {
+                abort(405, 'Method not allowed', 'The requested method is not supported for this route.');
+            }
+
+            $managedUser = find_managed_user_by_id((int) $matches[1]);
+
+            if ($managedUser === null) {
+                not_found('User');
+            }
+
+            if (!is_super_admin() && (string) ($managedUser['global_role'] ?? '') === 'super_admin') {
+                abort(403, 'Access denied', 'You do not have permission to view this user signature.');
+            }
+
+            if (trim((string) ($managedUser['signature_path'] ?? '')) === '') {
+                abort(404, 'File not found', 'The requested file is unavailable.');
+            }
+
+            send_stored_job_asset(user_signature_asset($managedUser), 'inline');
+            break;
+
         case preg_match('#^/users/([1-9][0-9]*)/edit$#', $path, $matches) === 1:
             require_role(['admin']);
             require_active_company_context();
@@ -4517,6 +4541,11 @@ try {
 
             $values = user_form_values($_POST, [], false);
             $errors = validate_user_form($values, $managedUser, current_user(), $existingMembership);
+            $signatureError = validate_user_signature_upload(is_array($_FILES['signature'] ?? null) ? $_FILES['signature'] : []);
+
+            if ($signatureError !== null) {
+                $errors['signature'] = $signatureError;
+            }
 
             if ($errors !== []) {
                 render('users/form', [
@@ -4541,6 +4570,21 @@ try {
                     is_super_admin() ? ($values['is_active'] === '1' ? 1 : 0) : (int) ($managedUser['is_active'] ?? 1)
                 )
             );
+
+            $signatureUpload = is_array($_FILES['signature'] ?? null) ? $_FILES['signature'] : [];
+            $signatureUploaded = (int) ($signatureUpload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+            if ($signatureUploaded) {
+                $storedSignature = store_uploaded_user_signature((int) $managedUser['id'], $signatureUpload);
+                remove_user_signature_file($managedUser);
+                update_user_signature(
+                    (int) $managedUser['id'],
+                    $storedSignature['storage_path'],
+                    $storedSignature['mime_type'],
+                    (int) $storedSignature['file_size']
+                );
+            }
+
             upsert_company_membership((int) current_company_id(), (int) $managedUser['id'], $values['role'], $values['is_active'] === '1');
             flash('success', 'User updated successfully.');
             redirect('/users/' . $managedUser['id']);

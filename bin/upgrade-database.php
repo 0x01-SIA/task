@@ -30,6 +30,7 @@ try {
     }
 
     ensure_users_super_admin_role($connection);
+    ensure_users_signature_columns($connection);
     ensure_companies_table($connection);
     ensure_company_users_table($connection);
     ensure_customers_company_scope($connection);
@@ -586,6 +587,13 @@ function ensure_jobs_task_link(PDO $connection): void
     ensure_column($connection, 'jobs', 'task_id', 'ALTER TABLE jobs ADD COLUMN task_id BIGINT UNSIGNED DEFAULT NULL AFTER job_number');
     ensure_index($connection, 'jobs', 'idx_jobs_task_id', 'ALTER TABLE jobs ADD KEY idx_jobs_task_id (task_id)');
     ensure_foreign_key($connection, 'jobs', 'fk_jobs_task', 'ALTER TABLE jobs ADD CONSTRAINT fk_jobs_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE RESTRICT ON UPDATE CASCADE');
+}
+
+function ensure_users_signature_columns(PDO $connection): void
+{
+    ensure_column($connection, 'users', 'signature_path', 'ALTER TABLE users ADD COLUMN signature_path VARCHAR(1000) DEFAULT NULL AFTER role');
+    ensure_column($connection, 'users', 'signature_mime_type', 'ALTER TABLE users ADD COLUMN signature_mime_type VARCHAR(100) DEFAULT NULL AFTER signature_path');
+    ensure_column($connection, 'users', 'signature_file_size', 'ALTER TABLE users ADD COLUMN signature_file_size BIGINT UNSIGNED DEFAULT NULL AFTER signature_mime_type');
 }
 
 function ensure_job_attachments_table(PDO $connection): void

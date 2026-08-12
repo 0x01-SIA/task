@@ -61,6 +61,16 @@ $isSelf = current_user() !== null && (int) current_user()['id'] === (int) $manag
                     <p class="mb-0"><?= h((string) (int) ($managedUser['completed_job_count'] ?? 0)) ?></p>
                 </div>
                 <div>
+                    <p class="info-label">PDF Signature</p>
+                    <p class="mb-0">
+                        <?php if (trim((string) ($managedUser['signature_path'] ?? '')) !== ''): ?>
+                            <a href="<?= h(app_url('/users/' . $managedUser['id'] . '/signature')) ?>" target="_blank" rel="noreferrer">Preview uploaded signature</a>
+                        <?php else: ?>
+                            No signature uploaded
+                        <?php endif; ?>
+                    </p>
+                </div>
+                <div>
                     <p class="info-label">Administration Guardrails</p>
                     <p class="mb-0">
                         <?= $isSelf ? 'Your own admin access is protected.' : 'Last active admin protections remain enforced.' ?>

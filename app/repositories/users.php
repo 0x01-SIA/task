@@ -39,6 +39,9 @@ function list_users(array $filters = []): array
                 u.name,
                 u.email,
                 u.role AS system_role,
+                u.signature_path,
+                u.signature_mime_type,
+                u.signature_file_size,
                 u.is_active,
                 u.created_at,
                 u.updated_at,
@@ -174,6 +177,9 @@ function find_managed_user_by_id(int $id): ?array
             u.name,
             u.email,
             u.role AS global_role,
+            u.signature_path,
+            u.signature_mime_type,
+            u.signature_file_size,
             u.is_active,
             u.created_at,
             u.updated_at,
@@ -245,6 +251,23 @@ function update_user(int $id, array $data): void
         'email' => $data['email'],
         'role' => $data['role'],
         'is_active' => $data['is_active'],
+    ]);
+}
+
+function update_user_signature(int $id, ?string $storagePath, ?string $mimeType, ?int $fileSize): void
+{
+    $statement = users_connection()->prepare(
+        'UPDATE users
+         SET signature_path = :signature_path,
+             signature_mime_type = :signature_mime_type,
+             signature_file_size = :signature_file_size
+         WHERE id = :id'
+    );
+    $statement->execute([
+        'id' => $id,
+        'signature_path' => $storagePath,
+        'signature_mime_type' => $mimeType,
+        'signature_file_size' => $fileSize,
     ]);
 }
 
@@ -343,6 +366,146 @@ function recent_assigned_jobs_for_user(int $userId, int $limit = 5): array
     $jobs = $statement->fetchAll();
 
     return is_array($jobs) ? $jobs : [];
+}
+
+function user_signature_rules(): array
+{
+    $defaultMaxBytes = min(job_server_upload_limit_bytes(), 2 * 1024 * 1024);
+
+    return [
+        'max_bytes' => $defaultMaxBytes,
+        'extensions' => [
+            'png' => ['image/png'],
+        ],
+    ];
+}
+
+function user_signature_relative_directory(int $userId): string
+{
+    return 'users'
+        . DIRECTORY_SEPARATOR
+        . $userId
+        . DIRECTORY_SEPARATOR
+        . 'signature';
+}
+
+function user_signature_directory(int $userId): string
+{
+    return job_asset_base_directory() . DIRECTORY_SEPARATOR . user_signature_relative_directory($userId);
+}
+
+function ensure_user_signature_directory(int $userId): string
+{
+    $directory = user_signature_directory($userId);
+
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        throw new RuntimeException('Unable to create the signature upload directory.');
+    }
+
+    return $directory;
+}
+
+function user_signature_relative_path(int $userId, string $storedName): string
+{
+    return str_replace(DIRECTORY_SEPARATOR, '/', user_signature_relative_directory($userId))
+        . '/'
+        . ltrim($storedName, '/');
+}
+
+function validate_user_signature_upload(array $file): ?string
+{
+    $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+
+    if ($error === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($error !== UPLOAD_ERR_OK) {
+        return uploaded_file_error_message($error);
+    }
+
+    $tmpPath = (string) ($file['tmp_name'] ?? '');
+
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+        return 'The uploaded signature image could not be verified.';
+    }
+
+    $originalName = trim((string) ($file['name'] ?? ''));
+
+    if ($originalName === '') {
+        return 'The uploaded signature image must have a filename.';
+    }
+
+    if (strtolower(pathinfo($originalName, PATHINFO_EXTENSION)) !== 'png') {
+        return 'The signature image must be a PNG file.';
+    }
+
+    $fileSize = (int) ($file['size'] ?? 0);
+
+    if ($fileSize <= 0) {
+        return 'The uploaded signature image is empty.';
+    }
+
+    $rules = user_signature_rules();
+
+    if ($fileSize > $rules['max_bytes']) {
+        return 'The signature image exceeds the allowed size limit.';
+    }
+
+    $imageInfo = @getimagesize($tmpPath);
+
+    if ($imageInfo === false || (string) ($imageInfo['mime'] ?? '') !== 'image/png') {
+        return 'The uploaded signature image must be a valid PNG.';
+    }
+
+    $mime = detect_uploaded_file_mime($tmpPath);
+
+    if ($mime !== 'image/png') {
+        return 'The uploaded signature image type does not match its extension.';
+    }
+
+    return null;
+}
+
+function store_uploaded_user_signature(int $userId, array $file): array
+{
+    $directory = ensure_user_signature_directory($userId);
+    $storedName = 'signature-' . bin2hex(random_bytes(8)) . '.png';
+    $storedPath = $directory . DIRECTORY_SEPARATOR . $storedName;
+
+    if (!move_uploaded_file((string) $file['tmp_name'], $storedPath)) {
+        throw new RuntimeException('The signature image could not be stored.');
+    }
+
+    return [
+        'storage_path' => user_signature_relative_path($userId, $storedName),
+        'mime_type' => 'image/png',
+        'file_size' => filesize($storedPath) ?: (int) ($file['size'] ?? 0),
+    ];
+}
+
+function resolved_user_signature_path(array $user): ?string
+{
+    return resolve_job_asset_path((string) ($user['signature_path'] ?? ''));
+}
+
+function remove_user_signature_file(array $user): void
+{
+    $path = resolved_user_signature_path($user);
+
+    if ($path !== null && is_file($path) && !unlink($path)) {
+        throw new RuntimeException('The stored user signature could not be removed.');
+    }
+}
+
+function user_signature_asset(array $user): array
+{
+    return [
+        'storage_path' => (string) ($user['signature_path'] ?? ''),
+        'mime_type' => (string) ($user['signature_mime_type'] ?? 'image/png'),
+        'file_size' => (int) ($user['signature_file_size'] ?? 0),
+        'original_filename' => 'user-signature.png',
+    ];
 }
 
 function list_active_workers(): array
