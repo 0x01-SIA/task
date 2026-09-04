@@ -470,9 +470,15 @@ function job_report_comment_rows(array $notes, array $labels): array
 function job_report_material_rows(array $materials, array $deviceInstallations, array $labels): array
 {
     $rows = [];
+    $linkedAccessoryUsageIds = job_report_linked_accessory_usage_ids($deviceInstallations);
 
     foreach ($materials as $material) {
         $usageId = (int) ($material['id'] ?? 0);
+
+        if (isset($linkedAccessoryUsageIds[$usageId])) {
+            continue;
+        }
+
         $installation = $deviceInstallations[$usageId] ?? null;
         $accessories = [];
 
@@ -501,6 +507,23 @@ function job_report_material_rows(array $materials, array $deviceInstallations, 
     }
 
     return $rows;
+}
+
+function job_report_linked_accessory_usage_ids(array $deviceInstallations): array
+{
+    $usageIds = [];
+
+    foreach ($deviceInstallations as $installation) {
+        foreach (($installation['accessories'] ?? []) as $accessory) {
+            $usageId = (int) ($accessory['accessory_material_usage_id'] ?? 0);
+
+            if ($usageId > 0) {
+                $usageIds[$usageId] = true;
+            }
+        }
+    }
+
+    return $usageIds;
 }
 
 function job_report_add_row(array &$rows, string $label, string $value): void
