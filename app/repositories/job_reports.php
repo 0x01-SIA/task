@@ -694,7 +694,9 @@ function render_job_report_pdf(array $payload): string
     job_report_renderer_draw_confirmation_section($renderer, $payload);
     job_report_renderer_draw_legal_note($renderer, (string) ($payload['labels']['legal_note'] ?? ''));
 
-    return job_report_images_to_pdf(job_report_renderer_export_pages($renderer));
+    $jpegPages = job_report_renderer_export_pages($renderer);
+
+    return job_report_images_to_pdf($jpegPages);
 }
 
 function job_report_renderer_create(array $payload): array
@@ -1018,89 +1020,99 @@ function job_report_renderer_draw_work_notes_section(array &$renderer, string $t
 
 function job_report_renderer_draw_material_section(array &$renderer, string $title, array $rows, array $labels): void
 {
-    $needed = 64;
+    job_report_renderer_ensure_space($renderer, 70);
+    job_report_renderer_material_table_header($renderer, $title, $labels);
 
     foreach ($rows as $row) {
-        $secondary = 0;
+        $columns = [
+            ['text' => (string) ($row['material'] ?? ''), 'x' => $renderer['margin'] + 18, 'width' => 280, 'size' => 11, 'bold' => false, 'color' => $renderer['colors']['text']],
+            ['text' => (string) ($row['sku'] ?? ''), 'x' => $renderer['margin'] + 318, 'width' => 150, 'size' => 10, 'bold' => false, 'color' => $renderer['colors']['muted']],
+            ['text' => (string) ($row['movement'] ?? ''), 'x' => $renderer['margin'] + 488, 'width' => 180, 'size' => 10, 'bold' => false, 'color' => $renderer['colors']['text']],
+            ['text' => (string) ($row['quantity'] ?? ''), 'x' => $renderer['page_width'] - $renderer['margin'] - 158, 'width' => 140, 'size' => 11, 'bold' => false, 'color' => $renderer['colors']['text']],
+        ];
+        $wrappedColumns = [];
+        $lineCount = 1;
 
+        foreach ($columns as $column) {
+            $lines = job_report_wrap_text($column['text'], $column['width'], $column['size'], $renderer['font_regular']);
+            $wrappedColumns[] = [$column, $lines];
+            $lineCount = max($lineCount, count($lines));
+        }
+
+        $lineHeight = 21;
+        for ($line = 0; $line < $lineCount; $line++) {
+            job_report_renderer_ensure_material_line_space($renderer, $lineHeight, $title, $labels);
+            $page = &job_report_renderer_current_page($renderer);
+            $startY = $renderer['y'];
+            imagefilledrectangle($page, $renderer['margin'] + 1, $startY - 2, $renderer['page_width'] - $renderer['margin'] - 1, $startY + $lineHeight - 1, $renderer['colors']['panel']);
+            foreach ($wrappedColumns as [$column, $lines]) {
+                if (isset($lines[$line])) {
+                    job_report_renderer_text($renderer, $lines[$line], $column['x'], $startY, $column['size'], $column['bold'], $column['color']);
+                }
+            }
+            $renderer['y'] += $lineHeight;
+        }
+
+        $details = [];
         if (trim((string) ($row['object_name'] ?? '')) !== '') {
-            $secondary += job_report_renderer_wrapped_height($renderer, $labels['object_name'] . ': ' . trim((string) $row['object_name']), 10, 960) + 2;
+            $details[] = [$labels['object_name'] . ': ' . trim((string) $row['object_name']), $renderer['margin'] + 18, 960];
         }
-
         if (trim((string) ($row['device_identifier'] ?? '')) !== '') {
-            $secondary += job_report_renderer_wrapped_height($renderer, $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), 10, 960) + 2;
+            $details[] = [$labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), $renderer['margin'] + 18, 960];
+        }
+        foreach (($row['accessories'] ?? []) as $accessory) {
+            $details[] = ['- ' . (string) $accessory, $renderer['margin'] + 36, 940];
         }
 
-        if (($row['accessories'] ?? []) !== []) {
-            foreach ($row['accessories'] as $accessory) {
-                $secondary += job_report_renderer_wrapped_height($renderer, '- ' . (string) $accessory, 10, 940) + 2;
+        foreach ($details as [$text, $x, $width]) {
+            foreach (job_report_wrap_text($text, $width, 10, $renderer['font_regular']) as $line) {
+                job_report_renderer_ensure_material_line_space($renderer, 20, $title, $labels);
+                $page = &job_report_renderer_current_page($renderer);
+                imagefilledrectangle($page, $renderer['margin'] + 1, $renderer['y'] - 2, $renderer['page_width'] - $renderer['margin'] - 1, $renderer['y'] + 18, $renderer['colors']['panel']);
+                job_report_renderer_text($renderer, $line, $x, $renderer['y'], 10, false, $renderer['colors']['muted']);
+                $renderer['y'] += 20;
             }
         }
 
-        $needed += max(
-            job_report_renderer_wrapped_height($renderer, (string) ($row['material'] ?? ''), 11, 280),
-            job_report_renderer_wrapped_height($renderer, (string) ($row['sku'] ?? ''), 10, 150),
-            job_report_renderer_wrapped_height($renderer, (string) ($row['movement'] ?? ''), 10, 180),
-            job_report_renderer_wrapped_height($renderer, (string) ($row['quantity'] ?? ''), 11, 140)
-        ) + $secondary + 18;
+        job_report_renderer_ensure_material_line_space($renderer, 10, $title, $labels);
+        $page = &job_report_renderer_current_page($renderer);
+        imageline($page, $renderer['margin'] + 18, $renderer['y'], $renderer['page_width'] - $renderer['margin'] - 18, $renderer['y'], $renderer['colors']['line']);
+        $renderer['y'] += 10;
     }
 
-    job_report_renderer_ensure_space($renderer, $needed + 14);
+    $renderer['y'] += 8;
+}
+
+function job_report_renderer_material_table_header(array &$renderer, string $title, array $labels): void
+{
     job_report_renderer_section_title($renderer, $title);
-
-    $tableTop = $renderer['y'];
+    $headerY = $renderer['y'] + 8;
     $page = &job_report_renderer_current_page($renderer);
-    imagefilledrectangle($page, $renderer['margin'], $tableTop, $renderer['page_width'] - $renderer['margin'], $tableTop + $needed - 18, $renderer['colors']['panel']);
-    imagerectangle($page, $renderer['margin'], $tableTop, $renderer['page_width'] - $renderer['margin'], $tableTop + $needed - 18, $renderer['colors']['line']);
-
-    $headerY = $tableTop + 14;
+    imagefilledrectangle($page, $renderer['margin'], $headerY - 8, $renderer['page_width'] - $renderer['margin'], $headerY + 24, $renderer['colors']['panel']);
+    imagerectangle($page, $renderer['margin'], $headerY - 8, $renderer['page_width'] - $renderer['margin'], $headerY + 24, $renderer['colors']['line']);
     $columns = [
         ['title' => $labels['material_name'], 'x' => $renderer['margin'] + 18, 'width' => 280],
         ['title' => $labels['sku'], 'x' => $renderer['margin'] + 318, 'width' => 150],
         ['title' => $labels['movement_type'], 'x' => $renderer['margin'] + 488, 'width' => 180],
         ['title' => $labels['quantity'], 'x' => $renderer['page_width'] - $renderer['margin'] - 158, 'width' => 140],
     ];
-
     foreach ($columns as $column) {
         job_report_renderer_text_block($renderer, $column['title'], $column['x'], $headerY, 10, $column['width'], true, $renderer['colors']['muted']);
     }
-
     imageline($page, $renderer['margin'] + 18, $headerY + 18, $renderer['page_width'] - $renderer['margin'] - 18, $headerY + 18, $renderer['colors']['line']);
     $renderer['y'] = $headerY + 28;
+}
 
-    foreach ($rows as $index => $row) {
-        $startY = $renderer['y'];
-        $maxPrimaryHeight = 0;
-        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['material'] ?? ''), $renderer['margin'] + 18, $startY, 11, 280));
-        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['sku'] ?? ''), $renderer['margin'] + 318, $startY + 1, 10, 150, false, $renderer['colors']['muted']));
-        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['movement'] ?? ''), $renderer['margin'] + 488, $startY + 1, 10, 180, false, $renderer['colors']['text']));
-        $maxPrimaryHeight = max($maxPrimaryHeight, job_report_renderer_text_block($renderer, (string) ($row['quantity'] ?? ''), $renderer['page_width'] - $renderer['margin'] - 158, $startY, 11, 140));
-
-        $currentY = $startY + $maxPrimaryHeight + 2;
-
-        if (trim((string) ($row['object_name'] ?? '')) !== '') {
-            $currentY += job_report_renderer_text_block($renderer, $labels['object_name'] . ': ' . trim((string) $row['object_name']), $renderer['margin'] + 18, $currentY, 10, 960, false, $renderer['colors']['muted']);
-        }
-
-        if (trim((string) ($row['device_identifier'] ?? '')) !== '') {
-            $currentY += job_report_renderer_text_block($renderer, $labels['device_identifier'] . ': ' . trim((string) $row['device_identifier']), $renderer['margin'] + 18, $currentY, 10, 960, false, $renderer['colors']['muted']);
-        }
-
-        if (($row['accessories'] ?? []) !== []) {
-            foreach ($row['accessories'] as $accessory) {
-                $currentY += job_report_renderer_text_block($renderer, '- ' . (string) $accessory, $renderer['margin'] + 36, $currentY, 10, 940, false, $renderer['colors']['muted']);
-            }
-        }
-
-        $renderer['y'] = $currentY + 4;
-
-        if ($index !== array_key_last($rows)) {
-            imageline($page, $renderer['margin'] + 18, $renderer['y'], $renderer['page_width'] - $renderer['margin'] - 18, $renderer['y'], $renderer['colors']['line']);
-            $renderer['y'] += 8;
-        }
+function job_report_renderer_ensure_material_line_space(array &$renderer, int $height, string $title, array $labels): void
+{
+    $bottom = $renderer['page_height'] - $renderer['margin'] - $renderer['footer_margin'];
+    if ($renderer['y'] + $height <= $bottom) {
+        return;
     }
 
-    $renderer['y'] += 18;
+    // Force a page break through the shared page allocator, then repeat the table heading.
+    job_report_renderer_ensure_space($renderer, $bottom - $renderer['y'] + 1);
+    job_report_renderer_material_table_header($renderer, $title, $labels);
 }
 
 function job_report_renderer_draw_confirmation_section(array &$renderer, array $payload): void
@@ -1426,12 +1438,14 @@ function job_report_renderer_ensure_space(array &$renderer, int $neededHeight): 
     job_report_renderer_draw_page_heading($renderer);
 }
 
-function job_report_renderer_export_pages(array $renderer): array
+function job_report_renderer_export_pages(array &$renderer): array
 {
-    $renderer = job_report_renderer_add_footers($renderer);
+    job_report_renderer_add_footers($renderer);
     $binaries = [];
 
-    foreach ($renderer['pages'] as $page) {
+    while ($renderer['pages'] !== []) {
+        $index = array_key_first($renderer['pages']);
+        $page = $renderer['pages'][$index];
         ob_start();
         imagejpeg($page, null, 92);
         $binary = ob_get_clean();
@@ -1442,17 +1456,18 @@ function job_report_renderer_export_pages(array $renderer): array
 
         $binaries[] = $binary;
         imagedestroy($page);
+        unset($renderer['pages'][$index]);
     }
 
     return $binaries;
 }
 
-function job_report_renderer_add_footers(array $renderer): array
+function job_report_renderer_add_footers(array &$renderer): void
 {
     $totalPages = count($renderer['pages']);
 
     if ($totalPages <= 1) {
-        return $renderer;
+        return;
     }
 
     foreach ($renderer['pages'] as $index => $page) {
@@ -1464,10 +1479,9 @@ function job_report_renderer_add_footers(array $renderer): array
         imagettftext($page, 10, 0, $renderer['page_width'] - $renderer['margin'] - $pageWidth, $footerY, $renderer['colors']['muted'], $renderer['font_regular'], $pageLabel);
     }
 
-    return $renderer;
 }
 
-function job_report_images_to_pdf(array $jpegPages): string
+function job_report_images_to_pdf(array &$jpegPages): string
 {
     if ($jpegPages === []) {
         throw new RuntimeException('The report contains no pages.');
@@ -1500,6 +1514,7 @@ function job_report_images_to_pdf(array $jpegPages): string
         $objects[$pageObjectId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /'
             . $resourceName . ' ' . $imageObjectId . ' 0 R >> >> /Contents ' . $contentObjectId . ' 0 R >>';
         $kids[] = $pageObjectId . ' 0 R';
+        unset($jpegPages[$index]);
     }
 
     $objects[2] = '<< /Type /Pages /Count ' . count($kids) . ' /Kids [ ' . implode(' ', $kids) . ' ] >>';
